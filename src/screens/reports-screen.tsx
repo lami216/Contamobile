@@ -1,0 +1,65 @@
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import type { Party, PaymentAccount, Product } from '@/domain/types';
+import { listParties, listPaymentAccounts, listProducts } from '@/db/queries';
+import { runReport, type ReportData, type ReportFilters, type ReportType } from '@/db/report-queries';
+import { PartyPicker, ProductPicker } from '@/components/pickers';
+import { AppText, Button, Card, Chip, EmptyState, Field, Money, Row, Screen, SearchField, SectionTitle } from '@/components/ui';
+import { useI18n } from '@/i18n/provider';
+import { useAuth } from '@/auth/provider';
+import { colors, spacing } from '@/theme';
+
+const reportTypes:{id:ReportType;ar:string;fr:string}[]=[{id:'overview',ar:'نظرة عامة',fr:'Vue générale'},{id:'sales',ar:'المبيعات',fr:'Ventes'},{id:'purchases',ar:'المشتريات',fr:'Achats'},{id:'product-sales',ar:'مبيعات المنتجات',fr:'Ventes par produit'},{id:'stock',ar:'حركة المخزون',fr:'Mouvements du stock'},{id:'debts',ar:'الديون',fr:'Dettes'},{id:'party-ledger',ar:'كشف طرف',fr:'Compte client/fournisseur'},{id:'financial',ar:'المالية',fr:'Finance'},{id:'expenses',ar:'المصاريف',fr:'Dépenses'}];
+const metricLabels:Record<string,{ar:string;fr:string}>={sales:{ar:'المبيعات',fr:'Ventes'},purchases:{ar:'المشتريات',fr:'Achats'},expenses:{ar:'المصاريف',fr:'Dépenses'},profit:{ar:'الربح',fr:'Bénéfice'},total:{ar:'الإجمالي',fr:'Total'},count:{ar:'العدد',fr:'Nombre'},revenue:{ar:'الإيراد',fr:'Revenu'},inventory:{ar:'قيمة المخزون',fr:'Valeur du stock'},receivable:{ar:'لنا',fr:'À recevoir'},payable:{ar:'علينا',fr:'À payer'},incoming:{ar:'داخل',fr:'Entrées'},outgoing:{ar:'خارج',fr:'Sorties'},balance:{ar:'الرصيد',fr:'Solde'},net:{ar:'الصافي',fr:'Net'},paid:{ar:'المدفوع',fr:'Payé'},due:{ar:'المتبقي',fr:'Reste'},quantity:{ar:'الكمية',fr:'Quantité'},movements:{ar:'الحركات',fr:'Mouvements'},netChange:{ar:'صافي التغيير',fr:'Variation nette'}};
+const stockMovementTypes=[['sale','بيع','Vente'],['purchase','شراء','Achat'],['transfer-in','تحويل داخل','Transfert entrant'],['transfer-out','تحويل خارج','Transfert sortant'],['adjustment','تصحيح','Ajustement'],['opening','رصيد بداية','Stock initial']] as const;
+const financialMovementLabels:Record<string,{ar:string;fr:string}>={sale:{ar:'بيع',fr:'Vente'},purchase:{ar:'شراء',fr:'Achat'},expense:{ar:'مصروف',fr:'Dépense'},'party-receipt':{ar:'تحصيل من طرف',fr:'Encaissement tiers'},'party-payment':{ar:'دفع لطرف',fr:'Paiement tiers'},'transfer-in':{ar:'تحويل داخل',fr:'Transfert entrant'},'transfer-out':{ar:'تحويل خارج',fr:'Transfert sortant'},'manual-deposit':{ar:'إيداع',fr:'Dépôt'},'manual-withdrawal':{ar:'سحب',fr:'Retrait'},'opening-balance':{ar:'رصيد بداية',fr:'Solde initial'},'opening-balance-correction':{ar:'تصحيح رصيد البداية',fr:'Correction du solde initial'},'balance-correction':{ar:'تصحيح رصيد',fr:'Correction de solde'}};
+const documentKindLabels:Record<string,{ar:string;fr:string}>={sale:{ar:'بيع',fr:'Vente'},purchase:{ar:'شراء',fr:'Achat'},return:{ar:'حركة تاريخية',fr:'Mouvement historique'},payment:{ar:'دفع/تحصيل',fr:'Paiement'},offset:{ar:'مقاصة',fr:'Compensation'},settlement:{ar:'تسوية',fr:'Règlement'},expense:{ar:'مصروف',fr:'Dépense'},transfer:{ar:'تحويل',fr:'Transfert'},adjustment:{ar:'تصحيح',fr:'Ajustement'}};
+function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,'0'),d=String(value.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
+
+export function ReportsScreen(){
+  const db=useSQLiteContext(),{t,locale,isRTL,number}=useI18n(),auth=useAuth(),allowed=auth.has('reports.view'),ar=locale==='ar',today=localDay();
+  const [type,setType]=useState<ReportType>('overview'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[allTime,setAllTime]=useState(false),[data,setData]=useState<ReportData>({metrics:[],rows:[]});
+  const [products,setProducts]=useState<Product[]>([]),[parties,setParties]=useState<Party[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[productId,setProductId]=useState(''),[partyId,setPartyId]=useState(''),[partyType,setPartyType]=useState<'customer'|'supplier'>('customer'),[accountId,setAccountId]=useState(''),[movementType,setMovementType]=useState(''),[direction,setDirection]=useState<'in'|'out'|''>(''),[debtSide,setDebtSide]=useState<'receivable'|'payable'|'clear'|''>(''),[search,setSearch]=useState(''),[productPicker,setProductPicker]=useState(false),[partyPicker,setPartyPicker]=useState(false);
+  const filters:ReportFilters=useMemo(()=>({allTime,productId:productId||undefined,partyId:partyId||undefined,paymentAccountId:accountId||undefined,movementType:movementType||undefined,direction,debtSide,search:search||undefined}),[accountId,allTime,debtSide,direction,movementType,partyId,productId,search]);
+  const load=useCallback(async()=>{if(!allowed)return;const [report,p,c,s,a]=await Promise.all([runReport(db,type,from,to,filters),listProducts(db,'',undefined,false,1000),listParties(db,'customer','',10000),listParties(db,'supplier','',10000),listPaymentAccounts(db,true)]);setData(report);setProducts(p);setParties([...c,...s]);setAccounts(a)},[allowed,db,filters,from,to,type]);
+  useFocusEffect(useCallback(()=>{void load()},[load]));
+  if(!allowed)return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض التقارير':'Vous n’avez pas accès aux rapports.'}/></Screen>;
+  const label=(key:string)=>metricLabels[key]?.[locale]??key,selectedProduct=products.find(p=>p.id===productId),selectedParty=parties.find(p=>p.id===partyId),numericMetrics=new Set(['count','quantity','movements','netChange']);
+  const accountName=(value:string)=>accounts.find(account=>account.id===value||account.code===value)?.name??value;
+  const localizeRow=(item:ReportData['rows'][number])=>{
+    let rowLabel=item.label,secondary=item.secondary;
+    if(type==='product-sales'&&secondary.startsWith('qty '))secondary=`${t('quantity')}: ${number(Number(secondary.slice(4)))}`;
+    if(type==='stock'){
+      const parts=secondary.split(' • '),movement=stockMovementTypes.find(([id])=>id===parts[1]);
+      if(movement&&parts[1])parts[1]=ar?movement[1]:movement[2];
+      secondary=parts.join(' • ');
+    }
+    if(type==='debts'){
+      const parts=secondary.split(' • ');
+      if(parts[0]==='customer')parts[0]=ar?'عميل':'Client';
+      else if(parts[0]==='supplier')parts[0]=ar?'مورد':'Fournisseur';
+      secondary=parts.join(' • ');
+    }
+    if(type==='party-ledger'){
+      const labelParts=rowLabel.split(' • '),kind=labelParts[1]?documentKindLabels[labelParts[1]]:undefined;
+      if(kind&&labelParts[1])labelParts[1]=kind[locale];
+      rowLabel=labelParts.join(' • ');
+      const parts=secondary.split(' • ');
+      if(parts[1]&&parts[1]!=='—')parts[1]=accountName(parts[1]);
+      secondary=parts.join(' • ');
+    }
+    if(type==='financial'){
+      const parts=rowLabel.split(' • '),movement=parts[0]?financialMovementLabels[parts[0]]:undefined;
+      if(movement&&parts[0])parts[0]=movement[locale];
+      if(parts[1])parts[1]=accountName(parts[1]);
+      rowLabel=parts.join(' • ');
+    }
+    return{rowLabel,secondary};
+  };
+  const changeType=(next:ReportType)=>{setType(next);setProductId('');setPartyId('');setAccountId('');setMovementType('');setDirection('');setDebtSide('');setSearch('')};
+  const productFilter=['sales','purchases','product-sales','stock'].includes(type),accountFilter=['sales','purchases','financial','expenses'].includes(type);
+  return <Screen padded={false}><FlatList data={data.rows} keyExtractor={x=>x.id} contentContainerStyle={styles.content} ListHeaderComponent={<View style={styles.header}><SectionTitle title={t('reports')}/><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{reportTypes.map(r=><Chip key={r.id} label={r[locale]} active={type===r.id} onPress={()=>changeType(r.id)}/>)}</ScrollView>{type!=='debts'?<Card><View style={[styles.dates,{flexDirection:isRTL?'row-reverse':'row'}]}><Field label={t('from')} value={from} onChangeText={value=>{setFrom(value);setAllTime(false)}} style={styles.flex}/><Field label={t('to')} value={to} onChangeText={value=>{setTo(value);setAllTime(false)}} style={styles.flex}/></View><Button title={ar?'كل المدة':'Toute la période'} variant="secondary" onPress={()=>{setFrom('');setTo('');setAllTime(true)}}/></Card>:null}{productFilter?<Card><AppText variant="caption" muted>{ar?'المنتج':'Produit'}</AppText><View style={styles.filterRow}><Button title={selectedProduct?.name??(ar?'كل المنتجات':'Tous les produits')} variant="secondary" onPress={()=>setProductPicker(true)}/>{productId?<Button title={ar?'إزالة الفلتر':'Effacer'} variant="ghost" onPress={()=>setProductId('')}/>:null}</View></Card>:null}{accountFilter?<Card><AppText variant="caption" muted>{ar?'وسيلة الدفع':'Moyen de paiement'}</AppText><View style={styles.wrap}><Chip label={ar?'الكل':'Tous'} active={!accountId} onPress={()=>setAccountId('')}/>{accounts.map(a=><Chip key={a.id} label={a.name} active={accountId===a.id} onPress={()=>setAccountId(a.id)}/>)}</View></Card>:null}{type==='stock'?<Card><AppText variant="caption" muted>{ar?'نوع حركة المخزون':'Type de mouvement'}</AppText><View style={styles.wrap}><Chip label={ar?'الكل':'Tous'} active={!movementType} onPress={()=>setMovementType('')}/>{stockMovementTypes.map(([id,arabic,french])=><Chip key={id} label={ar?arabic:french} active={movementType===id} onPress={()=>setMovementType(id)}/>)}</View></Card>:null}{type==='financial'?<Card><AppText variant="caption" muted>{ar?'اتجاه الحركة':'Sens du mouvement'}</AppText><View style={styles.wrap}><Chip label={ar?'الكل':'Tous'} active={!direction} onPress={()=>setDirection('')}/><Chip label={ar?'داخل':'Entrées'} active={direction==='in'} onPress={()=>setDirection('in')}/><Chip label={ar?'خارج':'Sorties'} active={direction==='out'} onPress={()=>setDirection('out')}/></View></Card>:null}{type==='debts'?<Card><SearchField value={search} onChangeText={setSearch}/><View style={styles.wrap}><Chip label={ar?'الكل':'Tous'} active={!debtSide} onPress={()=>setDebtSide('')}/><Chip label={ar?'لنا':'À recevoir'} active={debtSide==='receivable'} onPress={()=>setDebtSide('receivable')}/><Chip label={ar?'علينا':'À payer'} active={debtSide==='payable'} onPress={()=>setDebtSide('payable')}/><Chip label={ar?'مسدد':'Soldé'} active={debtSide==='clear'} onPress={()=>setDebtSide('clear')}/></View></Card>:null}{type==='party-ledger'?<Card><View style={styles.wrap}><Chip label={ar?'عميل':'Client'} active={partyType==='customer'} onPress={()=>{setPartyType('customer');setPartyId('')}}/><Chip label={ar?'مورد':'Fournisseur'} active={partyType==='supplier'} onPress={()=>{setPartyType('supplier');setPartyId('')}}/></View><Button title={selectedParty?.name??(ar?'اختر الطرف':'Choisir le compte')} variant="secondary" onPress={()=>setPartyPicker(true)}/>{!partyId?<AppText muted>{ar?'اختر عميلاً أو مورداً لإنشاء كشف الحساب.':'Choisissez un client ou un fournisseur pour le relevé.'}</AppText>:null}</Card>:null}<View style={[styles.metrics,{flexDirection:isRTL?'row-reverse':'row'}]}>{data.metrics.map(m=><Card key={m.label} style={styles.metric}><AppText variant="caption" muted>{label(m.label)}</AppText>{numericMetrics.has(m.label)?<AppText variant="heading">{number(m.value)}</AppText>:<Money value={m.value} tone={m.label==='profit'||m.label==='incoming'||m.label==='receivable'?'positive':m.label==='expenses'||m.label==='outgoing'||m.label==='payable'?'negative':'normal'}/>}</Card>)}</View></View>} renderItem={({item})=>{const localized=localizeRow(item);return <Row title={localized.rowLabel} subtitle={localized.secondary} trailing={item.format==='number'?<AppText variant="heading">{number(item.value)}</AppText>:<Money value={item.value} tone={item.extra!=null&&item.extra<0?'negative':item.extra!=null&&item.extra>0?'positive':'normal'}/>} />}} ListEmptyComponent={<Card><AppText muted>{type==='party-ledger'&&!partyId?(ar?'اختر الطرف أولاً':'Choisissez d’abord le compte.'):t('noData')}</AppText></Card>}/><ProductPicker visible={productPicker} products={products} onClose={()=>setProductPicker(false)} onSelect={product=>setProductId(product.id)}/><PartyPicker visible={partyPicker} parties={parties.filter(p=>p.partyType===partyType)} directLabel={ar?'إلغاء الاختيار':'Effacer la sélection'} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??'')}/></Screen>
+}
+const styles=StyleSheet.create({content:{padding:spacing.md,gap:spacing.xs,paddingBottom:spacing.xxl,backgroundColor:colors.background},header:{gap:spacing.md},chips:{gap:spacing.xs},dates:{gap:spacing.sm},flex:{flex:1},metrics:{flexWrap:'wrap',gap:spacing.sm},metric:{minWidth:145,flexGrow:1},wrap:{flexDirection:'row',flexWrap:'wrap',gap:spacing.xs},filterRow:{flexDirection:'row',flexWrap:'wrap',gap:spacing.xs}});

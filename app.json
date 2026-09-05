@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "الكرنه",
+    "slug": "alkarna-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "alkarna",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "mr.alkarna.mobile",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#F4FAFF"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
