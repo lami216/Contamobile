@@ -44,6 +44,29 @@ const exact:Record<string,string>={
   'إصدار النسخة غير مدعوم':'Cette version de sauvegarde n’est pas prise en charge.',
   'ملف النسخة ليس JSON صالحًا':'Le fichier de sauvegarde n’est pas un JSON valide.',
   'يجب أن تحتوي النسخة على مخزن بيع افتراضي واحد':'La sauvegarde doit contenir exactement un dépôt de vente par défaut.',
+  'ملف نسخة الكمبيوتر أكبر من 50MB':'La sauvegarde ordinateur dépasse la limite de 50 Mo.',
+  'ملف نسخة الكمبيوتر ليس JSON صالحًا':"La sauvegarde ordinateur n’est pas un JSON valide.",
+  'هذا الملف ليس نسخة رسمية مدعومة من نسخة الكمبيوتر':"Ce fichier n’est pas une sauvegarde ordinateur officielle prise en charge.",
+  'بنية collections غير صالحة':'La structure des collections de la sauvegarde est invalide.',
+  'عدد السجلات في النسخة أكبر من الحد المسموح':'La sauvegarde contient trop d’enregistrements.',
+  'معرف المخزن مكرر أو غير صالح':'Un identifiant de dépôt est dupliqué ou invalide.',
+  'معرف المنتج مكرر أو غير صالح':'Un identifiant de produit est dupliqué ou invalide.',
+  'معرف الحساب مكرر أو غير صالح':'Un identifiant de compte est dupliqué ou invalide.',
+  'معرف الطرف مكرر أو غير صالح':'Un identifiant de tiers est dupliqué ou invalide.',
+  'معرف المستند مكرر أو غير صالح':'Un identifiant de document est dupliqué ou invalide.',
+  'نسخة الكمبيوتر يجب أن تحتوي مخزن بيع افتراضيًا واحدًا':'La sauvegarde ordinateur doit contenir exactement un dépôt de vente par défaut.',
+  'مخزون يشير إلى مخزن غير موجود':'Un stock fait référence à un dépôt introuvable.',
+  'مستند يشير إلى مخزن غير موجود':'Un document fait référence à un dépôt introuvable.',
+  'تحويل يشير إلى مخزن غير موجود':'Un transfert fait référence à un dépôt introuvable.',
+  'مستند يشير إلى طرف غير موجود':'Un document fait référence à un client ou fournisseur introuvable.',
+  'مستند يشير إلى وسيلة دفع غير موجودة':'Un document fait référence à un moyen de paiement introuvable.',
+  'تسلسل البيع اليومي مكرر':'La séquence quotidienne des ventes contient un doublon.',
+  'مستند يشير إلى منتج غير موجود':'Un document fait référence à un produit introuvable.',
+  'حركة مخزون تشير إلى منتج غير موجود':'Un mouvement de stock fait référence à un produit introuvable.',
+  'حركة مخزون تشير إلى مخزن غير موجود':'Un mouvement de stock fait référence à un dépôt introuvable.',
+  'حركة مخزون تشير إلى مستند غير موجود':'Un mouvement de stock fait référence à un document introuvable.',
+  'اسم مستخدم مكرر أو غير صالح في نسخة الكمبيوتر':'Un identifiant utilisateur de la sauvegarde ordinateur est dupliqué ou invalide.',
+  'لم يتم اختيار ملف':'Aucun fichier n’a été sélectionné.',
   'التاريخ غير صالح':'La date est invalide.',
   'الفترة مطلوبة':'La période est obligatoire.',
   'بداية الفترة يجب ألا تتجاوز نهايتها':'La date de début ne peut pas être postérieure à la date de fin.',
@@ -62,6 +85,7 @@ function dynamic(message:string){
   match=message.match(/^لا يمكن حذف الفاتورة لأن جزءًا من مخزونها تم التصرف فيه\.?$/);if(match)return 'Impossible d’annuler la facture car une partie de son stock a déjà été utilisée.';
   match=message.match(/^النسخة لا تحتوي جدول (.+)$/);if(match)return `La sauvegarde ne contient pas la table ${match[1]}.`;
   match=message.match(/^حقل غير متوقع في (.+)$/);if(match)return `Champ inattendu dans ${match[1]}.`;
+  match=message.match(/^collection مفقود: (.+)$/);if(match)return `Collection manquante dans la sauvegarde : ${match[1]}.`;
   return null;
 }
 
