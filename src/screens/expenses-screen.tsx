@@ -5,7 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { DocumentRecord, PaymentAccount } from '@/domain/types';
 import { listDocuments, listPaymentAccounts } from '@/db/queries';
 import { postExpense } from '@/services/accounting-service';
-import { AppText, Button, Card, Chip, EmptyState, Field, Money, Row, Screen, SectionTitle } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, Field, Money, Row, Screen, SectionTitle } from '@/components/ui';
 import { useI18n } from '@/i18n/provider';
 import { spacing } from '@/theme';
 export function ExpensesScreen(){const db=useSQLiteContext(),{t,date}=useI18n();const [items,setItems]=useState<DocumentRecord[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[open,setOpen]=useState(false);const load=useCallback(async()=>{const [docs,a]=await Promise.all([listDocuments(db,{kind:'expense',limit:100}),listPaymentAccounts(db)]);setItems(docs);setAccounts(a)},[db]);useFocusEffect(useCallback(()=>{void load()},[load]));return <Screen><SectionTitle title={t('expenses')} action={<Button title={t('add')} onPress={()=>setOpen(true)}/>}/><FlatList data={items} keyExtractor={x=>x.id} ListEmptyComponent={<EmptyState title={t('noData')}/>} renderItem={({item})=><Row title={item.title??item.number} subtitle={`${date(item.occurredAt)} • ${item.number}`} trailing={<Money value={item.total} tone="negative"/>}/>}/><ExpenseModal visible={open} accounts={accounts} onClose={()=>setOpen(false)} onSave={async input=>{try{await postExpense(db,input);setOpen(false);await load();Alert.alert(t('success'))}catch(error){Alert.alert(t('error'),error instanceof Error?error.message:t('error'))}}}/></Screen>}
