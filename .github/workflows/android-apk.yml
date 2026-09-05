@@ -39,13 +39,6 @@ jobs:
           java-version: '17'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Install Expo-compatible Sharp CLI for native image generation
-        run: npm install --global sharp-cli@^5.2.0
-      - name: Normalize app icon with Sharp
-        run: |
-          mkdir -p /tmp/alkarna-icon
-          sharp -i assets/icon.png -o /tmp/alkarna-icon -f png
-          cp /tmp/alkarna-icon/icon.png assets/icon.png
       - name: Generate Android native project
         run: npx expo prebuild --platform android --clean --no-install
       - name: Build debug APK
