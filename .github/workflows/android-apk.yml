@@ -6,10 +6,14 @@ on:
     branches: [mobile-v1]
     paths:
       - '.github/workflows/android-apk.yml'
+      - 'app/**'
+      - 'src/**'
+      - 'assets/**'
       - 'app.json'
       - 'package.json'
       - 'package-lock.json'
-      - 'assets/**'
+      - 'tsconfig.json'
+      - 'babel.config.js'
 
 permissions:
   contents: read
