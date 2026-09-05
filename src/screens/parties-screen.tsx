@@ -1,0 +1,12 @@
+import { useCallback, useState } from 'react';
+import { Alert, FlatList, Modal, StyleSheet, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import type { Party, PartyType } from '@/domain/types';
+import { listParties } from '@/db/queries';
+import { createParty } from '@/services/accounting-service';
+import { AppText, Button, Card, EmptyState, Field, Money, Row, Screen, SearchField, SectionTitle } from '@/components/ui';
+import { useI18n } from '@/i18n/provider';
+import { spacing } from '@/theme';
+export function PartiesScreen({type}:{type:PartyType}){const db=useSQLiteContext(),{t}=useI18n();const [items,setItems]=useState<Party[]>([]),[search,setSearch]=useState(''),[open,setOpen]=useState(false);const load=useCallback(async()=>setItems(await listParties(db,type,search,150)),[db,type,search]);useFocusEffect(useCallback(()=>{void load()},[load]));return <Screen><SectionTitle title={type==='customer'?t('customers'):t('suppliers')} action={<Button title={t('add')} onPress={()=>setOpen(true)}/>}/><SearchField value={search} onChangeText={setSearch}/><FlatList data={items} keyExtractor={x=>x.id} ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')}/>} renderItem={({item})=><Row title={item.name} subtitle={item.phone||undefined} trailing={<Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/>} onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})}/>}/><PartyModal visible={open} type={type} onClose={()=>setOpen(false)} onSave={async(name,phone)=>{try{await createParty(db,{name,phone,partyType:type});setOpen(false);await load()}catch(error){Alert.alert(t('error'),error instanceof Error?error.message:t('error'))}}}/></Screen>}
+function PartyModal({visible,type,onClose,onSave}:{visible:boolean;type:PartyType;onClose:()=>void;onSave:(name:string,phone:string)=>Promise<void>}){const {t}=useI18n();const [name,setName]=useState(''),[phone,setPhone]=useState('');return <Modal visible={visible} animationType="slide" onRequestClose={onClose}><Screen scroll><SectionTitle title={t('createParty')}/><Card><Field label={t('name')} value={name} onChangeText={setName}/><Field label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/><AppText muted>{type==='customer'?t('customer'):t('supplier')}</AppText></Card><Button title={t('save')} onPress={()=>void onSave(name,phone)}/><Button title={t('cancel')} variant="ghost" onPress={onClose}/></Screen></Modal>}
