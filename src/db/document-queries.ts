@@ -1,0 +1,12 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+import type { DocumentLine, DocumentRecord } from '@/domain/types';
+
+type DocumentRow={id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
+type LineRow={id:string;product_id:string|null;description:string;quantity:number;unit_price:number;line_total:number;cost_at_sale:number|null;gross_profit:number|null;balance_before:number|null;balance_after:number|null};
+
+export async function getDocumentById(db:SQLiteDatabase,id:string):Promise<DocumentRecord|null>{
+  const r=await db.getFirstAsync<DocumentRow>('SELECT * FROM documents WHERE id=?',[id]);
+  if(!r)return null;
+  const lines=await db.getAllAsync<LineRow>('SELECT id,product_id,description,quantity,unit_price,line_total,cost_at_sale,gross_profit,balance_before,balance_after FROM document_lines WHERE document_id=? ORDER BY rowid',[id]);
+  return {id:r.id,number:r.number,sequence:r.sequence,kind:r.kind,status:r.status,partyId:r.party_id,partyName:r.party_name,warehouseId:r.warehouse_id,warehouseName:r.warehouse_name,destinationWarehouseId:r.destination_warehouse_id,destinationWarehouseName:r.destination_warehouse_name,paymentMethod:r.payment_method,title:r.title,total:r.total,dueTotal:r.due_total,paidTotal:r.paid_total,cashAmount:r.cash_amount,partyCashDirection:r.party_cash_direction,partyBalanceBefore:r.party_balance_before,partyBalanceDelta:r.party_balance_delta,partyBalanceAfter:r.party_balance_after,businessDate:r.business_date,dailySequence:r.daily_sequence,pricingMode:r.pricing_mode,occurredAt:r.occurred_at,updatedAt:r.updated_at,revision:r.revision,voidedAt:r.voided_at,lines:lines.map((line):DocumentLine=>({id:line.id,productId:line.product_id,description:line.description,quantity:line.quantity,unitPrice:line.unit_price,lineTotal:line.line_total,costAtSale:line.cost_at_sale,grossProfit:line.gross_profit,balanceBefore:line.balance_before,balanceAfter:line.balance_after}))};
+}
