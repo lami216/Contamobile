@@ -1,0 +1,14 @@
+import { useCallback, useState } from 'react';
+import { Alert, FlatList, Modal, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import type { Warehouse } from '@/domain/types';
+import { listWarehouses } from '@/db/queries';
+import { createWarehouse, setDefaultWarehouse } from '@/services/accounting-service';
+import { archiveWarehouse, renameWarehouse } from '@/services/management-service';
+import { AppText, Button, Card, EmptyState, Field, Row, Screen, SectionTitle } from '@/components/ui';
+import { useI18n } from '@/i18n/provider';
+import { colors, spacing } from '@/theme';
+export function WarehousesScreen(){const db=useSQLiteContext(),{t}=useI18n();const [items,setItems]=useState<Warehouse[]>([]),[editing,setEditing]=useState<Warehouse|null|undefined>(undefined);const load=useCallback(async()=>setItems(await listWarehouses(db)),[db]);useFocusEffect(useCallback(()=>{void load()},[load]));const run=async(work:()=>Promise<unknown>)=>{try{await work();setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),error instanceof Error?error.message:t('error'))}};return <Screen><SectionTitle title={t('warehouses')} action={<Button title={t('add')} onPress={()=>setEditing(null)}/>}/><FlatList data={items} keyExtractor={x=>x.id} ListEmptyComponent={<EmptyState title={t('noData')}/>} renderItem={({item})=><Row title={item.name} subtitle={item.isSalesDefault?'مخزن البيع الافتراضي':undefined} trailing={!item.isSalesDefault?<Button title={t('confirm')} variant="secondary" onPress={()=>void run(()=>setDefaultWarehouse(db,item.id))}/>:<AppText>✓</AppText>} onPress={()=>setEditing(item)}/>}/>{editing!==undefined?<WarehouseEditor item={editing} onClose={()=>setEditing(undefined)} onSave={name=>run(()=>editing?renameWarehouse(db,editing.id,name):createWarehouse(db,name))} onArchive={editing&&!editing.isSalesDefault?()=>Alert.alert(t('delete'),editing.name,[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void run(()=>archiveWarehouse(db,editing.id))}]):undefined}/>:null}</Screen>}
+function WarehouseEditor({item,onClose,onSave,onArchive}:{item:Warehouse|null;onClose:()=>void;onSave:(name:string)=>Promise<unknown>;onArchive?:()=>void}){const {t}=useI18n();const [name,setName]=useState(item?.name??'');return <Modal animationType="slide" onRequestClose={onClose}><Screen scroll><View style={styles.modal}><SectionTitle title={item?item.name:t('warehouses')}/><Card><Field label={t('name')} value={name} onChangeText={setName}/></Card><Button title={t('save')} onPress={()=>void onSave(name)}/>{onArchive?<Button title={t('delete')} variant="danger" onPress={onArchive}/>:null}<Button title={t('cancel')} variant="ghost" onPress={onClose}/></View></Screen></Modal>}
+const styles=StyleSheet.create({modal:{gap:spacing.md,backgroundColor:colors.background}});
