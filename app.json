@@ -5,12 +5,17 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "alkarna",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "android": {
       "package": "mr.alkarna.mobile",
       "versionCode": 1,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#F4FAFF"
+      }
     },
     "plugins": [
       "expo-router",
