@@ -8,6 +8,8 @@ type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'suppl
 type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;opening_balance:number;balance:number};
 type DocumentRow = {id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
 type LineRow = {id:string;product_id:string|null;description:string;quantity:number;unit_price:number;line_total:number;cost_at_sale:number|null;gross_profit:number|null;balance_before:number|null;balance_after:number|null};
+export type PartyFinancialSummary={partyId:string;cashIn:number;cashOut:number;customerTradeTotal:number;customerGrossProfit:number;supplierTradeTotal:number;supplierInvoiceCount:number};
+type PartySummaryRow={party_id:string;cash_in:number|null;cash_out:number|null;customer_trade_total:number|null;customer_gross_profit:number|null;supplier_trade_total:number|null;supplier_invoice_count:number|null};
 
 export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?: string, includeArchived = false, limit = 100, offset = 0): Promise<Product[]> {
   const q = `%${search.trim()}%`;
@@ -38,17 +40,31 @@ export async function getParty(db:SQLiteDatabase,id:string):Promise<Party|null> 
   return r?{id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,createdAt:r.created_at}:null;
 }
 
+function mapPartySummary(row:PartySummaryRow):PartyFinancialSummary{return{partyId:row.party_id,cashIn:Number(row.cash_in??0),cashOut:Number(row.cash_out??0),customerTradeTotal:Number(row.customer_trade_total??0),customerGrossProfit:Number(row.customer_gross_profit??0),supplierTradeTotal:Number(row.supplier_trade_total??0),supplierInvoiceCount:Number(row.supplier_invoice_count??0)}}
+const partySummarySql=`SELECT p.id party_id,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_in,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_out,
+  (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_trade_total,
+  (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(l.gross_profit,0) ELSE COALESCE(l.gross_profit,0) END),0) FROM documents d JOIN document_lines l ON l.document_id=d.id WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_gross_profit,
+  (SELECT COALESCE(SUM(d.total),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_trade_total,
+  (SELECT COUNT(*) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_invoice_count
+FROM parties p`;
+export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier'):Promise<PartyFinancialSummary[]>{const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${type?' WHERE p.party_type=?':''}`,type?[type]:[]);return rows.map(mapPartySummary)}
+export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string):Promise<PartyFinancialSummary>{const row=await db.getFirstAsync<PartySummaryRow>(`${partySummarySql} WHERE p.id=?`,[partyId]);return row?mapPartySummary(row):{partyId,cashIn:0,cashOut:0,customerTradeTotal:0,customerGrossProfit:0,supplierTradeTotal:0,supplierInvoiceCount:0}}
+
 export async function listPaymentAccounts(db:SQLiteDatabase,includeArchived=false):Promise<PaymentAccount[]> {
   const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
   return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),openingBalance:r.opening_balance,balance:r.balance}));
 }
 
-export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];partyId?:string;search?:string;limit?:number}={}):Promise<DocumentRecord[]> {
+export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];partyId?:string;search?:string;from?:string;to?:string;limit?:number}={}):Promise<DocumentRecord[]> {
   const clauses=['1=1'];
   const values:(string|number)[]=[];
   if(opts.kind){clauses.push('kind=?');values.push(opts.kind)}
   if(opts.partyId){clauses.push('party_id=?');values.push(opts.partyId)}
   if(opts.search){clauses.push('(number LIKE ? OR party_name LIKE ? OR title LIKE ?)');const q=`%${opts.search}%`;values.push(q,q,q)}
+  if(opts.from){clauses.push('substr(occurred_at,1,10)>=?');values.push(opts.from)}
+  if(opts.to){clauses.push('substr(occurred_at,1,10)<=?');values.push(opts.to)}
   values.push(opts.limit??100);
   const rows=await db.getAllAsync<DocumentRow>(`SELECT * FROM documents WHERE ${clauses.join(' AND ')} ORDER BY occurred_at DESC LIMIT ?`,values);
   const result:DocumentRecord[]=[];
