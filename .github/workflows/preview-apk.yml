@@ -26,15 +26,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Build installable preview APK
+      - name: Build standalone preview APK
         shell: bash
         run: |
           set -euxo pipefail
           npm install --no-audit --no-fund
           npx expo prebuild --platform android --clean --no-install
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleDebug --no-daemon --stacktrace
-          cp android/app/build/outputs/apk/debug/app-debug.apk alkarna-ux-preview.apk
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace
+          cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
           test -s alkarna-ux-preview.apk
 
       - name: Upload APK
