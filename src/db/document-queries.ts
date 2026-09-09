@@ -14,11 +14,12 @@ export async function getDocumentById(db:SQLiteDatabase,id:string):Promise<Docum
   return mapDocument(r,lines);
 }
 
-export async function listDocumentHeaders(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];search?:string;from?:string;to?:string;limit?:number;status?:DocumentRecord['status']}={}):Promise<DocumentRecord[]>{
+export async function listDocumentHeaders(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];partyId?:string;search?:string;from?:string;to?:string;limit?:number;status?:DocumentRecord['status']}={}):Promise<DocumentRecord[]>{
   const clauses=['1=1'];
   const values:(string|number)[]=[];
   if(opts.status){clauses.push('status=?');values.push(opts.status)}
   if(opts.kind){clauses.push('kind=?');values.push(opts.kind)}
+  if(opts.partyId){clauses.push('party_id=?');values.push(opts.partyId)}
   if(opts.search){clauses.push('(number LIKE ? OR party_name LIKE ? OR title LIKE ?)');const q=`%${opts.search.trim()}%`;values.push(q,q,q)}
   if(opts.from){clauses.push('substr(occurred_at,1,10)>=?');values.push(opts.from)}
   if(opts.to){clauses.push('substr(occurred_at,1,10)<=?');values.push(opts.to)}
