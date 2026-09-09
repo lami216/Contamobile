@@ -3,7 +3,7 @@ on:
   push:
     branches: [mobile-v1, main]
   pull_request:
-    branches: [main]
+    branches: [main, mobile-v1]
 permissions:
   contents: read
 jobs:
