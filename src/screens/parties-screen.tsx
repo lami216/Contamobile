@@ -1,18 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PartyType } from '@/domain/types';
 import { listParties, listPartyFinancialSummaries, type PartyFinancialSummary } from '@/db/queries';
 import { createParty } from '@/services/accounting-service';
-import { AppText, Button, Card, EmptyState, Field, Money, Row, Screen, SearchField, SectionTitle } from '@/components/ui';
+import { AppText, Badge, Button, Card, EmptyState, Field, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
+import { CompactMetric, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-import { spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 export function PartiesScreen({type}:{type:PartyType}){
-  const db=useSQLiteContext(),{t,locale,number,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
-  const [items,setItems]=useState<Party[]>([]),[summaries,setSummaries]=useState<PartyFinancialSummary[]>([]),[search,setSearch]=useState(''),[open,setOpen]=useState(false);
+  const db=useSQLiteContext(),{t,locale,number,isRTL,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
+  const [items,setItems]=useState<Party[]>([]),[summaries,setSummaries]=useState<PartyFinancialSummary[]>([]),[search,setSearch]=useState('');
+  const [createOpen,setCreateOpen]=useState(false),[name,setName]=useState(''),[phone,setPhone]=useState(''),[busy,setBusy]=useState(false);
   const viewCapability=type==='customer'?'customers.view':'suppliers.view',createCapability=type==='customer'?'customers.create':'suppliers.create',allowed=auth.has(viewCapability),canCreate=auth.has(createCapability);
   const load=useCallback(async()=>{if(!allowed)return;const [parties,metrics]=await Promise.all([listParties(db,type,search,150),listPartyFinancialSummaries(db,type)]);setItems(parties);setSummaries(metrics)},[allowed,db,type,search]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
@@ -20,9 +22,47 @@ export function PartiesScreen({type}:{type:PartyType}){
   const visibleSummaries=useMemo(()=>{if(!search.trim())return summaries;const visibleIds=new Set(items.map(item=>item.id));return summaries.filter(item=>visibleIds.has(item.partyId))},[items,search,summaries]);
   const aggregate=useMemo(()=>visibleSummaries.reduce((total,item)=>{total.cashIn+=item.cashIn;total.cashOut+=item.cashOut;total.trade+=type==='customer'?item.customerTradeTotal:item.supplierTradeTotal;total.profit+=type==='customer'?item.customerGrossProfit:0;total.count+=type==='supplier'?item.supplierInvoiceCount:0;return total},{cashIn:0,cashOut:0,trade:0,profit:0,count:0}),[visibleSummaries,type]);
   const net=useMemo(()=>items.reduce((sum,item)=>sum+item.net,0),[items]);
+  const closeCreate=()=>{if(busy)return;setCreateOpen(false);setName('');setPhone('')};
+  const saveParty=async()=>{
+    if(!canCreate||busy)return;
+    setBusy(true);
+    try{await createParty(db,{name,phone,partyType:type});setCreateOpen(false);setName('');setPhone('');await load()}
+    catch(error){Alert.alert(t('error'),errorMessage(error))}
+    finally{setBusy(false)}
+  };
   if(!allowed)return <Screen><EmptyState title={type==='customer'?(ar?'ليس لديك صلاحية عرض العملاء':'Vous n’avez pas accès aux clients.'):(ar?'ليس لديك صلاحية عرض الموردين':'Vous n’avez pas accès aux fournisseurs.')}/></Screen>;
-  const tradeLabel=type==='customer'?(ar?'إجمالي ما اشتراه العملاء منا':'Achats totaux des clients'):(ar?'إجمالي مشترياتنا من الموردين':'Achats totaux fournisseurs');
-  return <Screen><SectionTitle title={type==='customer'?t('customers'):t('suppliers')} action={canCreate?<Button title={t('add')} onPress={()=>setOpen(true)}/>:undefined}/><View style={styles.metrics}><Card style={styles.metric}><AppText variant="caption" muted>{tradeLabel}</AppText><Money value={aggregate.trade}/></Card>{type==='customer'?<Card style={styles.metric}><AppText variant="caption" muted>{ar?'إجمالي الربح':'Bénéfice brut total'}</AppText><Money value={aggregate.profit} tone={aggregate.profit>0?'positive':aggregate.profit<0?'negative':'normal'}/></Card>:<Card style={styles.metric}><AppText variant="caption" muted>{ar?'عدد فواتير الشراء':'Factures d’achat'}</AppText><AppText variant="heading">{number(aggregate.count)}</AppText></Card>}<Card style={styles.metric}><AppText variant="caption" muted>{type==='customer'?(ar?'ما دفعه العملاء لنا':'Versé par les clients'):(ar?'ما دفعناه للموردين':'Versé aux fournisseurs')}</AppText><Money value={type==='customer'?aggregate.cashIn:aggregate.cashOut}/></Card><Card style={styles.metric}><AppText variant="caption" muted>{ar?'صافي الرصيد':'Solde net'}</AppText><Money value={Math.abs(net)} tone={net>0?'positive':net<0?'negative':'normal'}/></Card></View><SearchField value={search} onChangeText={setSearch}/><FlatList data={items} keyExtractor={x=>x.id} ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')}/>} renderItem={({item})=>{const metric=summaryMap.get(item.id);const trade=type==='customer'?metric?.customerTradeTotal??0:metric?.supplierTradeTotal??0;const extra=type==='customer'?`${ar?'إجمالي مشترياته':'Achats'}: ${number(trade)} MRU • ${ar?'الربح':'Bénéfice'}: ${number(metric?.customerGrossProfit??0)} MRU`:`${ar?'إجمالي مشترياتنا منه':'Nos achats'}: ${number(trade)} MRU`;return <Row title={item.name} subtitle={`${item.phone||'—'} • ${extra}`} trailing={<Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/>} onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})}/>}}/>{open&&canCreate?<PartyModal visible={open} type={type} onClose={()=>setOpen(false)} onSave={async(name,phone)=>{try{if(!auth.has(createCapability))throw new Error(ar?'ليس لديك صلاحية إنشاء هذا الحساب':'Vous n’avez pas le droit de créer ce compte.');await createParty(db,{name,phone,partyType:type});setOpen(false);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}}}/>:null}</Screen>
+  const title=type==='customer'?t('customers'):t('suppliers');
+  const tradeLabel=type==='customer'?(ar?'إجمالي المبيعات لهم':'Ventes aux clients'):(ar?'إجمالي المشتريات منهم':'Achats fournisseurs');
+  const balanceLabel=net>0?(ar?'مستحق لنا':'À recevoir'):net<0?(ar?'مستحق علينا':'À payer'):(ar?'الرصيد مسدد':'Solde réglé');
+  const balanceTone=net>0?'positive':net<0?'negative':'normal';
+  return <Screen padded={false}>
+    <FlatList data={items} keyExtractor={item=>item.id} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list} ListHeaderComponent={<View style={styles.header}>
+      <SectionTitle title={title} subtitle={type==='customer'?(ar?'ابحث عن العميل واعرف الرصيد قبل التحصيل أو البيع الآجل.':'Trouvez le client et voyez son solde avant encaissement ou crédit.'):(ar?'اعرف ما علينا لكل مورد قبل الدفع أو تسجيل شراء جديد.':'Voyez ce qui est dû avant paiement ou nouvel achat.')} action={canCreate?<Button compact title={t('add')} onPress={()=>setCreateOpen(true)}/>:undefined}/>
+      <Card tone="primary" style={styles.balanceHero}><AppText variant="caption" muted>{balanceLabel}</AppText><Money value={Math.abs(net)} tone={balanceTone} large/><AppText variant="caption" muted>{ar?`${number(items.length)} حساب ظاهر`:`${number(items.length)} comptes affichés`}</AppText></Card>
+      <View style={[styles.metrics,{flexDirection:isRTL?'row-reverse':'row'}]}><CompactMetric label={tradeLabel} value={aggregate.trade}/>{type==='customer'?<CompactMetric label={ar?'الربح الإجمالي':'Bénéfice brut'} value={aggregate.profit} tone={aggregate.profit>=0?'positive':'negative'}/>:<View style={styles.countMetric}><AppText variant="caption" muted>{ar?'فواتير الشراء':'Factures d’achat'}</AppText><AppText variant="heading">{number(aggregate.count)}</AppText></View>}<CompactMetric label={type==='customer'?(ar?'المبالغ المحصلة':'Encaissements'):(ar?'المبالغ المدفوعة':'Paiements')} value={type==='customer'?aggregate.cashIn:aggregate.cashOut}/></View>
+      <SearchField value={search} onChangeText={setSearch} placeholder={type==='customer'?(ar?'ابحث باسم العميل أو الهاتف…':'Nom ou téléphone du client…'):(ar?'ابحث باسم المورد أو الهاتف…':'Nom ou téléphone du fournisseur…')}/>
+    </View>} ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')} description={!search&&canCreate?(ar?'أضف أول حساب لتبدأ متابعة الرصيد والحركات.':'Ajoutez le premier compte pour suivre solde et opérations.'):undefined}/>} renderItem={({item})=>{
+      const metric=summaryMap.get(item.id),trade=type==='customer'?metric?.customerTradeTotal??0:metric?.supplierTradeTotal??0;
+      const stateLabel=item.net>0?(ar?'لنا عليه':'À recevoir'):item.net<0?(ar?'له علينا':'À payer'):(ar?'مسدد':'Soldé');
+      const stateTone=item.net>0?'positive':item.net<0?'negative':'neutral';
+      return <Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={({pressed})=>[styles.row,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}><View style={styles.body}><View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1} style={styles.name}>{item.name}</AppText><Badge label={stateLabel} tone={stateTone}/></View>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}<AppText variant="caption" muted>{type==='customer'?(ar?`إجمالي مشترياته ${number(trade)} MRU`:`Achats ${number(trade)} MRU`):(ar?`إجمالي مشترياتنا ${number(trade)} MRU`:`Nos achats ${number(trade)} MRU`)}</AppText></View><View style={styles.trailing}><AppText variant="caption" muted>{ar?'الرصيد':'Solde'}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/><AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText></View></Pressable>;
+    }}/>
+
+    <Sheet visible={createOpen&&canCreate} title={type==='customer'?(ar?'عميل جديد':'Nouveau client'):(ar?'مورد جديد':'Nouveau fournisseur')} onClose={closeCreate} footer={<><Button title={t('save')} loading={busy} disabled={!name.trim()} onPress={()=>void saveParty()}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={closeCreate}/></>}><Field label={t('name')} value={name} onChangeText={setName} autoFocus/><Field label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/><Card tone="muted"><AppText variant="caption" muted>{type==='customer'?(ar?'يمكنك إضافة الرصيد والحركات لاحقًا من صفحة العميل.':'Le solde et les opérations se gèrent ensuite depuis le client.'):(ar?'يمكنك تسجيل الشراء والدفع لاحقًا من حساب المورد.':'Les achats et paiements se gèrent ensuite depuis le fournisseur.')}</AppText></Card></Sheet>
+  </Screen>;
 }
-function PartyModal({visible,type,onClose,onSave}:{visible:boolean;type:PartyType;onClose:()=>void;onSave:(name:string,phone:string)=>Promise<void>}){const {t}=useI18n();const [name,setName]=useState(''),[phone,setPhone]=useState('');return <Modal visible={visible} animationType="slide" onRequestClose={onClose}><Screen scroll><SectionTitle title={t('createParty')}/><Card><Field label={t('name')} value={name} onChangeText={setName}/><Field label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/><AppText muted>{type==='customer'?t('customer'):t('supplier')}</AppText></Card><Button title={t('save')} onPress={()=>void onSave(name,phone)}/><Button title={t('cancel')} variant="ghost" onPress={onClose}/></Screen></Modal>}
-const styles=StyleSheet.create({metrics:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm},metric:{minWidth:145,flexGrow:1}});
+
+const styles=StyleSheet.create({
+  list:{padding:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
+  header:{gap:spacing.md,marginBottom:spacing.sm},
+  balanceHero:{gap:spacing.xs,shadowOpacity:0,elevation:0},
+  metrics:{gap:spacing.sm,flexWrap:'wrap'},
+  countMetric:{flex:1,minWidth:132,borderRadius:radius.lg,backgroundColor:colors.surface,padding:spacing.md,gap:spacing.xs,borderWidth:1,borderColor:colors.border},
+  row:{minHeight:92,alignItems:'center',gap:spacing.md,paddingVertical:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  body:{flex:1,gap:spacing.xs},
+  nameRow:{alignItems:'center',gap:spacing.xs},
+  name:{flexShrink:1},
+  trailing:{alignItems:'flex-end',gap:spacing.xxs,minWidth:96},
+  arrow:{color:colors.textSoft,lineHeight:20},
+  pressed:{opacity:.64,backgroundColor:colors.surfaceMuted,borderRadius:radius.md},
+});
