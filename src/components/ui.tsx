@@ -65,7 +65,7 @@ export function Chip({label,active,onPress,disabled=false}:{label:string;active:
 
 export function Row({title,subtitle,trailing,onPress,leading}:{title:string;subtitle?:string;trailing?:ReactNode;onPress?:()=>void;leading?:ReactNode}){
   const {isRTL}=useI18n();
-  const body=<>{leading}{<View style={styles.rowBody}><AppText variant="subheading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={2}>{subtitle}</AppText>:null}</View>}{trailing}</>;
+  const body=<>{leading}<View style={styles.rowBody}><AppText variant="subheading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={2}>{subtitle}</AppText>:null}</View>{trailing}</>;
   return onPress?<Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.row,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed]}>{body}</Pressable>:<View style={[styles.row,{flexDirection:isRTL?'row-reverse':'row'}]}>{body}</View>;
 }
 
@@ -84,10 +84,10 @@ const styles=StyleSheet.create({
   scroll:{flexGrow:1,paddingBottom:spacing.xl},
   text:{color:colors.text,fontWeight:'400'},
   display:{fontWeight:'900',letterSpacing:-.8},
-  title:{fontWeight:'850',letterSpacing:-.5},
+  title:{fontWeight:'800',letterSpacing:-.5},
   heading:{fontWeight:'800'},
   subheading:{fontWeight:'700'},
-  amountWeight:{fontWeight:'850'},
+  amountWeight:{fontWeight:'800'},
   amountLargeWeight:{fontWeight:'900',letterSpacing:-.7},
   muted:{color:colors.textMuted},
   card:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border,padding:spacing.md,gap:spacing.sm,...elevation.subtle},
@@ -107,8 +107,8 @@ const styles=StyleSheet.create({
   buttonTextPrimary:{color:colors.onPrimary},
   field:{gap:spacing.xs},
   input:{minHeight:touch.comfortable,borderWidth:1,borderColor:colors.border,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'600'},
-  search:{minHeight:56,borderRadius:radius.lg,paddingHorizontal:spacing.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong,color:colors.text,fontSize:typography.body,fontWeight:'650',...elevation.subtle},
-  error:{color:colors.negative,fontSize:typography.caption,fontWeight:'650'},
+  search:{minHeight:56,borderRadius:radius.lg,paddingHorizontal:spacing.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong,color:colors.text,fontSize:typography.body,fontWeight:'600',...elevation.subtle},
+  error:{color:colors.negative,fontSize:typography.caption,fontWeight:'600'},
   empty:{minHeight:180,alignItems:'center',justifyContent:'center',gap:spacing.sm,padding:spacing.lg},
   emptyMark:{width:46,height:46,borderRadius:23,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted},
   emptyMarkText:{color:colors.textSoft,lineHeight:26},
@@ -119,7 +119,7 @@ const styles=StyleSheet.create({
   negative:{color:colors.negative},
   chip:{minHeight:touch.min,paddingHorizontal:spacing.md,borderRadius:radius.full,backgroundColor:colors.surfaceMuted,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
   chipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
-  chipText:{color:colors.text,fontWeight:'750',fontSize:typography.caption},
+  chipText:{color:colors.text,fontWeight:'700',fontSize:typography.caption},
   chipTextActive:{color:colors.onPrimary},
   row:{minHeight:68,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.sm,paddingHorizontal:spacing.xs,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
   rowBody:{flex:1,gap:spacing.xxs},
