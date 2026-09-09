@@ -3,6 +3,15 @@
 ## Mission
 Build a polished Android-first mobile edition of the existing desktop accounting/shop-management application. The mobile app is not a shrunken desktop UI. Preserve business rules and data behavior, then redesign each workflow for touch, small screens, one-handed use, and offline operation.
 
+## Product rebuild contract
+`docs/ULYSSES_MOBILE_PRODUCT_CONTRACT.md` is the binding product-quality contract for the current rebuild. Read it before changing any user-facing workflow. Feature parity alone is not completion: common seller tasks must be fast, thumb-friendly, low-scroll, low-keyboard, and visually clear.
+
+For high-frequency seller workflows, load both:
+- `.agents/skills/mobile-pos-product-ux/SKILL.md`
+- `.agents/skills/premium-mobile-interaction/SKILL.md`
+
+These complement, rather than replace, the accounting, SQLite, migration, RTL, Expo, and quality skills.
+
 ## Product constraints
 - Android-first. Keep architecture portable to iOS when it does not harm Android quality.
 - Local-first and usable with no internet and no backend/server.
@@ -28,6 +37,8 @@ Build a polished Android-first mobile edition of the existing desktop accounting
 - Lists/cards must scale to real accounting data volumes.
 - Charts are supporting information, never substitutes for readable numbers.
 - Support light/dark only if it can be done consistently; do not partially theme the app.
+- High-frequency actions must not require scrolling to discover the primary completion action.
+- Prefer direct controls, safe defaults, progressive disclosure, and focused modal/sheet surfaces over long forms.
 
 ## Required workflow for every migrated feature
 1. Read the corresponding desktop implementation and identify business rules, inputs, outputs, validation, persistence, and edge cases.
@@ -37,7 +48,7 @@ Build a polished Android-first mobile edition of the existing desktop accounting
 5. Test Arabic RTL and French/LTR behavior.
 6. Test small Android screens and long/large data.
 7. Run typecheck/lint/tests available in the repo.
-8. Review the final screen for accessibility, touch ergonomics, loading/empty/error states, and accidental data loss.
+8. Review the final screen for accessibility, touch ergonomics, loading/empty/error states, accidental data loss, and common-path tap/keyboard/scroll friction.
 
 ## Skill routing
 Project skills live in `.agents/skills/`. Load the matching `SKILL.md` before performing specialized work. Multiple skills may be combined when a task crosses domains.
