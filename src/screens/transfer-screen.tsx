@@ -6,11 +6,11 @@ import type { Product, Warehouse } from '@/domain/types';
 import { listProducts, listWarehouses } from '@/db/queries';
 import { transferStock } from '@/services/accounting-service';
 import { ProductPicker } from '@/components/pickers';
-import { AppText, Badge, Button, Card, Chip, EmptyState, Field, Screen, SectionTitle } from '@/components/ui';
+import { AppText, Badge, Button, Chip, EmptyState, Field, Screen, SectionTitle } from '@/components/ui';
 import { QuantityStepper, Sheet, StickyActionBar } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 type Line={product:Product;quantity:number;available:number};
 
@@ -29,10 +29,23 @@ export function TransferScreen(){
   const fromName=warehouses.find(item=>item.id===from)?.name??'',toName=warehouses.find(item=>item.id===to)?.name??'';
   return <Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <SectionTitle title={t('transfer')} subtitle={ar?'اختر المصدر والوجهة، ثم أضف المنتجات والكميات.':'Choisissez source et destination, puis produits et quantités.'}/>
-    <Card tone="primary"><AppText variant="caption" muted>{t('from')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(item=><Chip key={item.id} label={item.name} active={from===item.id} onPress={()=>{setFrom(item.id);if(to===item.id)setTo('');setLines([])}}/>)}</View><AppText variant="caption" muted>{t('to')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.filter(item=>item.id!==from).map(item=><Chip key={item.id} label={item.name} active={to===item.id} onPress={()=>setTo(item.id)}/>)}</View></Card>
+    <View style={styles.routePanel}><View style={styles.routeRule}/><AppText variant="caption" muted>{t('from')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(item=><Chip key={item.id} label={item.name} active={from===item.id} onPress={()=>{setFrom(item.id);if(to===item.id)setTo('');setLines([])}}/>)}</View><View style={styles.divider}/><AppText variant="caption" muted>{t('to')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.filter(item=>item.id!==from).map(item=><Chip key={item.id} label={item.name} active={to===item.id} onPress={()=>setTo(item.id)}/>)}</View></View>
     <SectionTitle title={t('products')} subtitle={lines.length?(ar?'استخدم + و− للكميات المعتادة، واضغط الرقم للكميات الكسرية.':'Utilisez +/− ; touchez le nombre pour une quantité décimale.'):undefined} action={<Button compact title={t('addLine')} onPress={()=>setPicker(true)}/>}/>
-    {lines.length?lines.map(line=><Card key={line.product.id}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><View style={[styles.meta,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={ar?`متوفر ${number(line.available)}`:`Stock ${number(line.available)}`} tone="positive"/><AppText variant="caption" muted>{line.product.sku}</AppText></View></View><Button compact title={t('remove')} variant="ghost" onPress={()=>setLines(current=>current.filter(item=>item.product.id!==line.product.id))}/></View><QuantityStepper value={line.quantity} onDecrease={()=>change(line.product.id,line.quantity-1)} onIncrease={()=>change(line.product.id,line.quantity+1)} onEdit={()=>openEdit(line)}/></Card>):<Card tone="muted"><EmptyState title={ar?'لم تضف منتجات بعد':'Aucun produit ajouté'} description={ar?'أضف المنتجات التي تريد نقلها فقط.':'Ajoutez uniquement les produits à transférer.'}/></Card>}
+    {lines.length?<View style={styles.linesPanel}>{lines.map((line,index)=><View key={line.product.id} style={[styles.line,index===lines.length-1&&styles.lastLine]}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><View style={[styles.meta,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={ar?`متوفر ${number(line.available)}`:`Stock ${number(line.available)}`} tone="positive"/><AppText variant="caption" muted>{line.product.sku}</AppText></View></View><Button compact title={t('remove')} variant="ghost" onPress={()=>setLines(current=>current.filter(item=>item.product.id!==line.product.id))}/></View><QuantityStepper value={line.quantity} onDecrease={()=>change(line.product.id,line.quantity-1)} onIncrease={()=>change(line.product.id,line.quantity+1)} onEdit={()=>openEdit(line)}/></View>)}</View>:<View style={styles.emptyPanel}><EmptyState title={ar?'لم تضف منتجات بعد':'Aucun produit ajouté'} description={ar?'أضف المنتجات التي تريد نقلها فقط.':'Ajoutez uniquement les produits à transférer.'}/></View>}
   </ScrollView><StickyActionBar label={t('confirm')} summary={from&&to?(ar?`${fromName} ← ${toName} • ${lines.length} منتجات`:`${fromName} → ${toName} • ${lines.length} produits`):undefined} loading={busy} disabled={!from||!to||!lines.length} onPress={()=>void submit()}/><ProductPicker visible={picker} products={products} exclude={lines.map(line=>line.product.id)} onClose={()=>setPicker(false)} onSelect={chooseProduct}/><Sheet visible={Boolean(editId)} title={ar?'الكمية المنقولة':'Quantité à transférer'} onClose={()=>setEditId(null)} footer={<Button title={t('save')} onPress={saveEdit}/>}><Field label={t('quantity')} value={draft} onChangeText={setDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/></Sheet></Screen>;
 }
 
-const styles=StyleSheet.create({content:{padding:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},chips:{flexWrap:'wrap',gap:spacing.xs},lineHead:{alignItems:'center',gap:spacing.md},flex:{flex:1},meta:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'}});
+const styles=StyleSheet.create({
+  content:{padding:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
+  routePanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,padding:spacing.md,gap:spacing.sm},
+  routeRule:{width:34,height:3,borderRadius:2,backgroundColor:colors.accent},
+  divider:{height:StyleSheet.hairlineWidth,backgroundColor:colors.border,marginVertical:spacing.xxs},
+  chips:{flexWrap:'wrap',gap:spacing.xs},
+  linesPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
+  line:{padding:spacing.md,gap:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  lastLine:{borderBottomWidth:0},
+  lineHead:{alignItems:'center',gap:spacing.md},
+  flex:{flex:1},
+  meta:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
+  emptyPanel:{backgroundColor:colors.surfaceMuted,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border},
+});
