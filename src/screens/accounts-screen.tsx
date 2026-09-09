@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -40,7 +40,6 @@ export function AccountsScreen(){
     setAccounts(all.filter(account=>!account.isArchived));setArchived(all.filter(account=>account.isArchived));setMovements(m);setTransfers(tfr);setParties([...customers,...suppliers]);
   },[canMovements,canTransfer,canView,db]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
-  if(!canView)return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض وسائل الدفع':'Vous n’avez pas accès aux moyens de paiement.'}/></Screen>;
 
   const activeAccounts=accounts.filter(account=>account.isActive),accountName=(id:string)=>accounts.find(account=>account.id===id||account.code===id)?.name??id;
   const open=(next:ModalMode,account?:PaymentAccount)=>{setSelected(account??null);setMode(next)};
@@ -50,11 +49,13 @@ export function AccountsScreen(){
   const visibleMovements=operational.filter(movement=>within(movement.occurredAt,movementFrom,movementTo)&&(!movementAccount||movement.paymentMethod===movementAccount)&&(!movementType||movement.type===movementType));
   const visibleTransfers=transfers.filter(row=>within(row.occurredAt,transferFromDate,transferToDate)&&(!transferFromAccount||row.fromAccountId===transferFromAccount)&&(!transferToAccount||row.toAccountId===transferToAccount));
   const adjustments=operational.filter(movement=>['manual-deposit','manual-withdrawal'].includes(movement.type)&&within(movement.occurredAt,adjustFrom,adjustTo)&&(!adjustAccountFilter||movement.paymentMethod===adjustAccountFilter)&&(!adjustType||movement.type===adjustType));
-  const summary=useMemo(()=>{
+  const summary=(()=>{
     const currentBalance=accounts.filter(account=>account.isActive&&!account.isArchived).reduce((sum,account)=>sum+account.balance,0),nonOperating=new Set(['transfer-in','transfer-out','opening-balance','opening-balance-correction','balance-correction']),operating=movements.filter(movement=>!nonOperating.has(movement.type)),income=operating.filter(movement=>movement.direction==='in').reduce((sum,movement)=>sum+movement.amount,0),expenses=operating.filter(movement=>movement.direction==='out').reduce((sum,movement)=>sum+movement.amount,0);
     let owedToUs=0,weOwe=0;for(const party of parties){if(party.net>0)owedToUs+=party.net;else if(party.net<0)weOwe+=Math.abs(party.net)}return{currentBalance,income,expenses,owedToUs,weOwe};
-  },[accounts,movements,parties]);
+  })();
   const tabs:[BankTab,string,boolean][]=[['accounts',t('accounts'),true],['movements',ar?'الحركة':'Mouvements',canMovements],['transfers',t('transfer'),canTransfer],['adjustments',ar?'سحب / إيداع':'Retrait / dépôt',canAdjust]];
+
+  if(!canView)return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض وسائل الدفع':'Vous n’avez pas accès aux moyens de paiement.'}/></Screen>;
 
   const runPayload=async(payload:Payload)=>{
     if(!mode||!modeAllowed(mode)||busy)return;
