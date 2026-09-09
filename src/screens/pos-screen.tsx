@@ -41,7 +41,7 @@ export function PosScreen(){
   useFocusEffect(useCallback(()=>{void loadBase()},[loadBase]));
 
   useEffect(()=>{
-    if(!allowed||!warehouseId){setResults([]);return}
+    if(!allowed||!warehouseId)return;
     let cancelled=false;
     const timer=setTimeout(()=>{
       setSearching(true);
@@ -70,7 +70,7 @@ export function PosScreen(){
     setLines(current=>{
       const existing=current.find(line=>line.product.id===product.id);
       if(existing)return current.map(line=>line.product.id===product.id?{...line,quantity:Math.min(line.quantity+1,stock)}:line);
-      return [{product,quantity:1,unitPrice:sellingPrice(product,pricingMode),stock},...current];
+      return [{product,quantity:Math.min(1,stock),unitPrice:sellingPrice(product,pricingMode),stock},...current];
     });
     setSearch('');
   };
