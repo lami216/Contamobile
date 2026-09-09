@@ -1,14 +1,30 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
-import { AppText, Button, Card, Field, Screen } from '@/components/ui';
+import { AppText, Badge, Button, Field, Screen } from '@/components/ui';
 import { useAuth } from '@/auth/provider';
 import { useI18n } from '@/i18n/provider';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 export function LoginScreen(){
-  const {login}=useAuth(),{t,locale}=useI18n(),ar=locale==='ar';
+  const {login}=useAuth(),{t,locale,isRTL}=useI18n(),ar=locale==='ar';
   const [username,setUsername]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const submit=async()=>{setBusy(true);setError('');try{if(!await login(username,password))setError(ar?'اسم المستخدم أو كلمة المرور غير صحيحة':'Identifiant ou mot de passe incorrect.')}finally{setBusy(false)}};
-  return <Screen padded={false}><KeyboardAvoidingView style={styles.flex} behavior={Platform.OS==='ios'?'padding':undefined}><View style={styles.center}><View style={styles.brand}><AppText variant="title">{t('appName')}</AppText><AppText muted>{ar?'محاسبة محلية • يعمل دون إنترنت':'Comptabilité locale • Fonctionne hors ligne'}</AppText></View><Card><Field label={ar?'اسم المستخدم':'Identifiant'} autoCapitalize="none" autoCorrect={false} value={username} onChangeText={setUsername}/><Field label={ar?'كلمة المرور':'Mot de passe'} secureTextEntry value={password} onChangeText={setPassword} onSubmitEditing={()=>void submit()}/>{error?<AppText style={styles.error}>{error}</AppText>:null}<Button loading={busy} disabled={!username.trim()||!password} title={ar?'دخول':'Se connecter'} onPress={()=>void submit()}/></Card></View></KeyboardAvoidingView></Screen>;
+  const submit=async()=>{if(busy)return;setBusy(true);setError('');try{if(!await login(username.trim(),password))setError(ar?'اسم المستخدم أو كلمة المرور غير صحيحة':'Identifiant ou mot de passe incorrect.')}finally{setBusy(false)}};
+  return <Screen padded={false}><KeyboardAvoidingView style={styles.flex} behavior={Platform.OS==='ios'?'padding':undefined}><View style={styles.center}><View style={styles.hero}><View style={styles.heroAccent}/><View style={[styles.heroTop,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={ar?'يعمل دون إنترنت':'Hors ligne'} tone="positive"/><Badge label={ar?'بيانات محلية':'Données locales'} tone="primary"/></View><View style={styles.brand}><AppText variant="display" style={styles.brandName}>{t('appName')}</AppText><AppText variant="subheading" style={styles.brandSubtitle}>{ar?'حسابات المحل، أسرع وأوضح من أول عملية.':'Les comptes du magasin, plus rapides et plus clairs dès la première opération.'}</AppText></View></View><View style={styles.loginPanel}><View style={styles.formTitle}><AppText variant="heading">{ar?'تسجيل الدخول':'Connexion'}</AppText><AppText variant="caption" muted>{ar?'أدخل حسابك المحلي للمتابعة.':'Utilisez votre compte local pour continuer.'}</AppText></View><Field label={ar?'اسم المستخدم':'Identifiant'} autoCapitalize="none" autoCorrect={false} value={username} onChangeText={setUsername} returnKeyType="next" autoFocus/><Field label={ar?'كلمة المرور':'Mot de passe'} secureTextEntry value={password} onChangeText={setPassword} onSubmitEditing={()=>void submit()} returnKeyType="done"/>{error?<View style={styles.errorNote}><View style={styles.errorRule}/><AppText variant="caption" style={styles.error}>{error}</AppText></View>:null}<Button loading={busy} disabled={!username.trim()||!password} title={ar?'دخول إلى الكرنه':'Entrer dans Alkarna'} onPress={()=>void submit()}/></View><AppText variant="caption" muted style={styles.footer}>{ar?'لا يحتاج تسجيل الدخول إلى اتصال بالإنترنت.':'La connexion ne nécessite pas Internet.'}</AppText></View></KeyboardAvoidingView></Screen>;
 }
-const styles=StyleSheet.create({flex:{flex:1},center:{flex:1,justifyContent:'center',padding:spacing.lg,gap:spacing.lg,backgroundColor:colors.background},brand:{gap:spacing.xs},error:{color:colors.negative}});
+
+const styles=StyleSheet.create({
+  flex:{flex:1},
+  center:{flex:1,justifyContent:'center',padding:spacing.lg,gap:spacing.lg,backgroundColor:colors.background},
+  hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,backgroundColor:colors.primary,padding:spacing.lg,gap:spacing.xl},
+  heroAccent:{position:'absolute',top:0,left:0,right:0,height:3,backgroundColor:colors.accent},
+  heroTop:{gap:spacing.xs,flexWrap:'wrap'},
+  brand:{gap:spacing.sm},
+  brandName:{color:colors.onPrimary},
+  brandSubtitle:{color:'#DCEFE9',lineHeight:23},
+  loginPanel:{gap:spacing.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,padding:spacing.md},
+  formTitle:{gap:spacing.xxs},
+  errorNote:{gap:spacing.xs,backgroundColor:colors.warningSoft,borderRadius:radius.md,padding:spacing.sm},
+  errorRule:{width:28,height:2,borderRadius:2,backgroundColor:colors.warning},
+  error:{color:colors.warning,fontWeight:'700'},
+  footer:{textAlign:'center'},
+});
