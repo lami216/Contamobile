@@ -146,12 +146,12 @@ export function PosScreen(){
 
       <SearchField value={search} onChangeText={setSearch} returnKeyType="search" placeholder={ar?'ابحث بالاسم أو الباركود…':'Nom ou code-barres…'}/>
 
-      {search.trim()?<Card style={styles.resultsCard}><SectionTitle title={ar?'نتائج سريعة':'Résultats rapides'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/>{results.length?results.slice(0,12).map(product=>{const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode);return <Pressable key={product.id} accessibilityRole="button" disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,stock<=0&&styles.disabled]}><View style={styles.productBody}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><View style={[styles.metaRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{product.sku}</AppText><Badge label={stock>0?(ar?`متوفر ${number(stock)}`:`Stock ${number(stock)}`):(ar?'غير متوفر':'Rupture')} tone={stock>0?'positive':'negative'}/></View></View><View style={styles.productPrice}><Money value={price}/><View style={styles.addCircle}><AppText variant="heading" style={styles.addPlus}>+</AppText></View></View></Pressable>}):<EmptyState title={t('noResults')}/>}</Card>:null}
+      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج سريعة':'Résultats rapides'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.length?results.slice(0,12).map((product,index)=>{const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode);return <Pressable key={product.id} accessibilityRole="button" disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,stock<=0&&styles.disabled,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.productBody}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><View style={[styles.metaRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{product.sku}</AppText><Badge label={stock>0?(ar?`متوفر ${number(stock)}`:`Stock ${number(stock)}`):(ar?'غير متوفر':'Rupture')} tone={stock>0?'positive':'negative'}/></View></View><View style={styles.productPrice}><Money value={price}/><View style={styles.addButton}><AppText variant="heading" style={styles.addPlus}>+</AppText></View></View></Pressable>}):<EmptyState title={t('noResults')}/>}</View></View>:null}
 
       <SectionTitle title={ar?`السلة${lines.length?` · ${number(lines.length)}`:''}`:`Panier${lines.length?` · ${number(lines.length)}`:''}`} subtitle={lines.length?(ar?'غيّر الكمية مباشرة بدون فتح لوحة المفاتيح':'Modifiez la quantité sans ouvrir le clavier'):undefined}/>
-      {lines.length===0?<Card tone="muted"><EmptyState title={ar?'ابدأ بإضافة منتج':'Ajoutez un produit pour commencer'} description={ar?'ابحث بالاسم أو الباركود، ثم اضغط على المنتج لإضافته مباشرة.':'Recherchez par nom ou code-barres, puis touchez le produit.'}/></Card>:lines.map(line=><Card key={line.product.id} style={styles.cartCard}><View style={[styles.cartHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.cartName}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted>{ar?`المتوفر ${number(line.stock)}`:`Stock ${number(line.stock)}`}</AppText></View><Money value={Math.round(line.quantity*line.unitPrice)}/></View><View style={[styles.cartControls,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={()=>changeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>changeQuantity(line.product.id,line.quantity+1)} onEdit={()=>openQuantity(line)}/><View style={styles.unitPrice}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={line.unitPrice}/></View></View></Card>)}
+      {lines.length===0?<Card tone="muted"><EmptyState title={ar?'ابدأ بإضافة منتج':'Ajoutez un produit pour commencer'} description={ar?'ابحث بالاسم أو الباركود، ثم اضغط على المنتج لإضافته مباشرة.':'Recherchez par nom ou code-barres, puis touchez le produit.'}/></Card>:<View style={styles.cartPanel}>{lines.map((line,index)=><View key={line.product.id} style={[styles.cartLine,index===lines.length-1&&styles.lastRow]}><View style={[styles.cartHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.cartName}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted>{ar?`المتوفر ${number(line.stock)}`:`Stock ${number(line.stock)}`}</AppText></View><Money value={Math.round(line.quantity*line.unitPrice)}/></View><View style={[styles.cartControls,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={()=>changeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>changeQuantity(line.product.id,line.quantity+1)} onEdit={()=>openQuantity(line)}/><View style={styles.unitPrice}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={line.unitPrice}/></View></View></View>)}</View>}
 
-      {!search.trim()?<View style={styles.quickSection}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'منتجات من المخزن الحالي — استخدم البحث للوصول لأي منتج':'Produits du dépôt actuel — utilisez la recherche pour le reste'}/><View style={styles.quickGrid}>{results.slice(0,10).map(product=>{const stock=Number(product.stocks?.[warehouseId]??0);return <Pressable key={product.id} disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.rowPressed,stock<=0&&styles.disabled]}><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={sellingPrice(product,pricingMode)}/><AppText variant="caption" muted>{ar?`${number(stock)} متوفر`:`${number(stock)} en stock`}</AppText></Pressable>})}</View></View>:null}
+      {!search.trim()?<View style={styles.quickSection}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'منتجات من المخزن الحالي — استخدم البحث للوصول لأي منتج':'Produits du dépôt actuel — utilisez la recherche pour le reste'}/><View style={styles.quickGrid}>{results.slice(0,10).map(product=>{const stock=Number(product.stocks?.[warehouseId]??0);return <Pressable key={product.id} disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed,stock<=0&&styles.disabled]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={sellingPrice(product,pricingMode)}/><AppText variant="caption" muted>{ar?`${number(stock)} متوفر`:`${number(stock)} en stock`}</AppText></Pressable>})}</View></View>:null}
     </ScrollView>
 
     <BottomActionBar label={t('completeSale')} total={total} count={itemCount} secondary={ar?'قطعة':'articles'} onPress={openPayment} disabled={!lines.length}/>
@@ -181,23 +181,28 @@ const styles=StyleSheet.create({
   titleBlock:{flex:1,gap:spacing.xxs},
   mode:{flexDirection:'row',gap:spacing.xs},
   warehouseStrip:{gap:spacing.xs},
-  resultsCard:{paddingVertical:spacing.sm},
-  productRow:{minHeight:72,alignItems:'center',gap:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  resultSection:{gap:spacing.sm},
+  panel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
+  productRow:{minHeight:72,alignItems:'center',gap:spacing.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
   productBody:{flex:1,gap:spacing.xs},
   metaRow:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
   productPrice:{alignItems:'flex-end',gap:spacing.xs},
-  addCircle:{width:touch.min,height:touch.min,borderRadius:radius.full,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center'},
+  addButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,backgroundColor:colors.primarySoft,borderWidth:1,borderColor:colors.primarySoft,alignItems:'center',justifyContent:'center'},
   addPlus:{color:colors.primary,lineHeight:24},
-  rowPressed:{opacity:.65,transform:[{scale:.992}]},
+  rowPressed:{backgroundColor:colors.surfaceMuted},
   disabled:{opacity:.38},
-  cartCard:{gap:spacing.md},
+  lastRow:{borderBottomWidth:0},
+  cartPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
+  cartLine:{gap:spacing.md,padding:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
   cartHead:{alignItems:'flex-start',gap:spacing.md},
   cartName:{flex:1,gap:spacing.xxs},
   cartControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
   unitPrice:{alignItems:'flex-end',gap:spacing.xxs},
   quickSection:{gap:spacing.sm},
   quickGrid:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm},
-  quickProduct:{width:'48%',minHeight:116,borderRadius:radius.lg,backgroundColor:colors.surface,padding:spacing.md,gap:spacing.xs,borderWidth:1,borderColor:colors.border},
+  quickProduct:{width:'48%',minHeight:116,borderRadius:radius.md,backgroundColor:colors.surface,padding:spacing.md,gap:spacing.xs,borderWidth:1,borderColor:colors.border},
+  quickRule:{width:24,height:2,borderRadius:2,backgroundColor:colors.accent,marginBottom:spacing.xxs},
+  quickPressed:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
   sheetSection:{gap:spacing.sm},
   chips:{flexWrap:'wrap',gap:spacing.xs},
   totalRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
@@ -205,6 +210,6 @@ const styles=StyleSheet.create({
   summaryCell:{minWidth:92,gap:spacing.xxs},
   warningText:{color:colors.warning,fontWeight:'700'},
   success:{alignItems:'center',gap:spacing.md,paddingVertical:spacing.md},
-  successMark:{width:72,height:72,borderRadius:36,backgroundColor:colors.positiveSoft,alignItems:'center',justifyContent:'center'},
+  successMark:{width:64,height:64,borderRadius:radius.lg,backgroundColor:colors.positiveSoft,borderWidth:1,borderColor:'#D3E7DA',alignItems:'center',justifyContent:'center'},
   successCheck:{color:colors.positive},
 });
