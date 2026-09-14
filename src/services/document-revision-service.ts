@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { assertMoney, assertQuantity, isProductExpired, normalizePartyNet, roundLineTotal } from '@/domain/accounting';
 import type { PricingMode } from '@/domain/types';
 import { AccountingError } from './accounting-service';
+import { resolveAuthoritativeProductCost, syncAuthoritativeProductCosts } from './product-cost-service';
 
 type Tx=SQLiteDatabase;
 type InvoiceKind='sale'|'purchase';
@@ -35,9 +36,8 @@ async function reverseInvoicePayment(tx:Tx,document:DocumentRow,kind:InvoiceKind
 
 async function createFinancialMovement(tx:Tx,args:{accountId:string;direction:'in'|'out';amount:number;document:DocumentRow;partyId:string|null;partyName:string|null;type:string}){if(!args.amount)return;const account=await getAccount(tx,args.accountId,true),delta=args.direction==='in'?args.amount:-args.amount,after=account.balance+delta;await tx.runAsync('UPDATE payment_accounts SET balance=?,updated_at=? WHERE id=?',[after,stamp(),account.id]);await tx.runAsync('INSERT INTO financial_movements(id,payment_method,direction,amount,document_id,document_number,party_id,party_name,type,delta,balance_before,balance_after,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',[id('fin'),account.id,args.direction,args.amount,args.document.id,args.document.number,args.partyId,args.partyName,args.type,delta,account.balance,after,args.document.occurred_at]);}
 
-async function historicalCost(tx:Tx,productId:string,occurredAt:string){const row=await tx.getFirstAsync<{unit_price:number}>('SELECT dl.unit_price FROM documents d JOIN document_lines dl ON dl.document_id=d.id WHERE d.kind=\'purchase\' AND d.status=\'posted\' AND dl.product_id=? AND d.occurred_at<=? ORDER BY d.occurred_at DESC LIMIT 1',[productId,occurredAt]);return row?Number(row.unit_price):null}
-
-async function recomputePurchaseCosts(tx:Tx,productIds:string[]){for(const productId of new Set(productIds)){const row=await tx.getFirstAsync<{unit_price:number;occurred_at:string}>('SELECT dl.unit_price,d.occurred_at FROM documents d JOIN document_lines dl ON dl.document_id=d.id WHERE d.kind=\'purchase\' AND d.status=\'posted\' AND dl.product_id=? ORDER BY d.occurred_at DESC LIMIT 1',[productId]);await tx.runAsync('UPDATE products SET last_purchase_cost=?,last_purchase_at=?,updated_at=? WHERE id=?',[row?Number(row.unit_price):null,row?.occurred_at??null,stamp(),productId]);}}
+async function historicalCost(tx:Tx,productId:string,occurredAt:string){return (await resolveAuthoritativeProductCost(tx,productId,occurredAt))?.cost??null}
+async function recomputePurchaseCosts(tx:Tx,productIds:string[]){await syncAuthoritativeProductCosts(tx,productIds)}
 
 async function replaceLines(tx:Tx,documentId:string,lines:PreparedLine[]){await tx.runAsync('DELETE FROM document_lines WHERE document_id=?',[documentId]);for(const line of lines)await tx.runAsync('INSERT INTO document_lines(id,document_id,product_id,description,quantity,unit_price,line_total,cost_at_sale,gross_profit) VALUES(?,?,?,?,?,?,?,?,?)',[line.id,documentId,line.product.id,line.product.name,line.quantity,line.unitPrice,line.lineTotal,line.costAtSale,line.grossProfit]);}
 
