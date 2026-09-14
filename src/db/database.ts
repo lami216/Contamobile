@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const now = () => new Date().toISOString();
 
 export async function migrateDatabase(db: SQLiteDatabase) {
@@ -69,6 +69,16 @@ export async function migrateDatabase(db: SQLiteDatabase) {
         await tx.runAsync('UPDATE products SET last_purchase_cost=?,last_purchase_at=?,updated_at=? WHERE id=?',[source?Number(source.unit_price):null,source?.occurred_at??null,stamp,product.id]);
       }
       await tx.runAsync('PRAGMA user_version = 2');
+    });
+  }
+  if (version < 3) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS product_categories(id TEXT PRIMARY KEY,name TEXT NOT NULL COLLATE NOCASE UNIQUE,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        ALTER TABLE products ADD COLUMN category_id TEXT;
+        CREATE INDEX IF NOT EXISTS products_category_id ON products(category_id);
+      `);
+      await tx.runAsync('PRAGMA user_version = 3');
     });
   }
 }
