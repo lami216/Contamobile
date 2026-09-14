@@ -6,7 +6,7 @@ export type DocumentStatus = 'posted' | 'voided';
 
 export interface Warehouse { id: string; name: string; isSalesDefault: boolean; isArchived: boolean; archivedAt: string | null; }
 export interface ProductCategory { id: string; name: string; createdAt: string; updatedAt: string; }
-export interface Product { id: string; sku: string; name: string; barcode: string; categoryId: string | null; categoryName: string | null; pieceCost: number | null; lastPurchaseCost: number | null; lastPurchaseAt: string | null; piecePrice: number | null; wholesalePrice: number | null; expiryDate: string | null; note: string | null; isArchived: boolean; createdAt: string; updatedAt: string; stocks?: Record<string, number>; }
+export interface Product { id: string; sku: string; name: string; barcode: string; categoryId?: string | null; categoryName?: string | null; pieceCost: number | null; lastPurchaseCost: number | null; lastPurchaseAt: string | null; piecePrice: number | null; wholesalePrice: number | null; expiryDate: string | null; note: string | null; isArchived: boolean; createdAt: string; updatedAt: string; stocks?: Record<string, number>; }
 export interface Party { id: string; name: string; phone: string; partyType: PartyType; receivable: number; payable: number; net: number; createdAt: string; }
 export interface PaymentAccount { id: string; code: string; name: string; color: string; icon: string; isActive: boolean; isArchived: boolean; openingBalance: number; balance: number; }
 export interface DocumentLine { id: string; productId: string | null; description: string; quantity: number; unitPrice: number; lineTotal: number; costAtSale: number | null; grossProfit: number | null; balanceBefore?: number | null; balanceAfter?: number | null; }
