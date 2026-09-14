@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const now = () => new Date().toISOString();
 
 export async function migrateDatabase(db: SQLiteDatabase) {
@@ -44,6 +44,31 @@ export async function migrateDatabase(db: SQLiteDatabase) {
       for (const [id,code,name,color] of accounts) await tx.runAsync('INSERT OR IGNORE INTO payment_accounts(id,code,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?)',[id,code,name,color,stamp,stamp]);
       for (const key of ['product','sale','purchase','expense']) await tx.runAsync('INSERT OR IGNORE INTO counters(key,value) VALUES(?,0)', [key]);
       await tx.runAsync('PRAGMA user_version = 1');
+    });
+  }
+  if (version < 2) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      const products = await tx.getAllAsync<{id:string}>('SELECT id FROM products');
+      const stamp = now();
+      for (const product of products) {
+        const purchase = await tx.getFirstAsync<{unit_price:number;occurred_at:string}>(`
+          SELECT dl.unit_price,d.occurred_at
+          FROM documents d JOIN document_lines dl ON dl.document_id=d.id
+          WHERE d.kind='purchase' AND d.status='posted' AND dl.product_id=? AND dl.unit_price>0
+          ORDER BY d.occurred_at DESC,COALESCE(d.sequence,0) DESC,d.rowid DESC LIMIT 1
+        `,[product.id]);
+        const opening = purchase ? null : await tx.getFirstAsync<{unit_price:number;occurred_at:string}>(`
+          SELECT dl.unit_price,d.occurred_at
+          FROM stock_movements sm
+          JOIN documents d ON d.id=sm.document_id
+          JOIN document_lines dl ON dl.document_id=d.id AND dl.product_id=sm.product_id
+          WHERE sm.product_id=? AND sm.type='opening' AND d.status='posted' AND dl.unit_price>0
+          ORDER BY d.occurred_at DESC,sm.rowid DESC LIMIT 1
+        `,[product.id]);
+        const source=purchase??opening;
+        await tx.runAsync('UPDATE products SET last_purchase_cost=?,last_purchase_at=?,updated_at=? WHERE id=?',[source?Number(source.unit_price):null,source?.occurred_at??null,stamp,product.id]);
+      }
+      await tx.runAsync('PRAGMA user_version = 2');
     });
   }
 }
