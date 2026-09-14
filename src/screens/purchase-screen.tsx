@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { Party, PaymentAccount, Product, Warehouse } from '@/domain/types';
-import { listParties, listPaymentAccounts, listProducts, listWarehouses } from '@/db/queries';
+import type { Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
+import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postPurchase } from '@/services/accounting-service';
 import { PartyPicker } from '@/components/pickers';
 import { AppText, Button, Card, Chip, EmptyState, Field, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
@@ -17,7 +17,7 @@ type Line={product:Product;quantity:number;unitPrice:number};
 export function PurchaseScreen(){
   const db=useSQLiteContext(),{t,locale,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
   const allowed=auth.has('purchases.create');
-  const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState(''),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]);
+  const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState(''),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
   const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[lines,setLines]=useState<Line[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
   const [supplierId,setSupplierId]=useState<string|null>(null),[supplierPicker,setSupplierPicker]=useState(false),[paymentOpen,setPaymentOpen]=useState(false),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[busy,setBusy]=useState(false),[successTotal,setSuccessTotal]=useState<number|null>(null);
   const [quantityLineId,setQuantityLineId]=useState<string|null>(null),[quantityDraft,setQuantityDraft]=useState('1'),[priceLineId,setPriceLineId]=useState<string|null>(null),[priceDraft,setPriceDraft]=useState('0');
@@ -26,9 +26,10 @@ export function PurchaseScreen(){
     if(!allowed)return;
     setLoading(true);
     try{
-      const [w,a,s]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'supplier','',300)]);
+      const [w,a,s,cats]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'supplier','',300),listProductCategories(db)]);
       const active=a.filter(item=>item.isActive&&!item.isArchived);
-      setWarehouses(w);setAccounts(active);setSuppliers(s);
+      setWarehouses(w);setAccounts(active);setSuppliers(s);setCategories(cats);
+      setCategoryId(current=>current&&cats.some(category=>category.id===current)?current:'');
       setWarehouseId(current=>current||w.find(item=>item.isSalesDefault)?.id||w[0]?.id||'');
       setPaymentMethod(current=>current==='note'||active.some(item=>item.id===current||item.code===current)?current:active.find(item=>item.code==='cash')?.id||active[0]?.id||'note');
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setLoading(false)}
@@ -40,10 +41,10 @@ export function PurchaseScreen(){
     let cancelled=false;
     const timer=setTimeout(()=>{
       setSearching(true);
-      void listProducts(db,search,undefined,false,search.trim()?40:18).then(rows=>{if(!cancelled)setResults(rows)}).catch(error=>{if(!cancelled)Alert.alert(t('error'),errorMessage(error))}).finally(()=>{if(!cancelled)setSearching(false)});
+      void listProducts(db,search,undefined,false,search.trim()?40:18,0,categoryId).then(rows=>{if(!cancelled)setResults(rows)}).catch(error=>{if(!cancelled)Alert.alert(t('error'),errorMessage(error))}).finally(()=>{if(!cancelled)setSearching(false)});
     },search.trim()?140:0);
     return()=>{cancelled=true;clearTimeout(timer)};
-  },[allowed,db,errorMessage,search,t]);
+  },[allowed,categoryId,db,errorMessage,search,t]);
 
   const total=useMemo(()=>lines.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice),0),[lines]);
   const itemCount=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
@@ -73,7 +74,7 @@ export function PurchaseScreen(){
     try{
       await postPurchase(db,{warehouseId,partyId:supplierId,paymentMethod,cashAmount:paid,lines:lines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice}))});
       const done=total;setLines([]);setSupplierId(null);setTender('');setPaymentOpen(false);setSearch('');setSuccessTotal(done);
-      setResults(await listProducts(db,'',undefined,false,18));
+      setResults(await listProducts(db,'',undefined,false,18,0,categoryId));
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
   };
 
@@ -83,14 +84,15 @@ export function PurchaseScreen(){
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <View style={[styles.top,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="title">{t('purchases')}</AppText><AppText variant="caption" muted>{warehouse?.name??t('warehouse')}</AppText></View><Button compact title={supplier?.name??t('supplier')} variant={supplier?'secondary':'ghost'} onPress={()=>setSupplierPicker(true)}/></View>
       {warehouses.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(item=><Chip key={item.id} label={item.name} active={warehouseId===item.id} disabled={lines.length>0&&warehouseId!==item.id} onPress={()=>setWarehouseId(item.id)}/>)}</ScrollView>:null}
+      {categories.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={ar?'كل الفئات':'Toutes'} active={!categoryId} onPress={()=>setCategoryId('')}/>{categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}</ScrollView>:null}
       <SearchField value={search} onChangeText={setSearch} placeholder={ar?'ابحث عن المنتج بالاسم أو الباركود…':'Produit par nom ou code-barres…'}/>
 
-      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج المنتجات':'Produits'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.slice(0,12).map((product,index)=><Pressable key={product.id} accessibilityRole="button" onPress={()=>{addProduct(product);setSearch('')}} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><AppText variant="caption" muted>{product.sku}{product.barcode?` • ${product.barcode}`:''}</AppText></View><View style={styles.productEnd}><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><View style={styles.addButton}><AppText variant="heading" style={styles.plusText}>+</AppText></View></View></Pressable>)}</View></View>:null}
+      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج المنتجات':'Produits'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.slice(0,12).map((product,index)=><Pressable key={product.id} accessibilityRole="button" onPress={()=>{addProduct(product);setSearch('')}} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><AppText variant="caption" muted>{product.sku}{product.categoryName?` • ${product.categoryName}`:''}{product.barcode?` • ${product.barcode}`:''}</AppText></View><View style={styles.productEnd}><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><View style={styles.addButton}><AppText variant="heading" style={styles.plusText}>+</AppText></View></View></Pressable>)}</View></View>:null}
 
       <SectionTitle title={ar?`الفاتورة · ${lines.length}`:`Facture · ${lines.length}`} subtitle={lines.length?(ar?'سعر الشراء إلزامي لكل سطر ويمكن تعديله مباشرة.':'Le prix d’achat est obligatoire pour chaque ligne et reste modifiable.'):undefined}/>
       {lines.length===0?<Card tone="muted"><EmptyState title={ar?'أضف أول منتج':'Ajoutez un premier produit'} description={ar?'ابحث عن المنتج واضغط عليه لإضافته للفاتورة.':'Recherchez puis touchez le produit pour l’ajouter.'}/></Card>:<View style={styles.invoicePanel}>{lines.map((line,index)=><View key={line.product.id} style={[styles.invoiceLine,index===lines.length-1&&styles.lastRow]}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.flex}>{line.product.name}</AppText><Money value={Math.round(line.quantity*line.unitPrice)}/></View><View style={[styles.controls,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={()=>changeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>changeQuantity(line.product.id,line.quantity+1)} onEdit={()=>openQuantity(line)}/><Pressable accessibilityRole="button" onPress={()=>openPrice(line)} style={({pressed})=>[styles.priceButton,line.unitPrice<=0&&styles.priceMissing,pressed&&styles.pricePressed]}><AppText variant="caption" muted>{t('purchasePrice')}</AppText><Money value={line.unitPrice}/><AppText variant="caption" style={styles.editHint}>{line.unitPrice>0?t('edit'):(ar?'مطلوب':'Requis')}</AppText></Pressable></View></View>)}</View>}
 
-      {!search.trim()?<View style={styles.quick}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'آخر المنتجات المتاحة للإضافة':'Produits disponibles à ajouter rapidement'}/><View style={styles.grid}>{results.slice(0,10).map(product=><Pressable key={product.id} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><AppText variant="caption" muted>{ar?'اضغط للإضافة':'Touchez pour ajouter'}</AppText></Pressable>)}</View></View>:null}
+      {!search.trim()?<View style={styles.quick}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'آخر المنتجات المتاحة للإضافة':'Produits disponibles à ajouter rapidement'}/><View style={styles.grid}>{results.slice(0,10).map(product=><Pressable key={product.id} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><AppText variant="caption" muted>{product.categoryName??(ar?'اضغط للإضافة':'Touchez pour ajouter')}</AppText></Pressable>)}</View></View>:null}
     </ScrollView>
     <BottomActionBar label={ar?'متابعة الدفع':'Continuer'} total={total} count={itemCount} secondary={ar?'قطعة':'articles'} onPress={startPayment} disabled={!lines.length}/>
 
