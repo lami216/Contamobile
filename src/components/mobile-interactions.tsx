@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Money } from '@/components/ui';
 import { colors, elevation, radius, spacing, touch } from '@/theme';
@@ -23,7 +23,7 @@ export function StickyActionBar({label,onPress,disabled=false,loading=false,summ
 
 export function Sheet({visible,title,onClose,children,footer}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode}){
   const insets=useSafeAreaInsets(),{isRTL}=useI18n();
-  return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={styles.overlay}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View><View style={styles.sheetBody}>{children}</View>{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></View></Modal>;
+  return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS==='ios'?'padding':undefined}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View><ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></KeyboardAvoidingView></Modal>;
 }
 
 export function HeroAction({eyebrow,title,subtitle,actionLabel,onPress,trailing}:{eyebrow?:string;title:string;subtitle?:string;actionLabel:string;onPress:()=>void;trailing?:ReactNode}){
@@ -58,6 +58,7 @@ const styles=StyleSheet.create({
   sheetHead:{minHeight:touch.comfortable,alignItems:'center',justifyContent:'space-between',gap:spacing.md},
   close:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
   closePressed:{backgroundColor:colors.surfaceStrong},
+  sheetScroll:{flexShrink:1},
   sheetBody:{gap:spacing.md,paddingVertical:spacing.md},
   sheetFooter:{paddingTop:spacing.sm,gap:spacing.sm},
   hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,backgroundColor:colors.primary,padding:spacing.lg,gap:spacing.lg,...elevation.floating},
