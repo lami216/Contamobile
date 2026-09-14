@@ -1,8 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { DashboardSummary, DocumentLine, DocumentRecord, Party, PaymentAccount, Product, Warehouse } from '@/domain/types';
+import type { DashboardSummary, DocumentLine, DocumentRecord, Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
 
 const bool = (value: number) => value === 1;
-type ProductRow = { id:string;sku:string;name:string;barcode:string;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;is_archived:number;created_at:string;updated_at:string };
+type ProductRow = { id:string;sku:string;name:string;barcode:string;category_id:string|null;category_name:string|null;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;is_archived:number;created_at:string;updated_at:string };
+type CategoryRow = {id:string;name:string;created_at:string;updated_at:string};
 type WarehouseRow = {id:string;name:string;is_sales_default:number;is_archived:number;archived_at:string|null};
 type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;created_at:string};
 type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;opening_balance:number;balance:number};
@@ -11,17 +12,22 @@ type LineRow = {id:string;product_id:string|null;description:string;quantity:num
 export type PartyFinancialSummary={partyId:string;cashIn:number;cashOut:number;customerTradeTotal:number;customerGrossProfit:number;supplierTradeTotal:number;supplierInvoiceCount:number};
 type PartySummaryRow={party_id:string;cash_in:number|null;cash_out:number|null;customer_trade_total:number|null;customer_gross_profit:number|null;supplier_trade_total:number|null;supplier_invoice_count:number|null};
 
-export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?: string, includeArchived = false, limit = 100, offset = 0): Promise<Product[]> {
+export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?: string, includeArchived = false, limit = 100, offset = 0, categoryId = ''): Promise<Product[]> {
   const q = `%${search.trim()}%`;
-  const rows = await db.getAllAsync<ProductRow>('SELECT * FROM products WHERE (?=1 OR is_archived=0) AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ?) ORDER BY name LIMIT ? OFFSET ?',[includeArchived?1:0,q,q,q,limit,offset]);
+  const rows = await db.getAllAsync<ProductRow>(`SELECT p.*,c.name category_name FROM products p LEFT JOIN product_categories c ON c.id=p.category_id WHERE (?=1 OR p.is_archived=0) AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?) AND (?='' OR p.category_id=?) ORDER BY p.name LIMIT ? OFFSET ?`,[includeArchived?1:0,q,q,q,categoryId,categoryId,limit,offset]);
   const result: Product[] = [];
   for (const row of rows) {
     const stocks = warehouseId
       ? await db.getAllAsync<{warehouse_id:string;quantity:number}>('SELECT warehouse_id,quantity FROM product_stocks WHERE product_id=? AND warehouse_id=?',[row.id,warehouseId])
       : await db.getAllAsync<{warehouse_id:string;quantity:number}>('SELECT warehouse_id,quantity FROM product_stocks WHERE product_id=?',[row.id]);
-    result.push({id:row.id,sku:row.sku,name:row.name,barcode:row.barcode,pieceCost:row.piece_cost,lastPurchaseCost:row.last_purchase_cost,lastPurchaseAt:row.last_purchase_at,piecePrice:row.piece_price,wholesalePrice:row.wholesale_price,expiryDate:row.expiry_date,note:row.note,isArchived:bool(row.is_archived),createdAt:row.created_at,updatedAt:row.updated_at,stocks:Object.fromEntries(stocks.map(s=>[s.warehouse_id,s.quantity]))});
+    result.push({id:row.id,sku:row.sku,name:row.name,barcode:row.barcode,categoryId:row.category_id,categoryName:row.category_name,pieceCost:row.piece_cost,lastPurchaseCost:row.last_purchase_cost,lastPurchaseAt:row.last_purchase_at,piecePrice:row.piece_price,wholesalePrice:row.wholesale_price,expiryDate:row.expiry_date,note:row.note,isArchived:bool(row.is_archived),createdAt:row.created_at,updatedAt:row.updated_at,stocks:Object.fromEntries(stocks.map(s=>[s.warehouse_id,s.quantity]))});
   }
   return result;
+}
+
+export async function listProductCategories(db:SQLiteDatabase):Promise<ProductCategory[]> {
+  const rows=await db.getAllAsync<CategoryRow>('SELECT id,name,created_at,updated_at FROM product_categories ORDER BY name COLLATE NOCASE');
+  return rows.map(row=>({id:row.id,name:row.name,createdAt:row.created_at,updatedAt:row.updated_at}));
 }
 
 export async function listWarehouses(db: SQLiteDatabase, includeArchived=false): Promise<Warehouse[]> {
@@ -81,7 +87,7 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
   const profit=await db.getFirstAsync<{total:number|null}>("SELECT SUM(l.gross_profit) total FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date=?",[day]);
   const expense=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='expense' AND status='posted' AND substr(occurred_at,1,10)=?",[day]);
   const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties');
-  const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,p.piece_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0');
+  const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0');
   const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT product_id,SUM(quantity) q FROM product_stocks GROUP BY product_id HAVING q<=5)');
   return{todaySales:sale?.total??0,todayProfit:profit?.total??0,todayExpenses:expense?.total??0,receivable:debt?.receivable??0,payable:debt?.payable??0,inventoryValue:inventory?.value??0,lowStockCount:low?.count??0};
 }

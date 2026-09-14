@@ -1,0 +1,46 @@
+name: Android preview APK
+
+on:
+  push:
+    branches: [ux-rebuild-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build standalone preview APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm install --no-audit --no-fund
+          npx expo prebuild --platform android --clean --no-install
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace
+          cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
+          test -s alkarna-ux-preview.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-ux-preview-apk
+          path: alkarna-ux-preview.apk
+          if-no-files-found: error
+          retention-days: 14
