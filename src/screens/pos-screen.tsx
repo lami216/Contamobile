@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { Party, PaymentAccount, PricingMode, Product, Warehouse } from '@/domain/types';
+import type { Party, PaymentAccount, PricingMode, Product, ProductCategory, Warehouse } from '@/domain/types';
 import { sellingPrice, validateSaleDraft } from '@/domain/accounting';
-import { listParties, listPaymentAccounts, listProducts, listWarehouses } from '@/db/queries';
+import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postSale } from '@/services/accounting-service';
 import { PartyPicker } from '@/components/pickers';
 import { AppText, Badge, Button, Card, Chip, EmptyState, Field, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
@@ -19,7 +19,7 @@ export function PosScreen(){
   const db=useSQLiteContext(),{t,locale,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
   const allowed=auth.has('pos.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
-  const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]);
+  const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
   const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[pricingMode,setPricingMode]=useState<PricingMode>('retail');
   const [lines,setLines]=useState<CartLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
   const [paymentOpen,setPaymentOpen]=useState(false),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
@@ -30,11 +30,12 @@ export function PosScreen(){
     if(!allowed)return;
     setLoading(true);
     try{
-      const [w,a,p]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'customer','',300)]);
+      const [w,a,p,cats]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'customer','',300),listProductCategories(db)]);
       const active=a.filter(x=>x.isActive&&!x.isArchived);
       const selected=w.find(x=>x.isSalesDefault)?.id??w[0]?.id??'';
-      setWarehouses(w);setAccounts(active);setParties(p);setWarehouseId(current=>current||selected);
-      setPaymentMethod(current=>current||active.find(x=>x.code==='cash')?.id||active[0]?.id||'note');
+      setWarehouses(w);setAccounts(active);setParties(p);setCategories(cats);setWarehouseId(current=>current||selected);
+      setCategoryId(current=>current&&cats.some(category=>category.id===current)?current:'');
+      setPaymentMethod(current=>current==='note'||active.some(x=>x.id===current||x.code===current)?current:active.find(x=>x.code==='cash')?.id||active[0]?.id||'note');
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setLoading(false)}
   },[allowed,db,errorMessage,t]);
 
@@ -45,13 +46,13 @@ export function PosScreen(){
     let cancelled=false;
     const timer=setTimeout(()=>{
       setSearching(true);
-      void listProducts(db,search,warehouseId,false,search.trim()?40:18)
+      void listProducts(db,search,warehouseId,false,search.trim()?40:18,0,categoryId)
         .then(items=>{if(!cancelled)setResults(items)})
         .catch(error=>{if(!cancelled)Alert.alert(t('error'),errorMessage(error))})
         .finally(()=>{if(!cancelled)setSearching(false)});
     },search.trim()?140:0);
     return()=>{cancelled=true;clearTimeout(timer)};
-  },[allowed,db,errorMessage,search,t,warehouseId]);
+  },[allowed,categoryId,db,errorMessage,search,t,warehouseId]);
 
   const total=useMemo(()=>lines.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice),0),[lines]);
   const itemCount=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
@@ -131,7 +132,7 @@ export function PosScreen(){
       await postSale(db,{warehouseId,partyId,paymentMethod,cashAmount:paidValue,pricingMode,lines:lines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice}))});
       const completedTotal=total;
       setLines([]);setPartyId(null);setTender('');setPaymentOpen(false);setSearch('');setSuccessTotal(completedTotal);
-      const fresh=await listProducts(db,'',warehouseId,false,18);setResults(fresh);
+      const fresh=await listProducts(db,'',warehouseId,false,18,0,categoryId);setResults(fresh);
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
   };
 
@@ -143,15 +144,16 @@ export function PosScreen(){
       <View style={[styles.topRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.titleBlock}><AppText variant="title">{t('newSale')}</AppText><AppText variant="caption" muted>{selectedWarehouse?.name??t('warehouse')}</AppText></View><View style={styles.mode}><Chip label={t('retail')} active={pricingMode==='retail'} onPress={()=>changeMode('retail')}/><Chip label={t('wholesale')} active={pricingMode==='wholesale'} onPress={()=>changeMode('wholesale')}/></View></View>
 
       {warehouses.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.warehouseStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={warehouseId===w.id} disabled={lines.length>0&&warehouseId!==w.id} onPress={()=>setWarehouseId(w.id)}/>)}</ScrollView>:null}
+      {categories.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.warehouseStrip,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={ar?'كل الفئات':'Toutes'} active={!categoryId} onPress={()=>setCategoryId('')}/>{categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}</ScrollView>:null}
 
       <SearchField value={search} onChangeText={setSearch} returnKeyType="search" placeholder={ar?'ابحث بالاسم أو الباركود…':'Nom ou code-barres…'}/>
 
-      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج سريعة':'Résultats rapides'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.length?results.slice(0,12).map((product,index)=>{const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode);return <Pressable key={product.id} accessibilityRole="button" disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,stock<=0&&styles.disabled,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.productBody}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><View style={[styles.metaRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{product.sku}</AppText><Badge label={stock>0?(ar?`متوفر ${number(stock)}`:`Stock ${number(stock)}`):(ar?'غير متوفر':'Rupture')} tone={stock>0?'positive':'negative'}/></View></View><View style={styles.productPrice}><Money value={price}/><View style={styles.addButton}><AppText variant="heading" style={styles.addPlus}>+</AppText></View></View></Pressable>}):<EmptyState title={t('noResults')}/>}</View></View>:null}
+      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج سريعة':'Résultats rapides'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.length?results.slice(0,12).map((product,index)=>{const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode);return <Pressable key={product.id} accessibilityRole="button" disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,stock<=0&&styles.disabled,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.productBody}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><View style={[styles.metaRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{product.sku}{product.categoryName?` • ${product.categoryName}`:''}</AppText><Badge label={stock>0?(ar?`متوفر ${number(stock)}`:`Stock ${number(stock)}`):(ar?'غير متوفر':'Rupture')} tone={stock>0?'positive':'negative'}/></View></View><View style={styles.productPrice}><Money value={price}/><View style={styles.addButton}><AppText variant="heading" style={styles.addPlus}>+</AppText></View></View></Pressable>}):<EmptyState title={t('noResults')}/>}</View></View>:null}
 
       <SectionTitle title={ar?`السلة${lines.length?` · ${number(lines.length)}`:''}`:`Panier${lines.length?` · ${number(lines.length)}`:''}`} subtitle={lines.length?(ar?'غيّر الكمية مباشرة بدون فتح لوحة المفاتيح':'Modifiez la quantité sans ouvrir le clavier'):undefined}/>
       {lines.length===0?<Card tone="muted"><EmptyState title={ar?'ابدأ بإضافة منتج':'Ajoutez un produit pour commencer'} description={ar?'ابحث بالاسم أو الباركود، ثم اضغط على المنتج لإضافته مباشرة.':'Recherchez par nom ou code-barres, puis touchez le produit.'}/></Card>:<View style={styles.cartPanel}>{lines.map((line,index)=><View key={line.product.id} style={[styles.cartLine,index===lines.length-1&&styles.lastRow]}><View style={[styles.cartHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.cartName}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted>{ar?`المتوفر ${number(line.stock)}`:`Stock ${number(line.stock)}`}</AppText></View><Money value={Math.round(line.quantity*line.unitPrice)}/></View><View style={[styles.cartControls,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={()=>changeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>changeQuantity(line.product.id,line.quantity+1)} onEdit={()=>openQuantity(line)}/><View style={styles.unitPrice}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={line.unitPrice}/></View></View></View>)}</View>}
 
-      {!search.trim()?<View style={styles.quickSection}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'منتجات من المخزن الحالي — استخدم البحث للوصول لأي منتج':'Produits du dépôt actuel — utilisez la recherche pour le reste'}/><View style={styles.quickGrid}>{results.slice(0,10).map(product=>{const stock=Number(product.stocks?.[warehouseId]??0);return <Pressable key={product.id} disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed,stock<=0&&styles.disabled]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={sellingPrice(product,pricingMode)}/><AppText variant="caption" muted>{ar?`${number(stock)} متوفر`:`${number(stock)} en stock`}</AppText></Pressable>})}</View></View>:null}
+      {!search.trim()?<View style={styles.quickSection}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'منتجات من المخزن الحالي — استخدم البحث للوصول لأي منتج':'Produits du dépôt actuel — utilisez la recherche pour le reste'}/><View style={styles.quickGrid}>{results.slice(0,10).map(product=>{const stock=Number(product.stocks?.[warehouseId]??0);return <Pressable key={product.id} disabled={stock<=0} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed,stock<=0&&styles.disabled]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={sellingPrice(product,pricingMode)}/><AppText variant="caption" muted>{product.categoryName??(ar?`${number(stock)} متوفر`:`${number(stock)} en stock`)}</AppText></Pressable>})}</View></View>:null}
     </ScrollView>
 
     <BottomActionBar label={t('completeSale')} total={total} count={itemCount} secondary={ar?'قطعة':'articles'} onPress={openPayment} disabled={!lines.length}/>
