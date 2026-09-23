@@ -8,7 +8,7 @@ const id=(prefix:string)=>`${prefix}-${Crypto.randomUUID()}`;
 const now=()=>new Date().toISOString();
 
 async function transactionResult<T>(db:SQLiteDatabase,work:(tx:SQLiteDatabase)=>Promise<T>):Promise<T>{let result:T|undefined;await db.withExclusiveTransactionAsync(async tx=>{result=await work(tx)});if(result===undefined)throw new Error('Transaction produced no result');return result}
-async function party(tx:SQLiteDatabase,partyId:string){const row=await tx.getFirstAsync<PartyRow>('SELECT id,name,receivable,payable,net FROM parties WHERE id=?',[partyId]);if(!row)throw new AccountingError('الطرف غير موجود','party_missing');return row}
+async function party(tx:SQLiteDatabase,partyId:string){const row=await tx.getFirstAsync<PartyRow>('SELECT id,name,receivable,payable,net FROM parties WHERE id=? AND is_archived=0',[partyId]);if(!row)throw new AccountingError('الطرف غير موجود','party_missing');return row}
 async function audit(tx:SQLiteDatabase,action:string,entityId:string){await tx.runAsync('INSERT INTO audit_events(id,action,entity_id,status,created_at) VALUES(?,?,?,?,?)',[id('audit'),action,entityId,'committed',now()])}
 
 export async function postSettlement(db:SQLiteDatabase,input:{partyId:string;side:'receivable'|'payable';amount:number;note?:string}){

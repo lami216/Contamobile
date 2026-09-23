@@ -8,6 +8,10 @@ const exact:Record<string,string>={
   'الحساب غير موجود':'Le compte est introuvable.',
   'وسيلة الدفع غير موجودة':'Le moyen de paiement est introuvable.',
   'اسم المنتج مطلوب':'Le nom du produit est obligatoire.',
+  'اسم الفئة مطلوب':'Le nom de la catégorie est obligatoire.',
+  'اسم الفئة طويل جدًا':'Le nom de la catégorie est trop long.',
+  'هذه الفئة موجودة بالفعل':'Cette catégorie existe déjà.',
+  'الفئة غير موجودة':'La catégorie est introuvable.',
   'ملاحظة المنتج طويلة جدًا':'La note du produit est trop longue.',
   'هذا الباركود مستخدم لمنتج آخر':'Ce code-barres est déjà utilisé par un autre produit.',
   'سعر الشراء والمخزن مطلوبان عند إدخال رصيد بداية':"Le prix d’achat et le dépôt sont obligatoires pour saisir un stock initial.",
@@ -34,6 +38,9 @@ const exact:Record<string,string>={
   'لا يمكن حذف أو أرشفة وسيلة الدفع ورصيدها غير صفري. صفّر أو سوِّ الرصيد أولًا.':"Impossible d’archiver ce moyen de paiement tant que son solde n’est pas nul.",
   'وسيلة الدفع غير مؤرشفة':'Ce moyen de paiement n’est pas archivé.',
   'رقم الهاتف مستخدم لحساب آخر من نفس النوع':'Ce numéro de téléphone est déjà utilisé par un autre compte du même type.',
+  'لا يمكن حذف أو أرشفة الطرف ما دام لديه رصيد قائم. سوِّ الحساب أولاً.':'Impossible d’archiver ce compte tant qu’un solde reste ouvert. Réglez le compte d’abord.',
+  'الحساب المؤرشف غير موجود':'Le compte archivé est introuvable.',
+  'الدفع الجزئي داخل الفاتورة غير مدعوم. الفاتورة إما مدفوعة بالكامل أو آجلة بالكامل، ثم تسجل أي دفعة لاحقة من حساب الطرف.':'Le paiement partiel dans la facture n’est pas pris en charge. La facture est soit entièrement payée, soit entièrement à crédit; tout règlement ultérieur se fait depuis le compte du tiers.',
   'المستخدم غير موجود':'Utilisateur introuvable.',
   'اسم المستخدم مطلوب':"L’identifiant est obligatoire.",
   'اسم المستخدم مستخدم بالفعل':"Cet identifiant est déjà utilisé.",
@@ -81,6 +88,8 @@ function dynamic(message:string){
   let match=message.match(/^المخزون غير كافٍ للمنتج (.+)$/);if(match)return `Stock insuffisant pour ${match[1]}.`;
   match=message.match(/^انتهت صلاحية (.+) ولا يمكن بيعه$/);if(match)return `${match[1]} est périmé et ne peut pas être vendu.`;
   match=message.match(/^تكلفة الشراء مطلوبة لإضافة مخزون (.+)$/);if(match)return `Le coût d’achat est obligatoire pour ajouter du stock à ${match[1]}.`;
+  match=message.match(/^لا يمكن تصحيح مخزون (.+) في هذا المخزن قبل دخوله إليه عبر رصيد بداية أو شراء أو تحويل مخزون\.?$/);if(match)return `Impossible d’ajuster le stock de ${match[1]} dans ce dépôt avant une entrée par stock initial, achat ou transfert.`;
+  match=message.match(/^لا يمكن زيادة مخزون (.+) بالتصحيح لأنه لا يملك رصيد بداية أو فاتورة شراء تحدد تكلفته\.?$/);if(match)return `Impossible d’augmenter le stock de ${match[1]} par ajustement sans coût provenant du stock initial ou d’un achat.`;
   match=message.match(/^لا يمكن تعديل الفاتورة لأن جزءًا من مخزونها تم التصرف فيه\.?$/);if(match)return 'Impossible de modifier la facture car une partie de son stock a déjà été utilisée.';
   match=message.match(/^لا يمكن حذف الفاتورة لأن جزءًا من مخزونها تم التصرف فيه\.?$/);if(match)return 'Impossible d’annuler la facture car une partie de son stock a déjà été utilisée.';
   match=message.match(/^النسخة لا تحتوي جدول (.+)$/);if(match)return `La sauvegarde ne contient pas la table ${match[1]}.`;
