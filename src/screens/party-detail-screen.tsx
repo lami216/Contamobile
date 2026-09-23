@@ -20,7 +20,7 @@ export function PartyDetailScreen(){
   const {id}=useLocalSearchParams<{id:string}>(),db=useSQLiteContext(),{t,date,isRTL,locale,number,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
   const today=localDay();
   const [party,setParty]=useState<Party|null>(null),[docs,setDocs]=useState<DocumentRecord[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[summary,setSummary]=useState<PartyFinancialSummary>(()=>emptySummary(id)),[action,setAction]=useState<Action>(null),[from,setFrom]=useState(today),[to,setTo]=useState(today);
-  const load=useCallback(async()=>{if(!id)return;const [p,d,a,s]=await Promise.all([getParty(db,id),listDocuments(db,{partyId:id,from:from||undefined,to:to||undefined,limit:150}),listPaymentAccounts(db),getPartyFinancialSummary(db,id)]);setParty(p);setDocs(d);setAccounts(a.filter(account=>account.isActive&&!account.isArchived));setSummary(s)},[db,from,id,to]);
+  const load=useCallback(async()=>{if(!id)return;const [p,d,a,s]=await Promise.all([getParty(db,id),listDocuments(db,{partyId:id,from:from||undefined,to:to||undefined,limit:150}),listPaymentAccounts(db),getPartyFinancialSummary(db,id,from||undefined,to||undefined)]);setParty(p);setDocs(d);setAccounts(a.filter(account=>account.isActive&&!account.isArchived));setSummary(s)},[db,from,id,to]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
   if(!party)return <Screen><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/><EmptyState title={t('noData')}/></Screen>;
   const customer=party.partyType==='customer',archived=party.isArchived===true;
