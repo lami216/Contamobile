@@ -51,7 +51,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            set -euxo pipefail
+            set -eu
             mkdir -p diagnostics
             adb install -r release/Alkarna-release.apk
             adb logcat -c
