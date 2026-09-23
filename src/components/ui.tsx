@@ -23,6 +23,21 @@ export function SectionTitle({title,action,eyebrow}:{title:string;action?:ReactN
   return <View style={[styles.sectionHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.sectionTitleBody}>{eyebrow?<AppText variant="caption" muted>{eyebrow}</AppText>:null}<AppText variant="heading">{title}</AppText></View>{action}</View>;
 }
 
+export function PageHeader({title,subtitle,action,kicker}:{title:string;subtitle?:string;action?:ReactNode;kicker?:string}) {
+  const {isRTL}=useI18n();
+  return <View style={styles.pageHeader}>
+    <View style={[styles.pageHeaderTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      <View style={styles.pageHeaderText}>
+        {kicker?<AppText variant="caption" style={styles.pageKicker}>{kicker}</AppText>:null}
+        <AppText variant="title" style={styles.pageTitle}>{title}</AppText>
+        {subtitle?<AppText muted>{subtitle}</AppText>:null}
+      </View>
+      {action}
+    </View>
+    <View style={styles.pageHeaderRule}/>
+  </View>;
+}
+
 export function Button({title,onPress,variant='primary',disabled=false,loading=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'ghost';disabled?:boolean;loading?:boolean}) {
   return <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.button,variant==='primary'&&styles.buttonPrimary,variant==='secondary'&&styles.buttonSecondary,variant==='danger'&&styles.buttonDanger,variant==='ghost'&&styles.buttonGhost,(pressed||disabled)&&styles.buttonDim]}>
     {loading?<ActivityIndicator color={variant==='primary'?colors.onPrimary:colors.primary}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary]}>{title}</Text>}
@@ -74,6 +89,12 @@ const styles=StyleSheet.create({
   cardElevated:{...shadow.card,borderColor:'rgba(225,232,237,0.72)'},
   sectionHead:{minHeight:touch.min,justifyContent:'space-between',alignItems:'center',gap:spacing.md},
   sectionTitleBody:{flex:1,gap:2},
+  pageHeader:{gap:spacing.md,paddingTop:spacing.xs},
+  pageHeaderTop:{alignItems:'flex-start',justifyContent:'space-between',gap:spacing.md},
+  pageHeaderText:{flex:1,gap:4},
+  pageKicker:{fontWeight:'800',letterSpacing:1,color:colors.primary,textTransform:'uppercase'},
+  pageTitle:{fontWeight:'850',letterSpacing:-.35},
+  pageHeaderRule:{height:3,width:48,borderRadius:99,backgroundColor:colors.primary},
   button:{minHeight:touch.min,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.lg,alignItems:'center',justifyContent:'center'},
   buttonPrimary:{backgroundColor:colors.primary,...shadow.card},
   buttonSecondary:{backgroundColor:colors.primarySoft,borderWidth:1,borderColor:colors.primarySoftStrong},
