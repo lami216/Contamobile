@@ -84,6 +84,13 @@ export async function migrateDatabase(db: SQLiteDatabase) {
         CREATE INDEX IF NOT EXISTS transfers_status_date ON account_transfers(status,occurred_at DESC);
       `);
       await tx.runAsync('UPDATE account_transfers SET document_id=id WHERE document_id IS NULL');
+      await tx.execAsync(`
+        INSERT OR IGNORE INTO documents(id,number,kind,status,payment_method,title,note,total,due_total,paid_total,cash_amount,from_account_id,to_account_id,transfer_id,occurred_at,revision)
+        SELECT COALESCE(document_id,id),number,'account-transfer',status,from_account_id,'تحويل بين الحسابات',note,amount,0,amount,amount,from_account_id,to_account_id,id,occurred_at,revision FROM account_transfers;
+        INSERT OR IGNORE INTO documents(id,number,kind,status,payment_method,title,note,total,due_total,paid_total,cash_amount,account_adjustment_direction,occurred_at,revision)
+        SELECT document_id,document_number,'account-adjustment','posted',payment_method,CASE WHEN type='manual-deposit' THEN 'إيداع' ELSE 'سحب' END,note,amount,0,amount,amount,CASE WHEN type='manual-deposit' THEN 'deposit' ELSE 'withdrawal' END,occurred_at,COALESCE(revision,0)
+        FROM financial_movements WHERE type IN ('manual-deposit','manual-withdrawal') AND is_reversal=0;
+      `);
       await tx.runAsync('PRAGMA user_version = 3');
     });
   }
