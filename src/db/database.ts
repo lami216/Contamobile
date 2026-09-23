@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const now = () => new Date().toISOString();
 
 export async function migrateDatabase(db: SQLiteDatabase) {
@@ -44,6 +44,19 @@ export async function migrateDatabase(db: SQLiteDatabase) {
       for (const [id,code,name,color] of accounts) await tx.runAsync('INSERT OR IGNORE INTO payment_accounts(id,code,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?)',[id,code,name,color,stamp,stamp]);
       for (const key of ['product','sale','purchase','expense']) await tx.runAsync('INSERT OR IGNORE INTO counters(key,value) VALUES(?,0)', [key]);
       await tx.runAsync('PRAGMA user_version = 1');
+    });
+  }
+  if (version < 2) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS product_categories(id TEXT PRIMARY KEY,name TEXT NOT NULL COLLATE NOCASE UNIQUE,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        ALTER TABLE products ADD COLUMN category_id TEXT;
+        CREATE INDEX IF NOT EXISTS products_category ON products(category_id);
+        ALTER TABLE parties ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE parties ADD COLUMN archived_at TEXT;
+        CREATE INDEX IF NOT EXISTS parties_role_archived_name ON parties(party_type,is_archived,name);
+      `);
+      await tx.runAsync('PRAGMA user_version = 2');
     });
   }
 }
