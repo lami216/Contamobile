@@ -25,8 +25,8 @@ export function InvoiceEditorScreen({kind,documentId}:{kind:'sale'|'purchase';do
   const allowed=auth.has(capability);
   const load=useCallback(async()=>{
     if(!allowed)return;
-    const [p,c,w,pa,a,doc]=await Promise.all([listProducts(db,'',undefined,false,500),listProductCategories(db),listWarehouses(db),listParties(db,kind==='sale'?'customer':'supplier','',300),listPaymentAccounts(db),documentId?getDocumentById(db,documentId):Promise.resolve(null)]);
-    const activeAccounts=a.filter(account=>account.isActive&&!account.isArchived);
+    const [p,c,w,pa,a,doc]=await Promise.all([listProducts(db,'',undefined,Boolean(documentId),500),listProductCategories(db),listWarehouses(db,Boolean(documentId)),listParties(db,kind==='sale'?'customer':'supplier','',300,Boolean(documentId)),listPaymentAccounts(db,Boolean(documentId)),documentId?getDocumentById(db,documentId):Promise.resolve(null)]);
+    const activeAccounts=a.filter(account=>account.isActive&&!account.isArchived||Boolean(doc&&doc.paymentMethod&&(account.id===doc.paymentMethod||account.code===doc.paymentMethod)));
     setProducts(p);setCategories(c);setWarehouses(w);setParties(pa);setAccounts(activeAccounts);
     if(documentId){
       if(!doc||doc.kind!==kind||doc.status!=='posted'){setMissing(true);setHydrated(true);return}
@@ -55,7 +55,7 @@ export function InvoiceEditorScreen({kind,documentId}:{kind:'sale'|'purchase';do
   if(!allowed)return <Screen><EmptyState title={ar?'ليس لديك صلاحية تنفيذ هذه العملية':'Vous n’avez pas le droit d’effectuer cette opération.'}/></Screen>;
   if(!hydrated)return <Screen><EmptyState title={t('loading')}/></Screen>;
   if(missing)return <Screen><EmptyState title={ar?'الفاتورة غير موجودة أو غير قابلة للتعديل':'La facture est introuvable ou ne peut pas être modifiée.'}/><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/></Screen>;
-  const editableWarehouses=documentId&&kind==='sale'?warehouses.filter(w=>w.id===original?.warehouseId):warehouses;
+  const editableWarehouses=documentId&&kind==='sale'?warehouses.filter(w=>w.id===original?.warehouseId):documentId?warehouses.filter(w=>!w.isArchived||w.id===original?.warehouseId):warehouses;
   const currentPaymentUnavailable=documentId&&paymentMethod!=='note'&&!accounts.some(a=>a.id===paymentMethod||a.code===paymentMethod);
   return <Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <SectionTitle title={documentId?`${t('edit')} • ${original?.number??''}`:kind==='sale'?t('newSale'):t('purchases')}/>
