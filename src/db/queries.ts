@@ -44,18 +44,25 @@ export async function getParty(db:SQLiteDatabase,id:string):Promise<Party|null> 
 
 function mapPartySummary(row:PartySummaryRow):PartyFinancialSummary{return{partyId:row.party_id,cashIn:Number(row.cash_in??0),cashOut:Number(row.cash_out??0),customerTradeTotal:Number(row.customer_trade_total??0),customerGrossProfit:Number(row.customer_gross_profit??0),supplierTradeTotal:Number(row.supplier_trade_total??0),supplierInvoiceCount:Number(row.supplier_invoice_count??0)}}
 const partySummarySql=`SELECT p.id party_id,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_in,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_out,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND fm.status<>'reversed' AND fm.is_reversal=0) cash_in,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND fm.status<>'reversed' AND fm.is_reversal=0) cash_out,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_trade_total,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(l.gross_profit,0) ELSE COALESCE(l.gross_profit,0) END),0) FROM documents d JOIN document_lines l ON l.document_id=d.id WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_gross_profit,
   (SELECT COALESCE(SUM(d.total),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_trade_total,
   (SELECT COUNT(*) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_invoice_count
 FROM parties p`;
 export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier',includeArchived=false):Promise<PartyFinancialSummary[]>{const clauses:string[]=[];const args:(string|number)[]=[];if(type){clauses.push('p.party_type=?');args.push(type)}if(!includeArchived)clauses.push('p.is_archived=0');const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${clauses.length?` WHERE ${clauses.join(' AND ')}`:''}`,args);return rows.map(mapPartySummary)}
-export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string):Promise<PartyFinancialSummary>{const row=await db.getFirstAsync<PartySummaryRow>(`${partySummarySql} WHERE p.id=?`,[partyId]);return row?mapPartySummary(row):{partyId,cashIn:0,cashOut:0,customerTradeTotal:0,customerGrossProfit:0,supplierTradeTotal:0,supplierInvoiceCount:0}}
+export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string,from?:string,to?:string):Promise<PartyFinancialSummary>{
+  const dateClause=(column:string)=>`${from?` AND substr(${column},1,10)>=?`:''}${to?` AND substr(${column},1,10)<=?`:''}`;
+  const dateArgs=()=>[...(from?[from]:[]),...(to?[to]:[])];
+  const cash=await db.getFirstAsync<{cash_in:number|null;cash_out:number|null}>(`SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount ELSE 0 END),0) cash_in,COALESCE(SUM(CASE WHEN direction='out' THEN amount ELSE 0 END),0) cash_out FROM financial_movements WHERE party_id=? AND status<>'reversed' AND is_reversal=0${dateClause('occurred_at')}`,[partyId,...dateArgs()]);
+  const customer=await db.getFirstAsync<{trade:number|null;profit:number|null}>(`SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) trade,COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(x.profit,0) ELSE COALESCE(x.profit,0) END),0) profit FROM documents d LEFT JOIN (SELECT document_id,SUM(gross_profit) profit FROM document_lines GROUP BY document_id) x ON x.document_id=d.id WHERE d.party_id=? AND d.status='posted' AND d.kind IN ('sale','return')${dateClause('d.occurred_at')}`,[partyId,...dateArgs()]);
+  const supplier=await db.getFirstAsync<{trade:number|null;count:number}>(`SELECT COALESCE(SUM(d.total),0) trade,COUNT(*) count FROM documents d WHERE d.party_id=? AND d.status='posted' AND d.kind='purchase'${dateClause('d.occurred_at')}`,[partyId,...dateArgs()]);
+  return{partyId,cashIn:Number(cash?.cash_in??0),cashOut:Number(cash?.cash_out??0),customerTradeTotal:Number(customer?.trade??0),customerGrossProfit:Number(customer?.profit??0),supplierTradeTotal:Number(supplier?.trade??0),supplierInvoiceCount:Number(supplier?.count??0)};
+}
 
 export async function listPaymentAccounts(db:SQLiteDatabase,includeArchived=false):Promise<PaymentAccount[]> {
-  const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
+  const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,archived_at,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
   return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),archivedAt:r.archived_at,openingBalance:r.opening_balance,balance:r.balance}));
 }
 
@@ -82,8 +89,8 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
   const sale=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='sale' AND status='posted' AND business_date=?",[day]);
   const profit=await db.getFirstAsync<{total:number|null}>("SELECT SUM(l.gross_profit) total FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date=?",[day]);
   const expense=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='expense' AND status='posted' AND substr(occurred_at,1,10)=?",[day]);
-  const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties');
+  const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties WHERE is_archived=0');
   const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,p.piece_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0');
-  const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT product_id,SUM(quantity) q FROM product_stocks GROUP BY product_id HAVING q<=5)');
+  const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT s.product_id,SUM(s.quantity) q FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0 GROUP BY s.product_id HAVING q<=5)');
   return{todaySales:sale?.total??0,todayProfit:profit?.total??0,todayExpenses:expense?.total??0,receivable:debt?.receivable??0,payable:debt?.payable??0,inventoryValue:inventory?.value??0,lowStockCount:low?.count??0};
 }
