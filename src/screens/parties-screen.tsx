@@ -5,6 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PartyType } from '@/domain/types';
 import { listParties, listPartyFinancialSummaries, type PartyFinancialSummary } from '@/db/queries';
 import { createParty } from '@/services/accounting-service';
+import { restoreParty } from '@/services/management-service';
 import { AppText, Badge, Button, EmptyState, Field, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
 import { CompactMetric, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
@@ -14,8 +15,8 @@ import { colors, radius, spacing } from '@/theme';
 export function PartiesScreen({type}:{type:PartyType}){
   const db=useSQLiteContext(),{t,locale,number,isRTL,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
   const [items,setItems]=useState<Party[]>([]),[summaries,setSummaries]=useState<PartyFinancialSummary[]>([]),[search,setSearch]=useState('');
-  const [createOpen,setCreateOpen]=useState(false),[name,setName]=useState(''),[phone,setPhone]=useState(''),[busy,setBusy]=useState(false);
-  const viewCapability=type==='customer'?'customers.view':'suppliers.view',createCapability=type==='customer'?'customers.create':'suppliers.create',allowed=auth.has(viewCapability),canCreate=auth.has(createCapability);
+  const [createOpen,setCreateOpen]=useState(false),[archivedOpen,setArchivedOpen]=useState(false),[archivedItems,setArchivedItems]=useState<Party[]>([]),[name,setName]=useState(''),[phone,setPhone]=useState(''),[busy,setBusy]=useState(false);
+  const viewCapability=type==='customer'?'customers.view':'suppliers.view',createCapability=type==='customer'?'customers.create':'suppliers.create',archiveCapability=type==='customer'?'customers.delete':'suppliers.delete',allowed=auth.has(viewCapability),canCreate=auth.has(createCapability),canArchive=auth.has(archiveCapability);
   const load=useCallback(async()=>{if(!allowed)return;const [parties,metrics]=await Promise.all([listParties(db,type,search,150),listPartyFinancialSummaries(db,type)]);setItems(parties);setSummaries(metrics)},[allowed,db,type,search]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
   const summaryMap=useMemo(()=>new Map(summaries.map(item=>[item.partyId,item])),[summaries]);
@@ -30,6 +31,8 @@ export function PartiesScreen({type}:{type:PartyType}){
     catch(error){Alert.alert(t('error'),errorMessage(error))}
     finally{setBusy(false)}
   };
+  const openArchived=async()=>{if(!canArchive||busy)return;setBusy(true);try{const all=await listParties(db,type,'',500,true);setArchivedItems(all.filter(item=>item.isArchived));setArchivedOpen(true)}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}};
+  const restoreArchived=async(partyId:string)=>{if(!canArchive||busy)return;setBusy(true);try{await restoreParty(db,partyId);const all=await listParties(db,type,'',500,true);setArchivedItems(all.filter(item=>item.isArchived));await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}};
   if(!allowed)return <Screen><EmptyState title={type==='customer'?(ar?'ليس لديك صلاحية عرض العملاء':'Vous n’avez pas accès aux clients.'):(ar?'ليس لديك صلاحية عرض الموردين':'Vous n’avez pas accès aux fournisseurs.')}/></Screen>;
   const title=type==='customer'?t('customers'):t('suppliers');
   const tradeLabel=type==='customer'?(ar?'إجمالي المبيعات لهم':'Ventes aux clients'):(ar?'إجمالي المشتريات منهم':'Achats fournisseurs');
@@ -40,13 +43,15 @@ export function PartiesScreen({type}:{type:PartyType}){
       <SectionTitle title={title} subtitle={type==='customer'?(ar?'ابحث عن العميل واعرف الرصيد قبل التحصيل أو البيع الآجل.':'Trouvez le client et voyez son solde avant encaissement ou crédit.'):(ar?'اعرف ما علينا لكل مورد قبل الدفع أو تسجيل شراء جديد.':'Voyez ce qui est dû avant paiement ou nouvel achat.')} action={canCreate?<Button compact title={t('add')} onPress={()=>setCreateOpen(true)}/>:undefined}/>
       <View style={styles.balanceHero}><View style={styles.balanceRule}/><AppText variant="caption" muted>{balanceLabel}</AppText><Money value={Math.abs(net)} tone={balanceTone} large/><AppText variant="caption" muted>{ar?`${number(items.length)} حساب ظاهر`:`${number(items.length)} comptes affichés`}</AppText></View>
       <View style={[styles.metrics,{flexDirection:isRTL?'row-reverse':'row'}]}><CompactMetric label={tradeLabel} value={aggregate.trade}/>{type==='customer'?<CompactMetric label={ar?'الربح الإجمالي':'Bénéfice brut'} value={aggregate.profit} tone={aggregate.profit>=0?'positive':'negative'}/>:<CountMetric label={ar?'فواتير الشراء':'Factures d’achat'} value={number(aggregate.count)}/>}<CompactMetric label={type==='customer'?(ar?'المبالغ المحصلة':'Encaissements'):(ar?'المبالغ المدفوعة':'Paiements')} value={type==='customer'?aggregate.cashIn:aggregate.cashOut}/></View>
-      <SearchField value={search} onChangeText={setSearch} placeholder={type==='customer'?(ar?'ابحث باسم العميل أو الهاتف…':'Nom ou téléphone du client…'):(ar?'ابحث باسم المورد أو الهاتف…':'Nom ou téléphone du fournisseur…')}/>
+      <View style={[styles.searchRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.searchFlex}><SearchField value={search} onChangeText={setSearch} placeholder={type==='customer'?(ar?'ابحث باسم العميل أو الهاتف…':'Nom ou téléphone du client…'):(ar?'ابحث باسم المورد أو الهاتف…':'Nom ou téléphone du fournisseur…')}/></View>{canArchive?<Button compact title={ar?'المؤرشفون':'Archivés'} variant="ghost" loading={busy&&!archivedOpen} onPress={()=>void openArchived()}/>:null}</View>
     </View>} ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')} description={!search&&canCreate?(ar?'أضف أول حساب لتبدأ متابعة الرصيد والحركات.':'Ajoutez le premier compte pour suivre solde et opérations.'):undefined}/>} renderItem={({item})=>{
       const metric=summaryMap.get(item.id),trade=type==='customer'?metric?.customerTradeTotal??0:metric?.supplierTradeTotal??0;
       const stateLabel=item.net>0?(ar?'لنا عليه':'À recevoir'):item.net<0?(ar?'له علينا':'À payer'):(ar?'مسدد':'Soldé');
       const stateTone=item.net>0?'positive':item.net<0?'negative':'neutral';
-      return <Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={({pressed})=>[styles.row,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}><View style={styles.body}><View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1} style={styles.name}>{item.name}</AppText><Badge label={stateLabel} tone={stateTone}/></View>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}<AppText variant="caption" muted>{type==='customer'?(ar?`إجمالي مشترياته ${number(trade)} MRU`:`Achats ${number(trade)} MRU`):(ar?`إجمالي مشترياتنا ${number(trade)} MRU`:`Nos achats ${number(trade)} MRU`)}</AppText></View><View style={styles.trailing}><AppText variant="caption" muted>{ar?'الرصيد':'Solde'}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/><AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText></View></Pressable>;
+      return <Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={({pressed})=>[styles.row,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}><View style={styles.body}><View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1} style={styles.name}>{item.name}</AppText><Badge label={stateLabel} tone={stateTone}/></View>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}<View style={[styles.tradeMeta,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{type==='customer'?(ar?'إجمالي مشترياته':'Achats'):(ar?'إجمالي مشترياتنا':'Nos achats')}</AppText><Money value={trade}/></View></View><View style={styles.trailing}><AppText variant="caption" muted>{ar?'الرصيد':'Solde'}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/><AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText></View></Pressable>;
     }}/>
+
+    <Sheet visible={archivedOpen&&canArchive} title={type==='customer'?(ar?'العملاء المؤرشفون':'Clients archivés'):(ar?'الموردون المؤرشفون':'Fournisseurs archivés')} onClose={()=>{if(!busy)setArchivedOpen(false)}}>{archivedItems.length?archivedItems.map(item=><View key={item.id} style={[styles.archivedRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.body}><AppText variant="subheading">{item.name}</AppText>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}<AppText variant="caption" muted>{ar?'السجل التاريخي محفوظ، ويمكن استعادة الحساب للاستخدام مجددًا.':'L’historique est conservé ; restaurez le compte pour le réutiliser.'}</AppText></View><Button compact title={ar?'استعادة':'Restaurer'} loading={busy} onPress={()=>void restoreArchived(item.id)}/></View>):<EmptyState title={ar?'لا توجد حسابات مؤرشفة':'Aucun compte archivé'}/>}</Sheet>
 
     <Sheet visible={createOpen&&canCreate} title={type==='customer'?(ar?'عميل جديد':'Nouveau client'):(ar?'مورد جديد':'Nouveau fournisseur')} onClose={closeCreate} footer={<><Button title={t('save')} loading={busy} disabled={!name.trim()} onPress={()=>void saveParty()}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={closeCreate}/></>}><Field label={t('name')} value={name} onChangeText={setName} autoFocus/><Field label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/><View style={styles.sheetNote}><View style={styles.noteRule}/><AppText variant="caption" muted>{type==='customer'?(ar?'يمكنك إضافة الرصيد والحركات لاحقًا من صفحة العميل.':'Le solde et les opérations se gèrent ensuite depuis le client.'):(ar?'يمكنك تسجيل الشراء والدفع لاحقًا من حساب المورد.':'Les achats et paiements se gèrent ensuite depuis le fournisseur.')}</AppText></View></Sheet>
   </Screen>;
@@ -69,6 +74,10 @@ const styles=StyleSheet.create({
   trailing:{alignItems:'flex-end',gap:spacing.xxs,minWidth:96},
   arrow:{color:colors.textSoft,lineHeight:20},
   pressed:{backgroundColor:colors.surfaceMuted},
+  searchRow:{alignItems:'center',gap:spacing.sm},
+  searchFlex:{flex:1},
+  tradeMeta:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
+  archivedRow:{alignItems:'center',gap:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
   sheetNote:{gap:spacing.xs,paddingVertical:spacing.xs},
   noteRule:{width:28,height:2,borderRadius:2,backgroundColor:colors.accent},
 });
