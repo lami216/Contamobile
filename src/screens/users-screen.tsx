@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { CAPABILITIES, permissionPresets, type Capability } from '@/auth/permissions';
+import { CAPABILITIES, expandPermissionDependencies, permissionPresets, removePermissionAndDependents, type Capability } from '@/auth/permissions';
 import { useAuth } from '@/auth/provider';
 import { createUser, deleteUser, listUsers, updateUser } from '@/auth/service';
 import type { AppUser } from '@/auth/types';
@@ -49,7 +49,7 @@ function UserEditor({user,locale,busy,onClose,onSave,onDelete}:{user:AppUser|nul
   const initialPreset:Preset=useMemo(()=>{if(!user)return'manager';for(const key of ['manager','accountant','sales'] as const){const set=new Set(permissionPresets[key]);if(user.permissions.length===set.size&&user.permissions.every(permission=>set.has(permission)))return key}return'custom'},[user]);
   const [username,setUsername]=useState(user?.username??''),[name,setName]=useState(user?.name??''),[password,setPassword]=useState(''),[active,setActive]=useState(user?.isActive??true),[preset,setPreset]=useState<Preset>(initialPreset),[permissions,setPermissions]=useState<Capability[]>(user?.permissions??permissionPresets.manager);
   const choosePreset=(value:Exclude<Preset,'custom'>)=>{setPreset(value);setPermissions([...permissionPresets[value]])};
-  const toggle=(cap:Capability)=>{setPreset('custom');setPermissions(current=>current.includes(cap)?current.filter(item=>item!==cap):[...current,cap])};
+  const toggle=(cap:Capability)=>{setPreset('custom');setPermissions(current=>current.includes(cap)?removePermissionAndDependents(current,cap):expandPermissionDependencies([...current,cap]))};
   const presetLabel=(value:Exclude<Preset,'custom'>)=>value==='manager'?(ar?'مدير':'Gestionnaire'):value==='accountant'?(ar?'محاسب':'Comptable'):(ar?'مبيعات':'Ventes');
   const valid=Boolean(username.trim()&&name.trim()&&(user||password.length>0));
   return <Modal animationType="slide" onRequestClose={onClose}><Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modal}>
