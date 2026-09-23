@@ -12,8 +12,8 @@ import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing } from '@/theme';
 
-const kindLabels:Record<DocumentRecord['kind'],{ar:string;fr:string}>={sale:{ar:'بيع',fr:'Vente'},purchase:{ar:'شراء',fr:'Achat'},return:{ar:'حركة تاريخية',fr:'Mouvement historique'},transfer:{ar:'تحويل',fr:'Transfert'},adjustment:{ar:'تصحيح',fr:'Ajustement'},expense:{ar:'مصروف',fr:'Dépense'},payment:{ar:'دفع/تحصيل',fr:'Paiement'},offset:{ar:'مقاصة',fr:'Compensation'},settlement:{ar:'تسوية',fr:'Règlement'}};
-const selectableKinds:DocumentRecord['kind'][]=['sale','purchase','expense','payment','transfer','adjustment','offset','settlement'];
+const kindLabels:Record<DocumentRecord['kind'],{ar:string;fr:string}>={sale:{ar:'بيع',fr:'Vente'},purchase:{ar:'شراء',fr:'Achat'},return:{ar:'حركة تاريخية',fr:'Mouvement historique'},transfer:{ar:'تحويل',fr:'Transfert'},adjustment:{ar:'تصحيح',fr:'Ajustement'},expense:{ar:'مصروف',fr:'Dépense'},payment:{ar:'دفع/تحصيل',fr:'Paiement'},offset:{ar:'مقاصة',fr:'Compensation'},settlement:{ar:'تسوية',fr:'Règlement'},'account-transfer':{ar:'تحويل حسابات',fr:'Transfert de comptes'},'account-adjustment':{ar:'سحب / إيداع',fr:'Retrait / dépôt'}};
+const selectableKinds:DocumentRecord['kind'][]=['sale','purchase','expense','payment','transfer','adjustment','account-transfer','account-adjustment','offset','settlement'];
 function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,'0'),d=String(value.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
 
 type Period='today'|'all'|'custom';
