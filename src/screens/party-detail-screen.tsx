@@ -6,7 +6,7 @@ import type { DocumentRecord, Party, PaymentAccount } from '@/domain/types';
 import { getParty, getPartyFinancialSummary, listPaymentAccounts, type PartyFinancialSummary } from '@/db/queries';
 import { listDocumentHeaders } from '@/db/document-queries';
 import { postPartyCash } from '@/services/accounting-service';
-import { updateParty } from '@/services/management-service';
+import { archiveParty, updateParty } from '@/services/management-service';
 import { postOffset, postSettlement } from '@/services/party-ledger-service';
 import { AppText, Badge, Button, Chip, EmptyState, Field, Money, Screen, SectionTitle } from '@/components/ui';
 import { CompactMetric, Sheet } from '@/components/mobile-interactions';
@@ -27,17 +27,18 @@ export function PartyDetailScreen(){
   useFocusEffect(useCallback(()=>{void load()},[load]));
   if(!party)return <Screen><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/><EmptyState title={t('noData')}/></Screen>;
   const customer=party.partyType==='customer';
-  const canView=auth.has(customer?'customers.view':'suppliers.view'),canMove=auth.has(customer?'customers.collect':'suppliers.pay'),canEdit=auth.has(customer?'customers.edit':'suppliers.edit'),canLedger=canEdit;
+  const canView=auth.has(customer?'customers.view':'suppliers.view'),canMove=auth.has(customer?'customers.collect':'suppliers.pay')&&!party.isArchived,canEdit=auth.has(customer?'customers.edit':'suppliers.edit')&&!party.isArchived,canArchive=auth.has(customer?'customers.delete':'suppliers.delete')&&!party.isArchived,canLedger=canEdit;
   if(!canView)return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض هذا الحساب':'Vous n’avez pas accès à ce compte.'}/><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/></Screen>;
   const trade=customer?summary.customerTradeTotal:summary.supplierTradeTotal;
   const cash=customer?summary.cashIn:summary.cashOut;
   const balanceTitle=party.net>0?(ar?'مستحق لنا':'À recevoir'):party.net<0?(ar?'مستحق علينا':'À payer'):(ar?'الحساب مسدد':'Compte soldé');
   const balanceTone=party.net>0?'positive':party.net<0?'negative':'normal';
   const run=async(task:()=>Promise<unknown>)=>{if(busy)return;setBusy(true);try{await task();setAction(null);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}};
+  const confirmArchive=()=>Alert.alert(ar?'أرشفة الحساب':'Archiver le compte',party.net!==0?(ar?'يجب تسوية الرصيد قبل أرشفة الحساب.':'Le solde doit être réglé avant l’archivage.'):(ar?'سيختفي الحساب من العمليات الجديدة مع بقاء تاريخه محفوظًا.':'Le compte sera retiré des nouvelles opérations, tout en conservant son historique.'),party.net!==0?[{text:t('confirm')}]:[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void (async()=>{if(busy)return;setBusy(true);try{await archiveParty(db,party.id);router.back()}catch(error){Alert.alert(t('error'),errorMessage(error));setBusy(false)}})()}]);
   const periodLabel=period==='today'?(ar?'اليوم':'Aujourd’hui'):period==='all'?(ar?'كل المدة':'Toute la période'):`${from} → ${to}`;
   return <Screen padded={false}><FlatList data={docs} keyExtractor={item=>item.id} contentContainerStyle={styles.list} ListHeaderComponent={<View style={styles.header}>
     <SectionTitle title={party.name} subtitle={party.phone||undefined} action={<Button compact title={t('cancel')} variant="ghost" onPress={()=>router.back()}/>}/>
-    <View style={styles.balanceHero}><View style={styles.balanceRule}/><View style={[styles.balanceTop,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><Badge label={customer?t('customer'):t('supplier')} tone="primary"/><AppText variant="caption" muted>{balanceTitle}</AppText><Money value={Math.abs(party.net)} tone={balanceTone} large/><AppText variant="caption" muted>{ar?`لنا ${number(party.receivable)} • علينا ${number(party.payable)}`:`À recevoir ${number(party.receivable)} • à payer ${number(party.payable)}`}</AppText></View>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>setAction('edit')}/>:null}</View></View>
+    <View style={styles.balanceHero}><View style={styles.balanceRule}/><View style={[styles.balanceTop,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><View style={[styles.identityBadges,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={customer?t('customer'):t('supplier')} tone="primary"/>{party.isArchived?<Badge label={ar?'مؤرشف':'Archivé'} tone="warning"/>:null}</View><AppText variant="caption" muted>{balanceTitle}</AppText><Money value={Math.abs(party.net)} tone={balanceTone} large/><AppText variant="caption" muted>{ar?`لنا ${number(party.receivable)} • علينا ${number(party.payable)}`:`À recevoir ${number(party.receivable)} • à payer ${number(party.payable)}`}</AppText></View><View style={styles.headerActions}>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>setAction('edit')}/>:null}{canArchive?<Button compact title={ar?'أرشفة':'Archiver'} variant="ghost" disabled={busy} onPress={confirmArchive}/>:null}</View></View></View>
     {(canMove||canLedger)?<View style={[styles.actions,{flexDirection:isRTL?'row-reverse':'row'}]}>{canMove?<><Button title={t('receive')} onPress={()=>setAction('receive')}/><Button title={t('pay')} variant="secondary" onPress={()=>setAction('pay')}/></>:null}{canLedger&&party.net!==0?<Button title={ar?'تسوية':'Règlement'} variant="secondary" onPress={()=>setAction('settlement')}/>:null}{canLedger&&party.receivable>0&&party.payable>0?<Button title={ar?'مقاصة':'Compensation'} variant="secondary" onPress={()=>setAction('offset')}/>:null}</View>:null}
     <View style={[styles.metrics,{flexDirection:isRTL?'row-reverse':'row'}]}><CompactMetric label={customer?(ar?'إجمالي مشترياته':'Achats du client'):(ar?'مشترياتنا منه':'Nos achats')} value={trade}/><CompactMetric label={customer?(ar?'المبالغ المحصلة':'Encaissements'):(ar?'المبالغ المدفوعة':'Paiements')} value={cash}/>{customer?<CompactMetric label={ar?'الربح الإجمالي':'Bénéfice brut'} value={summary.customerGrossProfit} tone={summary.customerGrossProfit>=0?'positive':'negative'}/>:<CountMetric label={ar?'فواتير الشراء':'Factures'} value={number(summary.supplierInvoiceCount)}/>}</View>
     <SectionTitle title={t('records')} subtitle={ar?`الفترة: ${periodLabel}`:`Période : ${periodLabel}`}/><View style={[styles.periods,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={ar?'اليوم':'Aujourd’hui'} active={period==='today'} onPress={()=>setPeriod('today')}/><Chip label={ar?'كل المدة':'Toute la période'} active={period==='all'} onPress={()=>setPeriod('all')}/><Button compact title={ar?'فترة':'Période'} variant={period==='custom'?'secondary':'ghost'} onPress={()=>setDateSheet(true)}/></View>
@@ -67,6 +68,8 @@ const styles=StyleSheet.create({
   balanceRule:{height:3,backgroundColor:colors.accent},
   balanceTop:{alignItems:'flex-start',gap:spacing.md,padding:spacing.md},
   actions:{gap:spacing.sm,flexWrap:'wrap'},
+  headerActions:{gap:spacing.xs,alignItems:'flex-end'},
+  identityBadges:{gap:spacing.xs,alignItems:'center',flexWrap:'wrap'},
   metrics:{gap:spacing.xs,flexWrap:'wrap',borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
   countMetric:{flex:1,minWidth:132,backgroundColor:colors.surface,padding:spacing.md,gap:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
   metricRule:{width:28,height:2,borderRadius:2,backgroundColor:colors.accent},
