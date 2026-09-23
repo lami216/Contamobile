@@ -3,8 +3,8 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export const INVOICE_BRANDING_KEY='invoice-branding';
 export const invoiceFonts=['tahoma','arial','segoe-ui','times-new-roman'] as const;
 export type InvoiceFont=typeof invoiceFonts[number];
-export type InvoiceBranding={storeName:string;storePhone:string;storeAddress:string;registrationNumber:string;taxNumber:string;footerNote:string;nameFont:InvoiceFont;nameFontSize:number;nameFontWeight:400|600|800};
-export const DEFAULT_INVOICE_BRANDING:InvoiceBranding={storeName:'الكرنه',storePhone:'',storeAddress:'',registrationNumber:'',taxNumber:'',footerNote:'',nameFont:'tahoma',nameFontSize:24,nameFontWeight:800};
+export type InvoiceBranding={storeName:string;storeLogoDataUrl:string;storePhone:string;storeAddress:string;registrationNumber:string;taxNumber:string;footerNote:string;nameFont:InvoiceFont;nameFontSize:number;nameFontWeight:400|600|800};
+export const DEFAULT_INVOICE_BRANDING:InvoiceBranding={storeName:'الكرنه',storeLogoDataUrl:'',storePhone:'',storeAddress:'',registrationNumber:'',taxNumber:'',footerNote:'',nameFont:'tahoma',nameFontSize:24,nameFontWeight:800};
 
 export function validateInvoiceBranding(value:unknown):InvoiceBranding{
   const body=value as Partial<Record<keyof InvoiceBranding,unknown>>|null,storeName=String(body?.storeName??'').trim();
@@ -13,7 +13,9 @@ export function validateInvoiceBranding(value:unknown):InvoiceBranding{
   const nameFontSize=Number(body?.nameFontSize);if(!Number.isFinite(nameFontSize)||nameFontSize<16||nameFontSize>32)throw new Error('حجم اسم المحل يجب أن يكون بين 16 و32');
   const weight=Number(body?.nameFontWeight);if(![400,600,800].includes(weight))throw new Error('سماكة الخط غير صالحة');
   const optional=(key:keyof InvoiceBranding,max:number)=>{const text=String(body?.[key]??'').trim();if(text.length>max)throw new Error('إحدى معلومات النشاط أطول من الحد المسموح');return text};
-  return {storeName,storePhone:optional('storePhone',40),storeAddress:optional('storeAddress',160),registrationNumber:optional('registrationNumber',60),taxNumber:optional('taxNumber',60),footerNote:optional('footerNote',160),nameFont:font,nameFontSize,nameFontWeight:weight as 400|600|800};
+  const storeLogoDataUrl=optional('storeLogoDataUrl',500000);
+  if(storeLogoDataUrl&&!/^data:image\/(?:png|jpeg|webp);base64,/i.test(storeLogoDataUrl))throw new Error('صورة الشعار غير صالحة. استخدم PNG أو JPG أو WebP');
+  return {storeName,storeLogoDataUrl,storePhone:optional('storePhone',80),storeAddress:optional('storeAddress',160),registrationNumber:optional('registrationNumber',60),taxNumber:optional('taxNumber',60),footerNote:optional('footerNote',160),nameFont:font,nameFontSize,nameFontWeight:weight as 400|600|800};
 }
 
 export async function getInvoiceBranding(db:SQLiteDatabase):Promise<InvoiceBranding>{
