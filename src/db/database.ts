@@ -62,6 +62,7 @@ export async function migrateDatabase(db: SQLiteDatabase) {
   if (version < 3) {
     await db.withExclusiveTransactionAsync(async (tx) => {
       await tx.execAsync(`
+        ALTER TABLE payment_accounts ADD COLUMN archived_at TEXT;
         ALTER TABLE stock_movements ADD COLUMN document_revision INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE financial_movements ADD COLUMN status TEXT NOT NULL DEFAULT 'posted';
         ALTER TABLE financial_movements ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
