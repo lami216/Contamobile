@@ -8,7 +8,7 @@ import { colors, radius, shadow, spacing } from '@/theme';
 export function LoginScreen(){
   const {login}=useAuth(),{t,locale}=useI18n(),ar=locale==='ar';
   const [username,setUsername]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const submit=async()=>{setBusy(true);setError('');try{if(!await login(username,password))setError(ar?'اسم المستخدم أو كلمة المرور غير صحيحة':'Identifiant ou mot de passe incorrect.')}finally{setBusy(false}};
+  const submit=async()=>{setBusy(true);setError('');try{if(!await login(username,password))setError(ar?'اسم المستخدم أو كلمة المرور غير صحيحة':'Identifiant ou mot de passe incorrect.')}finally{setBusy(false)}};
   return <Screen padded={false}>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS==='ios'?'padding':undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
