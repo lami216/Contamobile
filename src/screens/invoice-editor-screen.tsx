@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { DocumentRecord, Party, PaymentAccount, PricingMode, Product, Warehouse } from '@/domain/types';
+import type { DocumentRecord, Party, PaymentAccount, PricingMode, Product, ProductCategory, Warehouse } from '@/domain/types';
 import { sellingPrice, validateSaleDraft } from '@/domain/accounting';
 import { getDocumentById } from '@/db/document-queries';
-import { listParties, listPaymentAccounts, listProducts, listWarehouses } from '@/db/queries';
+import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postPurchase, postSale } from '@/services/accounting-service';
 import { reviseInvoice } from '@/services/document-revision-service';
 import { ProductPicker, PartyPicker } from '@/components/pickers';
@@ -18,16 +18,16 @@ type Line={productId:string;name:string;quantity:string;unitPrice:string};
 
 export function InvoiceEditorScreen({kind,documentId}:{kind:'sale'|'purchase';documentId?:string}){
   const db=useSQLiteContext(),{t,isRTL,locale,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
-  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[parties,setParties]=useState<Party[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]);
+  const [products,setProducts]=useState<Product[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[parties,setParties]=useState<Party[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]);
   const [warehouseId,setWarehouseId]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[paymentMethod,setPaymentMethod]=useState(''),[pricingMode,setPricingMode]=useState<PricingMode>('retail'),[lines,setLines]=useState<Line[]>([]);
   const [original,setOriginal]=useState<DocumentRecord|null>(null),[hydrated,setHydrated]=useState(!documentId),[missing,setMissing]=useState(false),[productPicker,setProductPicker]=useState(false),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
   const capability=documentId?(kind==='sale'?'pos.edit':'purchases.edit'):(kind==='sale'?'pos.create':'purchases.create');
   const allowed=auth.has(capability);
   const load=useCallback(async()=>{
     if(!allowed)return;
-    const [p,w,pa,a,doc]=await Promise.all([listProducts(db,'',undefined,false,500),listWarehouses(db),listParties(db,kind==='sale'?'customer':'supplier','',300),listPaymentAccounts(db),documentId?getDocumentById(db,documentId):Promise.resolve(null)]);
+    const [p,c,w,pa,a,doc]=await Promise.all([listProducts(db,'',undefined,false,500),listProductCategories(db),listWarehouses(db),listParties(db,kind==='sale'?'customer':'supplier','',300),listPaymentAccounts(db),documentId?getDocumentById(db,documentId):Promise.resolve(null)]);
     const activeAccounts=a.filter(account=>account.isActive&&!account.isArchived);
-    setProducts(p);setWarehouses(w);setParties(pa);setAccounts(activeAccounts);
+    setProducts(p);setCategories(c);setWarehouses(w);setParties(pa);setAccounts(activeAccounts);
     if(documentId){
       if(!doc||doc.kind!==kind||doc.status!=='posted'){setMissing(true);setHydrated(true);return}
       setOriginal(doc);setWarehouseId(doc.warehouseId??'');setPartyId(doc.partyId);setPaymentMethod(doc.paymentMethod??'note');setPricingMode(doc.pricingMode??'retail');setLines(doc.lines.filter(line=>line.productId).map(line=>({productId:String(line.productId),name:line.description,quantity:String(line.quantity),unitPrice:String(line.unitPrice)})));setHydrated(true);return;
@@ -64,6 +64,6 @@ export function InvoiceEditorScreen({kind,documentId}:{kind:'sale'|'purchase';do
     {lines.length===0?<Card><AppText muted>{t('noData')}</AppText></Card>:lines.map(line=><Card key={line.productId}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading">{line.name}</AppText><Button title={t('remove')} variant="ghost" onPress={()=>setLines(current=>current.filter(x=>x.productId!==line.productId))}/></View><View style={[styles.pair,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><Field label={t('quantity')} value={line.quantity} keyboardType="decimal-pad" onChangeText={value=>updateLine(line.productId,'quantity',value)}/></View><View style={styles.flex}><Field label={kind==='sale'?t('salePrice'):t('purchasePrice')} value={line.unitPrice} keyboardType="number-pad" onChangeText={value=>updateLine(line.productId,'unitPrice',value)}/></View></View><Money value={Math.round(Number(line.quantity||0)*Number(line.unitPrice||0))}/></Card>)}
     <Card><SectionTitle title={t('paymentMethod')}/>{currentPaymentUnavailable?<AppText variant="caption" muted>{ar?'وسيلة الدفع الأصلية متوقفة أو مؤرشفة. اختر وسيلة دفع نشطة قبل حفظ التعديل.':'Le moyen de paiement d’origine est inactif ou archivé. Choisissez un moyen actif avant d’enregistrer.'}</AppText>:null}<View style={styles.chips}>{accounts.map(a=><Chip key={a.id} label={a.name} active={paymentMethod===a.id||paymentMethod===a.code} onPress={()=>setPaymentMethod(a.id)}/>) }<Chip label={t('onCredit')} active={paymentMethod==='note'} onPress={()=>setPaymentMethod('note')}/></View><AppText variant="caption" muted>{paymentMethod==='note'?(ar?'الفاتورة الآجلة تسجل كامل المبلغ على حساب الطرف. أي دفعة لاحقة تسجل من حساب الطرف.':'La facture à crédit inscrit la totalité sur le compte du tiers. Tout règlement ultérieur se fait depuis son compte.'):(ar?'الفاتورة المدفوعة تسجل كامل المبلغ على وسيلة الدفع المختارة.':'La facture payée enregistre la totalité sur le moyen de paiement choisi.')}</AppText><View style={[styles.total,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{t('total')}</AppText><Money value={total}/></View></Card>
     <Button loading={busy} disabled={!lines.length||!warehouseId||Boolean(currentPaymentUnavailable)} title={documentId?t('save'):kind==='sale'?t('completeSale'):t('completePurchase')} onPress={submit}/><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/>
-  </ScrollView><ProductPicker visible={productPicker} products={products} exclude={lines.map(l=>l.productId)} onClose={()=>setProductPicker(false)} onSelect={p=>setLines(current=>[...current,{productId:p.id,name:p.name,quantity:'1',unitPrice:String(kind==='sale'?sellingPrice(p,pricingMode):p.lastPurchaseCost??p.pieceCost??0)}])}/><PartyPicker visible={partyPicker} parties={parties} directLabel={kind==='sale'?t('directSale'):t('directPurchase')} onClose={()=>setPartyPicker(false)} onSelect={p=>setPartyId(p?.id??null)}/></Screen>;
+  </ScrollView><ProductPicker visible={productPicker} products={products} categories={categories} exclude={lines.map(l=>l.productId)} onClose={()=>setProductPicker(false)} onSelect={p=>setLines(current=>[...current,{productId:p.id,name:p.name,quantity:'1',unitPrice:String(kind==='sale'?sellingPrice(p,pricingMode):p.lastPurchaseCost??p.pieceCost??0)}])}/><PartyPicker visible={partyPicker} parties={parties} directLabel={kind==='sale'?t('directSale'):t('directPurchase')} onClose={()=>setPartyPicker(false)} onSelect={p=>setPartyId(p?.id??null)}/></Screen>;
 }
 const styles=StyleSheet.create({content:{padding:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},chips:{flexDirection:'row',flexWrap:'wrap',gap:spacing.xs},lineHead:{alignItems:'center',justifyContent:'space-between'},pair:{gap:spacing.sm},flex:{flex:1},total:{alignItems:'center',justifyContent:'space-between'}});
