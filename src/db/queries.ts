@@ -5,7 +5,7 @@ const bool = (value: number) => value === 1;
 type ProductRow = { id:string;sku:string;name:string;barcode:string;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;category_id:string|null;is_archived:number;created_at:string;updated_at:string };
 type WarehouseRow = {id:string;name:string;is_sales_default:number;is_archived:number;archived_at:string|null};
 type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;is_archived:number;archived_at:string|null;created_at:string};
-type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;opening_balance:number;balance:number};
+type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;archived_at:string|null;opening_balance:number;balance:number};
 type DocumentRow = {id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;note:string|null;account_adjustment_direction:'deposit'|'withdrawal'|null;from_account_id:string|null;to_account_id:string|null;transfer_id:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
 type LineRow = {id:string;product_id:string|null;description:string;quantity:number;unit_price:number;line_total:number;cost_at_sale:number|null;gross_profit:number|null;balance_before:number|null;balance_after:number|null};
 export type PartyFinancialSummary={partyId:string;cashIn:number;cashOut:number;customerTradeTotal:number;customerGrossProfit:number;supplierTradeTotal:number;supplierInvoiceCount:number};
@@ -56,7 +56,7 @@ export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string)
 
 export async function listPaymentAccounts(db:SQLiteDatabase,includeArchived=false):Promise<PaymentAccount[]> {
   const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
-  return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),openingBalance:r.opening_balance,balance:r.balance}));
+  return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),archivedAt:r.archived_at,openingBalance:r.opening_balance,balance:r.balance}));
 }
 
 export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];partyId?:string;search?:string;from?:string;to?:string;limit?:number}={}):Promise<DocumentRecord[]> {
