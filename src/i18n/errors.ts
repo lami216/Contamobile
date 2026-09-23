@@ -79,6 +79,12 @@ const exact:Record<string,string>={
   'لا يمكن تعديل هذه الفاتورة':'Cette facture ne peut pas être modifiée.',
   'الفاتورة غير موجودة':'La facture est introuvable.',
   'المصروف غير موجود':'La dépense est introuvable.',
+  'اسم المحل مطلوب ويجب ألا يتجاوز 80 حرفًا':'Le nom du commerce est obligatoire et ne doit pas dépasser 80 caractères.',
+  'نوع الخط غير صالح':'La police sélectionnée est invalide.',
+  'حجم اسم المحل يجب أن يكون بين 16 و32':'La taille du nom du commerce doit être comprise entre 16 et 32.',
+  'سماكة الخط غير صالحة':'La graisse de la police est invalide.',
+  'إحدى معلومات النشاط أطول من الحد المسموح':'Une information du commerce dépasse la longueur autorisée.',
+  'صورة الشعار غير صالحة. استخدم PNG أو JPG أو WebP':'Le logo est invalide. Utilisez une image PNG, JPG ou WebP.',
 };
 
 function dynamic(message:string){
