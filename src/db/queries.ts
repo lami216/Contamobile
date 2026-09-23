@@ -25,6 +25,13 @@ export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?
   return result;
 }
 
+export async function getProduct(db:SQLiteDatabase,id:string):Promise<Product|null> {
+  const row=await db.getFirstAsync<ProductRow>('SELECT p.*,c.name category_name FROM products p LEFT JOIN product_categories c ON c.id=p.category_id WHERE p.id=?',[id]);
+  if(!row)return null;
+  const stocks=await db.getAllAsync<{warehouse_id:string;quantity:number}>('SELECT warehouse_id,quantity FROM product_stocks WHERE product_id=?',[row.id]);
+  return {id:row.id,sku:row.sku,name:row.name,barcode:row.barcode,categoryId:row.category_id,categoryName:row.category_name,pieceCost:row.piece_cost,lastPurchaseCost:row.last_purchase_cost,lastPurchaseAt:row.last_purchase_at,piecePrice:row.piece_price,wholesalePrice:row.wholesale_price,expiryDate:row.expiry_date,note:row.note,isArchived:bool(row.is_archived),createdAt:row.created_at,updatedAt:row.updated_at,stocks:Object.fromEntries(stocks.map(s=>[s.warehouse_id,s.quantity]))};
+}
+
 export async function listProductCategories(db:SQLiteDatabase):Promise<ProductCategory[]> {
   const rows=await db.getAllAsync<CategoryRow>('SELECT id,name,created_at,updated_at FROM product_categories ORDER BY name COLLATE NOCASE');
   return rows.map(row=>({id:row.id,name:row.name,createdAt:row.created_at,updatedAt:row.updated_at}));
