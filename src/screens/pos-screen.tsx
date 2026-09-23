@@ -24,7 +24,7 @@ export function PosScreen(){
   const [lines,setLines]=useState<CartLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
   const [paymentOpen,setPaymentOpen]=useState(false),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
   const [quantityLineId,setQuantityLineId]=useState<string|null>(null),[quantityDraft,setQuantityDraft]=useState('1');
-  const [successTotal,setSuccessTotal]=useState<number|null>(null);
+  const [successTotal,setSuccessTotal]=useState<number|null>(null),[successWarnings,setSuccessWarnings]=useState<Array<{name:string;remaining:number}>>([]);
 
   const loadBase=useCallback(async()=>{
     if(!allowed)return;
@@ -59,11 +59,12 @@ export function PosScreen(){
   const selectedParty=parties.find(p=>p.id===partyId)??null;
   const selectedWarehouse=warehouses.find(w=>w.id===warehouseId)??null;
   const tenderValue=paymentMethod==='note'?0:Number(tender.trim()===''?total:tender);
-  const normalizedTender=Number.isFinite(tenderValue)&&tenderValue>0?tenderValue:0;
-  const paidValue=paymentMethod==='note'?0:Math.min(total,normalizedTender);
-  const dueValue=Math.max(total-paidValue,0);
+  const normalizedTender=Number.isFinite(tenderValue)&&tenderValue>=0?tenderValue:0;
+  const underpaid=paymentMethod!=='note'&&normalizedTender<total;
+  const paidValue=paymentMethod==='note'?0:total;
+  const dueValue=paymentMethod==='note'?total:0;
   const changeValue=paymentMethod==='note'?0:Math.max(normalizedTender-total,0);
-  const needsParty=dueValue>0;
+  const needsParty=paymentMethod==='note';
 
   const addProduct=(product:Product)=>{
     const stock=Number(product.stocks?.[warehouseId]??0);
@@ -126,12 +127,13 @@ export function PosScreen(){
   const completeSale=async()=>{
     if(!lines.length||!warehouseId||busy)return;
     if(paymentMethod!=='note'&&(!Number.isFinite(tenderValue)||tenderValue<0)){Alert.alert(t('error'),ar?'أدخل مبلغًا صحيحًا':'Saisissez un montant valide.');return}
+    if(underpaid){Alert.alert(t('error'),ar?'الدفع الجزئي داخل الفاتورة غير مدعوم. اختر الآجل ثم سجّل الدفعة لاحقًا من حساب العميل.':'Le paiement partiel dans la facture n’est pas pris en charge. Choisissez le crédit puis enregistrez le paiement depuis le compte client.');return}
     if(needsParty&&!partyId){Alert.alert(t('customer'),ar?'اختر العميل لأن هناك مبلغًا متبقيًا.':'Choisissez un client car un montant reste dû.');return}
     setBusy(true);
     try{
       await postSale(db,{warehouseId,partyId,paymentMethod,cashAmount:paidValue,pricingMode,lines:lines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice}))});
-      const completedTotal=total;
-      setLines([]);setPartyId(null);setTender('');setPaymentOpen(false);setSearch('');setSuccessTotal(completedTotal);
+      const completedTotal=total,lowStock=lines.map(line=>({name:line.product.name,remaining:Math.max(0,line.stock-line.quantity)})).filter(item=>item.remaining<=3);
+      setLines([]);setPartyId(null);setTender('');setPaymentOpen(false);setSearch('');setSuccessWarnings(lowStock);setSuccessTotal(completedTotal);
       const fresh=await listProducts(db,'',warehouseId,false,18,0,categoryId);setResults(fresh);
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
   };
@@ -158,21 +160,21 @@ export function PosScreen(){
 
     <BottomActionBar label={t('completeSale')} total={total} count={itemCount} secondary={ar?'قطعة':'articles'} onPress={openPayment} disabled={!lines.length}/>
 
-    <Sheet visible={paymentOpen} title={ar?'إتمام البيع':'Finaliser la vente'} onClose={()=>{if(!busy)setPaymentOpen(false)}} footer={<><Button title={ar?`تأكيد البيع · ${number(total)}`:`Confirmer · ${number(total)}`} loading={busy} disabled={needsParty&&!selectedParty} onPress={()=>void completeSale()}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={()=>setPaymentOpen(false)}/></>}>
+    <Sheet visible={paymentOpen} title={ar?'إتمام البيع':'Finaliser la vente'} onClose={()=>{if(!busy)setPaymentOpen(false)}} footer={<><Button title={ar?`تأكيد البيع · ${number(total)}`:`Confirmer · ${number(total)}`} loading={busy} disabled={underpaid||(needsParty&&!selectedParty)} onPress={()=>void completeSale()}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={()=>setPaymentOpen(false)}/></>}>
       <Card tone="primary"><View style={[styles.totalRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading">{t('total')}</AppText><Money value={total} large/></View></Card>
       <View style={styles.sheetSection}><AppText variant="caption" muted>{t('paymentMethod')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(a=><Chip key={a.id} label={a.name} active={paymentMethod===a.id||paymentMethod===a.code} onPress={()=>{setPaymentMethod(a.id);setTender(String(total))}}/>)}<Chip label={t('onCredit')} active={paymentMethod==='note'} onPress={()=>{setPaymentMethod('note');setTender('0')}}/></View></View>
       {paymentMethod!=='note'?<Field label={ar?'المبلغ المستلم':'Montant reçu'} value={tender} onChangeText={setTender} keyboardType="number-pad" selectTextOnFocus/>:null}
       <View style={[styles.paymentSummary,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.summaryCell}><AppText variant="caption" muted>{t('paid')}</AppText><Money value={paidValue} tone="positive"/></View><View style={styles.summaryCell}><AppText variant="caption" muted>{t('due')}</AppText><Money value={dueValue} tone={dueValue>0?'negative':'normal'}/></View>{changeValue>0?<View style={styles.summaryCell}><AppText variant="caption" muted>{ar?'الباقي للعميل':'Monnaie'}</AppText><Money value={changeValue} tone="positive"/></View>:null}</View>
       <Button title={selectedParty?.name??(needsParty?(ar?'اختر العميل — مطلوب':'Choisir le client — requis'):t('directSale'))} variant={needsParty&&!selectedParty?'secondary':'ghost'} onPress={()=>setPartyPicker(true)}/>
-      {needsParty&&!selectedParty?<Card tone="warning"><AppText variant="caption" style={styles.warningText}>{ar?'يوجد مبلغ متبقٍ؛ اختر العميل قبل تأكيد البيع.':'Un montant reste dû ; choisissez le client avant de confirmer.'}</AppText></Card>:null}
+      {underpaid?<Card tone="warning"><AppText variant="caption" style={styles.warningText}>{ar?'المبلغ أقل من الإجمالي. الفاتورة إمّا مدفوعة بالكامل أو آجلة بالكامل؛ للدفعة الجزئية اختر الآجل ثم سجّل التحصيل من حساب العميل.':'Le montant est inférieur au total. La facture doit être entièrement payée ou à crédit ; pour un paiement partiel, choisissez le crédit puis enregistrez l’encaissement depuis le compte client.'}</AppText></Card>:needsParty&&!selectedParty?<Card tone="warning"><AppText variant="caption" style={styles.warningText}>{ar?'اختر العميل لأن الفاتورة الآجلة تُسجل عليه بالكامل.':'Choisissez le client car la facture à crédit est portée intégralement sur son compte.'}</AppText></Card>:null}
     </Sheet>
 
     <PartyPicker visible={partyPicker} parties={parties} directLabel={t('directSale')} onClose={()=>setPartyPicker(false)} onSelect={p=>setPartyId(p?.id??null)}/>
 
     <Sheet visible={Boolean(quantityLineId)} title={ar?'تعديل الكمية':'Modifier la quantité'} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}><Field label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/></Sheet>
 
-    <Sheet visible={successTotal!==null} title={t('success')} onClose={()=>setSuccessTotal(null)} footer={<><Button title={ar?'ابدأ بيعًا جديدًا':'Nouvelle vente'} onPress={()=>setSuccessTotal(null)}/>{auth.has('records.view')?<Button title={t('records')} variant="secondary" onPress={()=>{setSuccessTotal(null);router.push('/sales/records')}}/>:null}</>}>
-      <View style={styles.success}><View style={styles.successMark}><AppText variant="title" style={styles.successCheck}>✓</AppText></View><AppText variant="subheading">{ar?'تم حفظ البيع والمخزون والحركة المالية.':'La vente, le stock et le mouvement financier sont enregistrés.'}</AppText>{successTotal!==null?<Money value={successTotal} large/>:null}</View>
+    <Sheet visible={successTotal!==null} title={t('success')} onClose={()=>{setSuccessTotal(null);setSuccessWarnings([])}} footer={<><Button title={ar?'ابدأ بيعًا جديدًا':'Nouvelle vente'} onPress={()=>{setSuccessTotal(null);setSuccessWarnings([])}}/>{auth.has('records.view')?<Button title={t('records')} variant="secondary" onPress={()=>{setSuccessTotal(null);setSuccessWarnings([]);router.push('/sales/records')}}/>:null}</>}>
+      <View style={styles.success}><View style={styles.successMark}><AppText variant="title" style={styles.successCheck}>✓</AppText></View><AppText variant="subheading">{ar?'تم حفظ البيع والمخزون والحركة المالية.':'La vente, le stock et le mouvement financier sont enregistrés.'}</AppText>{successTotal!==null?<Money value={successTotal} large/>:null}{successWarnings.length?<Card tone="warning"><AppText variant="subheading">{ar?'مخزون منخفض':'Stock faible'}</AppText>{successWarnings.map(item=><AppText key={item.name} variant="caption">{ar?item.name+': متبقي '+number(item.remaining):item.name+' : '+number(item.remaining)+' restant(s)'}</AppText>)}</Card>:null}</View>
     </Sheet>
   </Screen>;
 }
