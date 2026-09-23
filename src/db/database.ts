@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const now = () => new Date().toISOString();
 
 export async function migrateDatabase(db: SQLiteDatabase) {
@@ -79,6 +79,16 @@ export async function migrateDatabase(db: SQLiteDatabase) {
         CREATE INDEX IF NOT EXISTS products_category_id ON products(category_id);
       `);
       await tx.runAsync('PRAGMA user_version = 3');
+    });
+  }
+  if (version < 4) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(`
+        ALTER TABLE parties ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE parties ADD COLUMN archived_at TEXT;
+        CREATE INDEX IF NOT EXISTS parties_role_archived_name ON parties(party_type,is_archived,name);
+      `);
+      await tx.runAsync('PRAGMA user_version = 4');
     });
   }
 }
