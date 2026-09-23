@@ -12,7 +12,7 @@ const TABLES:Record<string,readonly string[]>={
   product_categories:['id','name','created_at','updated_at'],
   products:['id','sku','name','barcode','piece_cost','last_purchase_cost','last_purchase_at','piece_price','wholesale_price','expiry_date','note','category_id','is_archived','archived_at','created_at','updated_at'],
   product_stocks:['product_id','warehouse_id','quantity'],parties:['id','name','phone','party_type','receivable','payable','net','is_archived','archived_at','created_at','updated_at'],
-  payment_accounts:['id','code','name','color','icon','is_active','is_archived','opening_balance','balance','created_at','updated_at'],
+  payment_accounts:['id','code','name','color','icon','is_active','is_archived','archived_at','opening_balance','balance','created_at','updated_at'],
   documents:['id','number','sequence','kind','status','party_id','party_name','warehouse_id','warehouse_name','destination_warehouse_id','destination_warehouse_name','parent_document_id','payment_method','title','total','due_total','paid_total','cash_amount','party_cash_direction','party_balance_before','party_balance_delta','party_balance_after','business_date','daily_sequence','pricing_mode','note','account_adjustment_direction','from_account_id','to_account_id','transfer_id','occurred_at','updated_at','revision','voided_at'],
   document_lines:['id','document_id','product_id','description','quantity','unit_price','line_total','cost_at_sale','gross_profit','balance_before','balance_after'],
   stock_movements:['id','document_id','document_number','warehouse_id','warehouse_name','product_id','product_name','type','quantity_delta','balance_before','balance_after','document_revision','occurred_at'],
