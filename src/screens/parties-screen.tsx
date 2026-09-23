@@ -31,7 +31,7 @@ export function PartiesScreen({type}:{type:PartyType}){
   useFocusEffect(useCallback(()=>{void load()},[load]));
 
   const summaryMap=useMemo(()=>new Map(summaries.map(item=>[item.partyId,item])),[summaries]);
-  const activeItems=showArchived?[]:items;
+  const activeItems=useMemo(()=>showArchived?[]:items,[items,showArchived]);
   const visibleSummaries=useMemo(()=>{
     if(showArchived)return[];
     if(!search.trim())return summaries;
