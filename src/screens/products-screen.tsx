@@ -67,11 +67,11 @@ export function ProductsScreen(){
         </Card>;
       }}
     />
-    {editing!==undefined&&!showArchived?<ProductEditor product={editing} warehouses={warehouses} categories={categories} busy={busy} onClose={()=>setEditing(undefined)} onSave={async input=>{
+    {editing!==undefined&&!showArchived?<ProductEditor product={editing} warehouses={warehouses} categories={categories} busy={busy} canOpeningStock={auth.has('warehouses.adjust')} onClose={()=>setEditing(undefined)} onSave={async input=>{
       setBusy(true);
       try{
         if(editing){if(!canEdit)throw new Error(ar?'ليس لديك صلاحية تعديل المنتجات':'Vous n’avez pas le droit de modifier les produits.');await updateProduct(db,editing.id,input)}
-        else{if(!canCreate)throw new Error(ar?'ليس لديك صلاحية إنشاء المنتجات':'Vous n’avez pas le droit de créer des produits.');await createProduct(db,input)}
+        else{if(!canCreate)throw new Error(ar?'ليس لديك صلاحية إنشاء المنتجات':'Vous n’avez pas le droit de créer des produits.');if(Number(input.openingStock??0)>0&&!auth.has('warehouses.adjust'))throw new Error(ar?'إدخال رصيد بداية يتطلب صلاحية تصحيح المخزون':'Un stock initial nécessite le droit d’ajuster le stock.');await createProduct(db,input)}
         setEditing(undefined);await load();
       }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
     }} onArchive={editing&&canDelete?()=>Alert.alert(t('delete'),editing.name,[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void (async()=>{try{await archiveProduct(db,editing.id);setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}})()}]):undefined}/>:null}
@@ -80,7 +80,7 @@ export function ProductsScreen(){
 }
 
 type Form={name:string;barcode:string;pieceCost:string;piecePrice:string;wholesalePrice:string;expiryDate:string;note:string;categoryId:string;openingStock:string;openingWarehouseId:string};
-function ProductEditor({product,warehouses,categories,busy,onClose,onSave,onArchive}:{product:Product|null;warehouses:Warehouse[];categories:ProductCategory[];busy:boolean;onClose:()=>void;onSave:(input:{name:string;barcode:string;pieceCost:number|null;piecePrice:number|null;wholesalePrice:number|null;expiryDate:string|null;note:string|null;categoryId:string|null;openingStock?:number;openingWarehouseId?:string})=>Promise<void>;onArchive?:()=>void}){
+function ProductEditor({product,warehouses,categories,busy,canOpeningStock,onClose,onSave,onArchive}:{product:Product|null;warehouses:Warehouse[];categories:ProductCategory[];busy:boolean;canOpeningStock:boolean;onClose:()=>void;onSave:(input:{name:string;barcode:string;pieceCost:number|null;piecePrice:number|null;wholesalePrice:number|null;expiryDate:string|null;note:string|null;categoryId:string|null;openingStock?:number;openingWarehouseId?:string})=>Promise<void>;onArchive?:()=>void}){
   const {t,isRTL,locale}=useI18n(),ar=locale==='ar';
   const [form,setForm]=useState<Form>({name:product?.name??'',barcode:product?.barcode??'',pieceCost:String(product?.pieceCost??''),piecePrice:String(product?.piecePrice??''),wholesalePrice:String(product?.wholesalePrice??''),expiryDate:product?.expiryDate??'',note:product?.note??'',categoryId:product?.categoryId??'',openingStock:'0',openingWarehouseId:warehouses.find(w=>w.isSalesDefault)?.id??warehouses[0]?.id??''});
   const set=(key:keyof Form)=>(value:string)=>setForm(current=>({...current,[key]:value}));
@@ -102,7 +102,7 @@ function ProductEditor({product,warehouses,categories,busy,onClose,onSave,onArch
       <Field label={t('expiryDate')} value={form.expiryDate} onChangeText={set('expiryDate')} placeholder="YYYY-MM-DD"/>
       <Field label={t('note')} value={form.note} onChangeText={set('note')} multiline/>
     </Card>
-    {!product?<Card elevated><AppText variant="subheading">{t('openingBalance')}</AppText><Field label={t('quantity')} value={form.openingStock} onChangeText={set('openingStock')} keyboardType="decimal-pad"/><View style={styles.chips}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={form.openingWarehouseId===w.id} onPress={()=>set('openingWarehouseId')(w.id)}/>)}</View></Card>:null}
+    {!product&&canOpeningStock?<Card elevated><AppText variant="subheading">{t('openingBalance')}</AppText><Field label={t('quantity')} value={form.openingStock} onChangeText={set('openingStock')} keyboardType="decimal-pad"/><View style={styles.chips}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={form.openingWarehouseId===w.id} onPress={()=>set('openingWarehouseId')(w.id)}/>)}</View></Card>:null}
     <Button loading={busy} disabled={!form.name.trim()} title={t('save')} onPress={()=>void onSave({name:form.name,barcode:form.barcode,pieceCost:num(form.pieceCost),piecePrice:num(form.piecePrice),wholesalePrice:num(form.wholesalePrice),expiryDate:form.expiryDate||null,note:form.note||null,categoryId:form.categoryId||null,...(!product?{openingStock:Number(form.openingStock||0),openingWarehouseId:form.openingWarehouseId}: {})})}/>
     {onArchive?<Button title={t('delete')} variant="danger" onPress={onArchive}/>:null}
     <Button title={t('cancel')} variant="ghost" onPress={onClose}/>
