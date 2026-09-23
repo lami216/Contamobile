@@ -94,7 +94,7 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
   const profit=await db.getFirstAsync<{total:number|null}>("SELECT SUM(l.gross_profit) total FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date=?",[day]);
   const expense=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='expense' AND status='posted' AND substr(occurred_at,1,10)=?",[day]);
   const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties');
-  const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0');
+  const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id');
   const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT product_id,SUM(quantity) q FROM product_stocks GROUP BY product_id HAVING q<=5)');
   return{todaySales:sale?.total??0,todayProfit:profit?.total??0,todayExpenses:expense?.total??0,receivable:debt?.receivable??0,payable:debt?.payable??0,inventoryValue:inventory?.value??0,lowStockCount:low?.count??0};
 }
