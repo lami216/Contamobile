@@ -93,7 +93,7 @@ const styles=StyleSheet.create({
   pageHeaderTop:{alignItems:'flex-start',justifyContent:'space-between',gap:spacing.md},
   pageHeaderText:{flex:1,gap:4},
   pageKicker:{fontWeight:'800',letterSpacing:1,color:colors.primary,textTransform:'uppercase'},
-  pageTitle:{fontWeight:'850',letterSpacing:-.35},
+  pageTitle:{fontWeight:'800',letterSpacing:-.35},
   pageHeaderRule:{height:3,width:48,borderRadius:99,backgroundColor:colors.primary},
   button:{minHeight:touch.min,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.lg,alignItems:'center',justifyContent:'center'},
   buttonPrimary:{backgroundColor:colors.primary,...shadow.card},
