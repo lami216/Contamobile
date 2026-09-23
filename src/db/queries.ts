@@ -5,7 +5,7 @@ const bool = (value: number) => value === 1;
 type ProductRow = { id:string;sku:string;name:string;barcode:string;category_id:string|null;category_name:string|null;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;is_archived:number;created_at:string;updated_at:string };
 type CategoryRow = {id:string;name:string;created_at:string;updated_at:string};
 type WarehouseRow = {id:string;name:string;is_sales_default:number;is_archived:number;archived_at:string|null};
-type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;created_at:string};
+type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;is_archived:number;archived_at:string|null;created_at:string};
 type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;opening_balance:number;balance:number};
 type DocumentRow = {id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
 type LineRow = {id:string;product_id:string|null;description:string;quantity:number;unit_price:number;line_total:number;cost_at_sale:number|null;gross_profit:number|null;balance_before:number|null;balance_after:number|null};
@@ -35,15 +35,15 @@ export async function listWarehouses(db: SQLiteDatabase, includeArchived=false):
   return rows.map(r=>({id:r.id,name:r.name,isSalesDefault:bool(r.is_sales_default),isArchived:bool(r.is_archived),archivedAt:r.archived_at}));
 }
 
-export async function listParties(db:SQLiteDatabase,type:'customer'|'supplier',search='',limit=100):Promise<Party[]> {
+export async function listParties(db:SQLiteDatabase,type:'customer'|'supplier',search='',limit=100,includeArchived=false):Promise<Party[]> {
   const q=`%${search.trim()}%`;
-  const rows=await db.getAllAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,created_at FROM parties WHERE party_type=? AND (name LIKE ? OR phone LIKE ?) ORDER BY name LIMIT ?',[type,q,q,limit]);
-  return rows.map(r=>({id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,createdAt:r.created_at}));
+  const rows=await db.getAllAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,is_archived,archived_at,created_at FROM parties WHERE party_type=? AND (?=1 OR is_archived=0) AND (name LIKE ? OR phone LIKE ?) ORDER BY is_archived,name LIMIT ?',[type,includeArchived?1:0,q,q,limit]);
+  return rows.map(r=>({id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,isArchived:bool(r.is_archived),archivedAt:r.archived_at,createdAt:r.created_at}));
 }
 
 export async function getParty(db:SQLiteDatabase,id:string):Promise<Party|null> {
-  const r=await db.getFirstAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,created_at FROM parties WHERE id=?',[id]);
-  return r?{id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,createdAt:r.created_at}:null;
+  const r=await db.getFirstAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,is_archived,archived_at,created_at FROM parties WHERE id=?',[id]);
+  return r?{id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,isArchived:bool(r.is_archived),archivedAt:r.archived_at,createdAt:r.created_at}:null;
 }
 
 function mapPartySummary(row:PartySummaryRow):PartyFinancialSummary{return{partyId:row.party_id,cashIn:Number(row.cash_in??0),cashOut:Number(row.cash_out??0),customerTradeTotal:Number(row.customer_trade_total??0),customerGrossProfit:Number(row.customer_gross_profit??0),supplierTradeTotal:Number(row.supplier_trade_total??0),supplierInvoiceCount:Number(row.supplier_invoice_count??0)}}
