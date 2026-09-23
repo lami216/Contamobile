@@ -55,8 +55,8 @@ export async function getParty(db:SQLiteDatabase,id:string):Promise<Party|null> 
 
 function mapPartySummary(row:PartySummaryRow):PartyFinancialSummary{return{partyId:row.party_id,cashIn:Number(row.cash_in??0),cashOut:Number(row.cash_out??0),customerTradeTotal:Number(row.customer_trade_total??0),customerGrossProfit:Number(row.customer_gross_profit??0),supplierTradeTotal:Number(row.supplier_trade_total??0),supplierInvoiceCount:Number(row.supplier_invoice_count??0)}}
 const partySummarySql=`SELECT p.id party_id,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_in,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_out,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND COALESCE(fm.status,'posted')='posted' AND COALESCE(fm.is_reversal,0)=0) cash_in,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND COALESCE(fm.status,'posted')='posted' AND COALESCE(fm.is_reversal,0)=0) cash_out,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_trade_total,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(l.gross_profit,0) ELSE COALESCE(l.gross_profit,0) END),0) FROM documents d JOIN document_lines l ON l.document_id=d.id WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_gross_profit,
   (SELECT COALESCE(SUM(d.total),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_trade_total,
