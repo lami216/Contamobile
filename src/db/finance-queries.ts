@@ -3,6 +3,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export type FinancialMovement={id:string;paymentMethod:string;direction:'in'|'out';amount:number;documentId:string;documentNumber:string;partyName:string|null;type:string;note:string|null;balanceBefore:number|null;balanceAfter:number|null;occurredAt:string;revision:number;openingBalanceBefore:number|null;openingBalanceAfter:number|null;reason:string|null};
 export type AccountTransfer={id:string;number:string;fromAccountId:string;toAccountId:string;fromName:string;toName:string;amount:number;note:string|null;occurredAt:string;revision:number};
 
+export type FinancialOverviewTotals={income:number;expenses:number};
+
+export async function getFinancialOverviewTotals(db:SQLiteDatabase):Promise<FinancialOverviewTotals>{
+  const row=await db.getFirstAsync<{income:number|null;expenses:number|null}>(`SELECT
+    COALESCE(SUM(CASE WHEN direction='in' AND type NOT IN ('transfer-in','transfer-out','opening-balance','opening-balance-correction','balance-correction') THEN amount ELSE 0 END),0) income,
+    COALESCE(SUM(CASE WHEN direction='out' AND type NOT IN ('transfer-in','transfer-out','opening-balance','opening-balance-correction','balance-correction') THEN amount ELSE 0 END),0) expenses
+    FROM financial_movements WHERE status<>'reversed' AND is_reversal=0`);
+  return{income:Number(row?.income??0),expenses:Number(row?.expenses??0)};
+}
+
 export async function listFinancialMovements(db:SQLiteDatabase,accountId?:string,limit=100):Promise<FinancialMovement[]>{
   const clauses=["status<>'reversed'","is_reversal=0"],args:(string|number)[]=[];
   if(accountId){clauses.push('payment_method=?');args.push(accountId)}
