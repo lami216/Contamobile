@@ -3,7 +3,7 @@ name: Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [mobile-v1]
+    branches: [mobile-v1, feat/mobile-ui-parity-20260923]
     paths:
       - '.github/workflows/android-apk.yml'
       - 'app/**'
