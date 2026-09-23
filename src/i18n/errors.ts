@@ -34,6 +34,10 @@ const exact:Record<string,string>={
   'لا يمكن حذف أو أرشفة وسيلة الدفع ورصيدها غير صفري. صفّر أو سوِّ الرصيد أولًا.':"Impossible d’archiver ce moyen de paiement tant que son solde n’est pas nul.",
   'وسيلة الدفع غير مؤرشفة':'Ce moyen de paiement n’est pas archivé.',
   'رقم الهاتف مستخدم لحساب آخر من نفس النوع':'Ce numéro de téléphone est déjà utilisé par un autre compte du même type.',
+  'لا يمكن حذف أو أرشفة الطرف ما دام لديه رصيد قائم. سوِّ الحساب أولاً.':'Impossible d’archiver ce compte tant qu’un solde reste ouvert. Réglez d’abord le compte.',
+  'الطرف المؤرشف غير موجود':'Le compte archivé est introuvable.',
+  'الدفع الجزئي داخل الفاتورة غير مدعوم. الفاتورة إما مدفوعة بالكامل أو ملاحظة بالكامل، ثم تُسجل أي دفعة لاحقة من حساب الطرف.':'Le paiement partiel dans une facture n’est pas pris en charge. La facture doit être entièrement payée ou entièrement à crédit ; enregistrez ensuite tout paiement depuis le compte du tiers.',
+  'جهة الرصيد غير صالحة':'Le côté du solde est invalide.',
   'المستخدم غير موجود':'Utilisateur introuvable.',
   'اسم المستخدم مطلوب':"L’identifiant est obligatoire.",
   'اسم المستخدم مستخدم بالفعل':"Cet identifiant est déjà utilisé.",
@@ -81,6 +85,8 @@ function dynamic(message:string){
   let match=message.match(/^المخزون غير كافٍ للمنتج (.+)$/);if(match)return `Stock insuffisant pour ${match[1]}.`;
   match=message.match(/^انتهت صلاحية (.+) ولا يمكن بيعه$/);if(match)return `${match[1]} est périmé et ne peut pas être vendu.`;
   match=message.match(/^تكلفة الشراء مطلوبة لإضافة مخزون (.+)$/);if(match)return `Le coût d’achat est obligatoire pour ajouter du stock à ${match[1]}.`;
+  match=message.match(/^لا يمكن تصحيح مخزون المنتج (.+) في هذا المخزن قبل دخوله إليه عبر رصيد بداية أو شراء أو تحويل مخزون\.?$/);if(match)return `Impossible d’ajuster le stock de ${match[1]} dans ce dépôt avant une entrée par stock initial, achat ou transfert.`;
+  match=message.match(/^لا يمكن زيادة مخزون المنتج (.+) بالتصحيح لأنه لا يملك رصيد بداية أو فاتورة شراء قائمة تحدد تكلفته\.?$/);if(match)return `Impossible d’augmenter le stock de ${match[1]} par correction sans stock initial ni facture d’achat définissant son coût.`;
   match=message.match(/^لا يمكن تعديل الفاتورة لأن جزءًا من مخزونها تم التصرف فيه\.?$/);if(match)return 'Impossible de modifier la facture car une partie de son stock a déjà été utilisée.';
   match=message.match(/^لا يمكن حذف الفاتورة لأن جزءًا من مخزونها تم التصرف فيه\.?$/);if(match)return 'Impossible d’annuler la facture car une partie de son stock a déjà été utilisée.';
   match=message.match(/^النسخة لا تحتوي جدول (.+)$/);if(match)return `La sauvegarde ne contient pas la table ${match[1]}.`;
