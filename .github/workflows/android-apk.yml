@@ -1,9 +1,9 @@
-name: Android Release APK
+name: Android Production APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [mobile-v1, feat/mobile-ui-parity-20260923]
+    branches: [feat/mobile-ui-parity-20260923]
     paths:
       - '.github/workflows/android-apk.yml'
       - 'app/**'
@@ -16,59 +16,134 @@ on:
       - 'babel.config.js'
 
 concurrency:
-  group: android-release-apk-${{ github.ref }}
+  group: android-production-apk-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  release-apk:
+  production-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       CI: true
       NODE_ENV: production
+      ALKARNA_KEY_ALIAS: alkarna
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
 
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Run quality checks
+        run: npm run check
+
       - name: Generate Android native project
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build standalone release APK
+      - name: Create production signing certificate
+        run: |
+          set -eu
+          PW="$(openssl rand -hex 24)"
+          echo "ALKARNA_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+          keytool -genkeypair -v             -storetype JKS             -keystore android/app/alkarna-production.keystore             -storepass "$PW"             -keypass "$PW"             -alias "$ALKARNA_KEY_ALIAS"             -keyalg RSA             -keysize 4096             -validity 10000             -dname "CN=Alkarna Production, OU=Mobile, O=Alkarna, L=Nouakchott, ST=Nouakchott, C=MR"
+
+      - name: Configure release signing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle")
+          s = p.read_text()
+          replacements = {
+              "storeFile file('debug.keystore')": "storeFile file('alkarna-production.keystore')",
+              "storePassword 'android'": "storePassword System.getenv('ALKARNA_KEYSTORE_PASSWORD')",
+              "keyAlias 'androiddebugkey'": "keyAlias System.getenv('ALKARNA_KEY_ALIAS')",
+              "keyPassword 'android'": "keyPassword System.getenv('ALKARNA_KEYSTORE_PASSWORD')",
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f"Expected signing line not found: {old}")
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+      - name: Build production release APK
         working-directory: android
         run: |
+          set -eu
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Prepare installable APK
+      - name: Prepare production APK
         run: |
-          set -e
+          set -eu
           APK="$(find android/app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)"
-          if [ -z "$APK" ]; then
-            echo "Release APK was not produced."
+          test -n "$APK"
+          mkdir -p dist
+          cp "$APK" dist/Alkarna-Production-v0.2.0.apk
+          ls -lh dist/Alkarna-Production-v0.2.0.apk
+
+      - name: Verify production bundle and signing
+        run: |
+          set -eu
+          APK="dist/Alkarna-Production-v0.2.0.apk"
+          unzip -l "$APK" | grep 'assets/index.android.bundle'
+          if unzip -l "$APK" | grep -Eiq 'expo-dev-launcher|expo-dev-menu'; then
+            echo "Development client files found in production APK."
             exit 1
           fi
-          mkdir -p dist
-          cp "$APK" dist/Alkarna-release.apk
-          ls -lh dist/Alkarna-release.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee /tmp/signing.txt
+          grep -q 'Alkarna Production' /tmp/signing.txt
+          if grep -q 'Android Debug' /tmp/signing.txt; then
+            echo "APK is still signed with Android Debug certificate."
+            exit 1
+          fi
 
-      - name: Upload standalone Android app
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Smoke test production APK on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -eu
+            APK="dist/Alkarna-Production-v0.2.0.apk"
+            adb install "$APK"
+            adb logcat -c
+            adb shell am force-stop mr.alkarna.mobile
+            adb shell am start -W -n mr.alkarna.mobile/.MainActivity
+            sleep 12
+            adb shell pidof mr.alkarna.mobile
+            adb logcat -d -v brief > /tmp/alkarna-logcat.txt
+            if grep -Eiq 'FATAL EXCEPTION|Unable to load script|Cannot connect to Metro|ReactNativeJS:.*(TypeError|ReferenceError|Error:)' /tmp/alkarna-logcat.txt; then
+              tail -n 300 /tmp/alkarna-logcat.txt
+              exit 1
+            fi
+
+      - name: Upload production Android app
         uses: actions/upload-artifact@v4
         with:
-          name: Alkarna-Android-Release
-          path: dist/Alkarna-release.apk
+          name: Alkarna-Android-Production-v0.2.0
+          path: dist/Alkarna-Production-v0.2.0.apk
           if-no-files-found: error
           retention-days: 30
