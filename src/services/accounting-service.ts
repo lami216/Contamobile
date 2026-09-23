@@ -31,7 +31,7 @@ async function product(tx:Tx, productId:string, active=true) {
   return row;
 }
 async function party(tx:Tx, partyId:string) {
-  const row=await tx.getFirstAsync<PartyDb>('SELECT id,name,party_type,receivable,payable,net FROM parties WHERE id=?',[partyId]);
+  const row=await tx.getFirstAsync<PartyDb>('SELECT id,name,party_type,receivable,payable,net FROM parties WHERE id=? AND is_archived=0',[partyId]);
   if(!row) throw new AccountingError('الحساب غير موجود','party_missing');
   return row;
 }
