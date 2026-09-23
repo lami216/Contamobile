@@ -5,16 +5,16 @@ import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PaymentAccount } from '@/domain/types';
 import { listParties, listPaymentAccounts } from '@/db/queries';
 import { listAccountTransfers, listFinancialMovements, type AccountTransfer, type FinancialMovement } from '@/db/finance-queries';
-import { correctOpeningBalance, createPaymentAccount } from '@/services/accounting-service';
-import { postAccountAdjustment, postAccountTransfer, updateAccountAdjustment, updateAccountTransfer, voidAccountAdjustment, voidAccountTransfer } from '@/services/transaction-lifecycle-service';
+import { createPaymentAccount } from '@/services/accounting-service';
+import { postAccountAdjustment, postAccountTransfer, postOpeningBalanceCorrection, updateAccountAdjustment, updateAccountTransfer, updateOpeningBalanceCorrection, voidAccountAdjustment, voidAccountTransfer, voidOpeningBalanceCorrection } from '@/services/transaction-lifecycle-service';
 import { archivePaymentAccount, restorePaymentAccount, updatePaymentAccount } from '@/services/management-service';
 import { AppText, Button, Card, Chip, EmptyState, Field, Money, Row, Screen, SectionTitle } from '@/components/ui';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, spacing } from '@/theme';
 
-type ModalMode='create'|'transfer'|'transfer-edit'|'deposit'|'withdrawal'|'deposit-edit'|'withdrawal-edit'|'edit'|'correct'|null;
-type BankTab='accounts'|'movements'|'transfers'|'adjustments';
+type ModalMode='create'|'transfer'|'transfer-edit'|'deposit'|'withdrawal'|'deposit-edit'|'withdrawal-edit'|'edit'|'correct'|'correct-edit'|null;
+type BankTab='accounts'|'movements'|'transfers'|'adjustments'|'corrections';
 function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,'0'),d=String(value.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
 const within=(occurredAt:string,from:string,to:string)=>(!from||occurredAt.slice(0,10)>=from)&&(!to||occurredAt.slice(0,10)<=to);
 
@@ -24,7 +24,7 @@ export function AccountsScreen(){
   const [movementFrom,setMovementFrom]=useState(today),[movementTo,setMovementTo]=useState(today),[movementAccount,setMovementAccount]=useState(''),[movementType,setMovementType]=useState('');
   const [transferFromDate,setTransferFromDate]=useState(today),[transferToDate,setTransferToDate]=useState(today),[transferFromAccount,setTransferFromAccount]=useState(''),[transferToAccount,setTransferToAccount]=useState('');
   const [adjustFrom,setAdjustFrom]=useState(today),[adjustTo,setAdjustTo]=useState(today),[adjustAccountFilter,setAdjustAccountFilter]=useState(''),[adjustType,setAdjustType]=useState('');
-  const canView=auth.has('banks.view'),canCreate=auth.has('banks.create'),canEdit=auth.has('banks.edit'),canDelete=auth.has('banks.delete'),canMovements=auth.has('banks.movements.view'),canTransfer=auth.has('banks.transfer'),canTransferEdit=auth.has('banks.transfer.edit'),canTransferDelete=auth.has('banks.transfer.delete'),canTransferHistory=auth.has('banks.transfer')||auth.has('banks.transfer.edit')||auth.has('banks.transfer.delete'),canAdjust=auth.has('banks.deposit_withdraw'),canAdjustEdit=auth.has('banks.deposit_withdraw.edit'),canAdjustDelete=auth.has('banks.deposit_withdraw.delete'),canAdjustHistory=auth.has('banks.deposit_withdraw')||auth.has('banks.deposit_withdraw.edit')||auth.has('banks.deposit_withdraw.delete'),canCorrect=auth.has('banks.balance_correct');
+  const canView=auth.has('banks.view'),canCreate=auth.has('banks.create'),canEdit=auth.has('banks.edit'),canDelete=auth.has('banks.delete'),canMovements=auth.has('banks.movements.view'),canTransfer=auth.has('banks.transfer'),canTransferEdit=auth.has('banks.transfer.edit'),canTransferDelete=auth.has('banks.transfer.delete'),canTransferHistory=auth.has('banks.transfer')||auth.has('banks.transfer.edit')||auth.has('banks.transfer.delete'),canAdjust=auth.has('banks.deposit_withdraw'),canAdjustEdit=auth.has('banks.deposit_withdraw.edit'),canAdjustDelete=auth.has('banks.deposit_withdraw.delete'),canAdjustHistory=auth.has('banks.deposit_withdraw')||auth.has('banks.deposit_withdraw.edit')||auth.has('banks.deposit_withdraw.delete'),canCorrect=auth.has('banks.balance_correct'),canCorrectEdit=auth.has('banks.balance_correct.edit'),canCorrectDelete=auth.has('banks.balance_correct.delete'),canCorrectionHistory=auth.has('banks.balance_correct')||auth.has('banks.balance_correct.edit')||auth.has('banks.balance_correct.delete');
   const load=useCallback(async()=>{if(!canView)return;const [all,m,tfr,customers,suppliers]=await Promise.all([listPaymentAccounts(db,true),canMovements?listFinancialMovements(db,undefined,500):Promise.resolve([]),canTransferHistory?listAccountTransfers(db,500):Promise.resolve([]),listParties(db,'customer','',10000),listParties(db,'supplier','',10000)]);setAccounts(all.filter(a=>!a.isArchived));setArchived(all.filter(a=>a.isArchived));setMovements(m);setTransfers(tfr);setParties([...customers,...suppliers])},[canMovements,canTransferHistory,canView,db]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
   if(!canView)return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض وسائل الدفع':'Vous n’avez pas accès aux moyens de paiement.'}/></Screen>;
