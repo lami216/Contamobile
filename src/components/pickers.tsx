@@ -10,7 +10,7 @@ export function ProductPicker({visible,products,categories=[],onClose,onSelect,e
   const [search,setSearch]=useState(''),[categoryId,setCategoryId]=useState('');
   const filtered=useMemo(()=>{
     const q=search.trim().toLocaleLowerCase();
-    return products.filter(p=>!exclude.includes(p.id)&&(!categoryId||p.categoryId===categoryId)&&(!q||`${p.name} ${p.sku} ${p.barcode}`.toLocaleLowerCase().includes(q)));
+    return products.filter(p=>!p.isArchived&&!exclude.includes(p.id)&&(!categoryId||p.categoryId===categoryId)&&(!q||`${p.name} ${p.sku} ${p.barcode}`.toLocaleLowerCase().includes(q)));
   },[categoryId,exclude,products,search]);
   const close=()=>{setSearch('');setCategoryId('');onClose()};
   return <Modal visible={visible} animationType="slide" onRequestClose={close}><Screen>
