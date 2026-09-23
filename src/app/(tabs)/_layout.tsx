@@ -1,11 +1,11 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type ColorValue } from 'react-native';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, shadow, type } from '@/theme';
 
 const glyphs:Record<string,string>={index:'⌂',sales:'↗',inventory:'▦',parties:'◉',more:'•••'};
-function TabIcon({route,color,focused}:{route:string;color:string;focused:boolean}) {
+function TabIcon({route,color,focused}:{route:string;color:ColorValue;focused:boolean}) {
   return <View style={[styles.iconShell,focused&&styles.iconShellActive]}><Text style={[styles.icon,{color}]}>{glyphs[route]}</Text></View>;
 }
 
