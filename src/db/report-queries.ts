@@ -22,7 +22,7 @@ export async function runReport(db:SQLiteDatabase,type:ReportType,from:string,to
     const [inventory,debt,accounts]=await Promise.all([
       db.getFirstAsync<{value:number|null}>('SELECT COALESCE(SUM(s.quantity*COALESCE(p.last_purchase_cost,0)),0) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0'),
       db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT COALESCE(SUM(receivable),0) receivable,COALESCE(SUM(payable),0) payable FROM parties'),
-      db.getFirstAsync<{balance:number|null}>('SELECT COALESCE(SUM(balance),0) balance FROM payment_accounts'),
+      db.getFirstAsync<{balance:number|null}>('SELECT COALESCE(SUM(balance),0) balance FROM payment_accounts WHERE is_archived=0'),
     ]);
     const grossProfit=Number(profit?.total??0),expenseTotal=Number(expenses?.total??0);
     return{metrics:[
