@@ -88,6 +88,21 @@ export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord
   return result;
 }
 
+export type StockOverviewItem={id:string;name:string;sku:string;barcode:string;quantity:number;unitCost:number;inventoryValue:number};
+
+export async function stockOverview(db:SQLiteDatabase,warehouseId:string):Promise<StockOverviewItem[]> {
+  if(!warehouseId)return [];
+  const rows=await db.getAllAsync<{id:string;name:string;sku:string;barcode:string;quantity:number|null;unit_cost:number|null}>(
+    `SELECT p.id,p.name,p.sku,p.barcode,COALESCE(s.quantity,0) quantity,COALESCE(p.last_purchase_cost,p.piece_cost,0) unit_cost
+     FROM products p
+     LEFT JOIN product_stocks s ON s.product_id=p.id AND s.warehouse_id=?
+     WHERE p.is_archived=0
+     ORDER BY p.name COLLATE NOCASE`,
+    [warehouseId],
+  );
+  return rows.map(row=>{const quantity=Number(row.quantity??0),unitCost=Number(row.unit_cost??0);return{id:row.id,name:row.name,sku:row.sku,barcode:row.barcode,quantity,unitCost,inventoryValue:quantity*unitCost}});
+}
+
 export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSummary> {
   const day=new Date().toISOString().slice(0,10);
   const sale=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='sale' AND status='posted' AND business_date=?",[day]);
