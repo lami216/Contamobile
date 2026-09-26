@@ -1,10 +1,10 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, type } from '@/theme';
 
-function TabGlyph({route,color,focused}:{route:string;color:string;focused:boolean}){
+function TabGlyph({route,color,focused}:{route:string;color:ColorValue;focused:boolean}){
   return <View style={[styles.iconShell,focused&&styles.iconShellActive]}>
     {route==='index'?<View style={styles.homeGlyph}><View style={[styles.homeRoof,{borderColor:color}]}/><View style={[styles.homeBody,{borderColor:color}]}/></View>:null}
     {route==='sales'?<View style={styles.salesGlyph}><View style={[styles.salesBar,{backgroundColor:color,width:15}]}/><View style={[styles.salesBar,{backgroundColor:color,width:11}]}/><View style={[styles.salesDot,{backgroundColor:color}]}/></View>:null}
