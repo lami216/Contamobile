@@ -2,7 +2,7 @@ name: Android preview APK
 
 on:
   push:
-    branches: [ux-rebuild-v2]
+    branches: [ux-rebuild-v2, ui-redesign-v2]
   workflow_dispatch:
 
 permissions:
