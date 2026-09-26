@@ -87,6 +87,35 @@ export function Badge({label,tone='neutral'}:{label:string;tone?:'neutral'|'prim
   return <View style={[styles.badge,tone==='primary'&&styles.badgePrimary,tone==='positive'&&styles.badgePositive,tone==='negative'&&styles.badgeNegative,tone==='warning'&&styles.badgeWarning]}><AppText variant="caption" style={[styles.badgeText,tone==='primary'&&styles.badgeTextPrimary,tone==='positive'&&styles.badgeTextPositive,tone==='negative'&&styles.badgeTextNegative,tone==='warning'&&styles.badgeTextWarning]}>{label}</AppText></View>;
 }
 
+
+export function AppHeader({title,subtitle,eyebrow,trailing}:{title:string;subtitle?:string;eyebrow?:string;trailing?:ReactNode}){
+  const {isRTL}=useI18n();
+  return <View style={styles.appHeader}>{eyebrow?<AppText variant="caption" style={styles.appHeaderEyebrow}>{eyebrow}</AppText>:null}<View style={[styles.appHeaderRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.appHeaderCopy}><AppText variant="title">{title}</AppText>{subtitle?<AppText variant="caption" muted style={styles.appHeaderSubtitle}>{subtitle}</AppText>:null}</View>{trailing}</View></View>;
+}
+
+export function HeroMetricCard({label,value,secondary,footer,tone='primary'}:{label:string;value:number;secondary?:string;footer?:ReactNode;tone?:'primary'|'positive'|'neutral'}){
+  return <View style={[styles.heroMetric,tone==='positive'&&styles.heroMetricPositive,tone==='neutral'&&styles.heroMetricNeutral]}><View style={styles.heroMetricGlow}/><AppText variant="caption" style={tone==='neutral'?styles.heroMetricLabelNeutral:styles.heroMetricLabel}>{label}</AppText><Money value={value} large tone={tone==='positive'?'positive':'normal'}/>{secondary?<AppText variant="caption" style={tone==='neutral'?styles.heroMetricSecondaryNeutral:styles.heroMetricSecondary}>{secondary}</AppText>:null}{footer?<View style={styles.heroMetricFooter}>{footer}</View>:null}</View>;
+}
+
+export function MetricCard({label,value,tone='normal',hint}:{label:string;value:number;tone?:'normal'|'positive'|'negative';hint?:string}){
+  return <View style={styles.metricCard}><View style={[styles.metricCardRule,tone==='positive'&&styles.metricCardRulePositive,tone==='negative'&&styles.metricCardRuleNegative]}/><AppText variant="caption" muted>{label}</AppText><Money value={value} tone={tone}/>{hint?<AppText variant="caption" muted>{hint}</AppText>:null}</View>;
+}
+
+export function QuickAction({label,caption,onPress,tone='primary',disabled=false}:{label:string;caption?:string;onPress:()=>void;tone?:'primary'|'neutral'|'warning';disabled?:boolean}){
+  const {isRTL}=useI18n();
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.quickAction,tone==='warning'&&styles.quickActionWarning,pressed&&styles.quickActionPressed,disabled&&styles.disabled]}><View style={[styles.quickActionTop,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={[styles.quickActionMark,tone==='neutral'&&styles.quickActionMarkNeutral,tone==='warning'&&styles.quickActionMarkWarning]}/><AppText variant="subheading" style={styles.quickActionArrow}>{isRTL?'←':'→'}</AppText></View><AppText variant="subheading">{label}</AppText>{caption?<AppText variant="caption" muted numberOfLines={2}>{caption}</AppText>:null}</Pressable>;
+}
+
+export function SegmentedControl<T extends string>({value,options,onChange}:{value:T;options:{value:T;label:string}[];onChange:(value:T)=>void}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.segmented,{flexDirection:isRTL?'row-reverse':'row'}]}>{options.map(option=><Pressable key={option.value} accessibilityRole="button" accessibilityState={{selected:value===option.value}} onPress={()=>onChange(option.value)} style={({pressed})=>[styles.segment,value===option.value&&styles.segmentActive,pressed&&styles.segmentPressed]}><Text style={[styles.segmentText,value===option.value&&styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>;
+}
+
+export function AlertCard({title,description,tone='warning',action}:{title:string;description?:string;tone?:'warning'|'primary'|'negative';action?:ReactNode}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.alertCard,tone==='primary'&&styles.alertCardPrimary,tone==='negative'&&styles.alertCardNegative]}><View style={[styles.alertRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={[styles.alertMark,tone==='primary'&&styles.alertMarkPrimary,tone==='negative'&&styles.alertMarkNegative]}/><View style={styles.alertCopy}><AppText variant="subheading">{title}</AppText>{description?<AppText variant="caption" muted>{description}</AppText>:null}</View>{action}</View></View>;
+}
+
 const styles=StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
   screenContent:{flex:1,gap:spacing.md},
@@ -150,4 +179,44 @@ const styles=StyleSheet.create({
   badgeTextPositive:{color:colors.positive},
   badgeTextNegative:{color:colors.negative},
   badgeTextWarning:{color:colors.warning},
+  appHeader:{gap:spacing.xs,paddingTop:spacing.xs},
+  appHeaderRow:{alignItems:'flex-start',justifyContent:'space-between',gap:spacing.md},
+  appHeaderCopy:{flex:1,gap:spacing.xs},
+  appHeaderEyebrow:{color:colors.primary,fontWeight:'800',letterSpacing:.35},
+  appHeaderSubtitle:{maxWidth:440,lineHeight:18},
+  heroMetric:{position:'relative',overflow:'hidden',backgroundColor:colors.primary,borderRadius:radius.xl,borderCurve:'continuous',padding:spacing.lg,gap:spacing.xs,minHeight:150},
+  heroMetricPositive:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.positiveSoft},
+  heroMetricNeutral:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
+  heroMetricGlow:{position:'absolute',width:150,height:150,borderRadius:75,right:-56,top:-64,backgroundColor:'rgba(255,255,255,.09)'},
+  heroMetricLabel:{color:'#D9E8FF',fontWeight:'800'},
+  heroMetricLabelNeutral:{color:colors.textMuted,fontWeight:'800'},
+  heroMetricSecondary:{color:'#E7F0FF',lineHeight:18},
+  heroMetricSecondaryNeutral:{color:colors.textMuted,lineHeight:18},
+  heroMetricFooter:{marginTop:spacing.sm},
+  metricCard:{flex:1,minWidth:145,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,borderCurve:'continuous',padding:spacing.md,gap:spacing.xs},
+  metricCardRule:{width:28,height:3,borderRadius:2,backgroundColor:colors.primary},
+  metricCardRulePositive:{backgroundColor:colors.positive},
+  metricCardRuleNegative:{backgroundColor:colors.negative},
+  quickAction:{flexGrow:1,flexBasis:145,minHeight:112,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,borderCurve:'continuous',padding:spacing.md,gap:spacing.xs},
+  quickActionWarning:{backgroundColor:colors.warningSoft,borderColor:colors.warningSoft},
+  quickActionPressed:{backgroundColor:colors.primaryFaint,transform:[{scale:.99}]},
+  quickActionTop:{alignItems:'center',justifyContent:'space-between'},
+  quickActionMark:{width:28,height:7,borderRadius:4,backgroundColor:colors.primary},
+  quickActionMarkNeutral:{backgroundColor:colors.textSoft},
+  quickActionMarkWarning:{backgroundColor:colors.warning},
+  quickActionArrow:{color:colors.primary,lineHeight:20},
+  segmented:{backgroundColor:colors.surfaceMuted,borderRadius:radius.md,padding:4,gap:4,borderWidth:1,borderColor:colors.border},
+  segment:{flex:1,minHeight:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.sm},
+  segmentActive:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  segmentPressed:{opacity:.72},
+  segmentText:{color:colors.textMuted,fontSize:typography.caption,fontWeight:'700',textAlign:'center'},
+  segmentTextActive:{color:colors.primary,fontWeight:'800'},
+  alertCard:{backgroundColor:colors.warningSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F4D9A8',padding:spacing.md},
+  alertCardPrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
+  alertCardNegative:{backgroundColor:colors.negativeSoft,borderColor:'#F3C9CD'},
+  alertRow:{alignItems:'flex-start',gap:spacing.sm},
+  alertMark:{width:8,height:8,borderRadius:4,backgroundColor:colors.warning,marginTop:7},
+  alertMarkPrimary:{backgroundColor:colors.primary},
+  alertMarkNegative:{backgroundColor:colors.negative},
+  alertCopy:{flex:1,gap:spacing.xxs},
 });
