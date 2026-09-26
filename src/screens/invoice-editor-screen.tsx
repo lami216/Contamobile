@@ -13,7 +13,7 @@ import { AlertCard, AppHeader, AppText, Badge, Button, Card, Chip, EmptyState, F
 import { BottomActionBar, QuantityStepper } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-import { colors, radius, spacing } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 type Line={productId:string;name:string;quantity:string;unitPrice:string};
 
