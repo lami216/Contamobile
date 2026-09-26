@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -19,10 +19,11 @@ function expiryTone(value:string|null){if(!value)return null;const today=new Dat
 export function ProductsScreen(){
   const db=useSQLiteContext(),{t,number,locale,isRTL,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar',params=useLocalSearchParams<{productId?:string}>(),deepProductId=typeof params.productId==='string'?params.productId:'';
   const [items,setItems]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState(''),[search,setSearch]=useState(''),[showArchived,setShowArchived]=useState(false),[viewing,setViewing]=useState<Product|undefined>(undefined),[editing,setEditing]=useState<Product|null|undefined>(undefined),[busy,setBusy]=useState(false);
-  const [categoryManager,setCategoryManager]=useState(false),[categoryDraft,setCategoryDraft]=useState(''),[categoryEditing,setCategoryEditing]=useState<ProductCategory|null>(null),[deepOpenedId,setDeepOpenedId]=useState('');
+  const [categoryManager,setCategoryManager]=useState(false),[categoryDraft,setCategoryDraft]=useState(''),[categoryEditing,setCategoryEditing]=useState<ProductCategory|null>(null);
+  const deepOpenedId=useRef('');
   const load=useCallback(async()=>{if(!auth.has('products.view'))return;const [all,wh,cats]=await Promise.all([listProducts(db,search,undefined,showArchived,150,0,categoryId),listWarehouses(db),listProductCategories(db)]);setItems(showArchived?all.filter(item=>item.isArchived):all);setWarehouses(wh);setCategories(cats);if(categoryId&&!cats.some(category=>category.id===categoryId))setCategoryId('')},[auth,categoryId,db,search,showArchived]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
-  useEffect(()=>{if(!deepProductId||deepOpenedId===deepProductId||!auth.has('products.view'))return;setDeepOpenedId(deepProductId);void getProduct(db,deepProductId).then(product=>{if(product)setViewing(product);else Alert.alert(t('error'),ar?'المنتج غير موجود.':'Produit introuvable.')}).catch(error=>Alert.alert(t('error'),errorMessage(error)))},[ar,auth,db,deepOpenedId,deepProductId,errorMessage,t]);
+  useEffect(()=>{if(!deepProductId||deepOpenedId.current===deepProductId||!auth.has('products.view'))return;deepOpenedId.current=deepProductId;void getProduct(db,deepProductId).then(product=>{if(product)setViewing(product);else Alert.alert(t('error'),ar?'المنتج غير موجود.':'Produit introuvable.')}).catch(error=>Alert.alert(t('error'),errorMessage(error)))},[ar,auth,db,deepProductId,errorMessage,t]);
   const summary=useMemo(()=>items.reduce((acc,item)=>{const qty=stockOf(item);acc.stock+=qty;if(!item.isArchived&&qty<=5)acc.low+=1;const expiry=expiryTone(item.expiryDate);if(expiry==='expired'||expiry==='soon')acc.expiry+=1;return acc},{stock:0,low:0,expiry:0}),[items]);
   if(!auth.has('products.view'))return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض المنتجات':'Vous n’avez pas accès aux produits.'}/></Screen>;
   const canCreate=auth.has('products.create'),canEdit=auth.has('products.edit'),canDelete=auth.has('products.delete'),canManageCategories=canCreate||canEdit||canDelete;
