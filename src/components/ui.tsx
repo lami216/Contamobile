@@ -98,8 +98,9 @@ export function HeroMetricCard({label,value,secondary,footer,tone='primary'}:{la
   return <View style={[styles.heroMetric,tone==='positive'&&styles.heroMetricPositive,tone==='neutral'&&styles.heroMetricNeutral]}><View style={styles.heroMetricGlow}/><AppText variant="caption" style={tone==='neutral'?styles.heroMetricLabelNeutral:styles.heroMetricLabel}>{label}</AppText><Text style={[styles.heroMetricAmount,tone==='positive'&&styles.heroMetricAmountPositive,tone==='neutral'&&styles.heroMetricAmountNeutral]}>{money(value)}</Text>{secondary?<AppText variant="caption" style={tone==='neutral'?styles.heroMetricSecondaryNeutral:styles.heroMetricSecondary}>{secondary}</AppText>:null}{footer?<View style={styles.heroMetricFooter}>{footer}</View>:null}</View>;
 }
 
-export function MetricCard({label,value,tone='normal',hint}:{label:string;value:number;tone?:'normal'|'positive'|'negative';hint?:string}){
-  return <View style={styles.metricCard}><View style={[styles.metricCardRule,tone==='positive'&&styles.metricCardRulePositive,tone==='negative'&&styles.metricCardRuleNegative]}/><AppText variant="caption" muted>{label}</AppText><Money value={value} tone={tone}/>{hint?<AppText variant="caption" muted>{hint}</AppText>:null}</View>;
+export function MetricCard({label,value,tone='normal',hint,format='money'}:{label:string;value:number;tone?:'normal'|'positive'|'negative';hint?:string;format?:'money'|'number'}){
+  const {number}=useI18n();
+  return <View style={styles.metricCard}><View style={[styles.metricCardRule,tone==='positive'&&styles.metricCardRulePositive,tone==='negative'&&styles.metricCardRuleNegative]}/><AppText variant="caption" muted>{label}</AppText>{format==='number'?<AppText variant="amount" style={tone==='positive'?styles.positive:tone==='negative'?styles.negative:undefined}>{number(value)}</AppText>:<Money value={value} tone={tone}/>} {hint?<AppText variant="caption" muted>{hint}</AppText>:null}</View>;
 }
 
 export function QuickAction({label,caption,onPress,tone='primary',disabled=false}:{label:string;caption?:string;onPress:()=>void;tone?:'primary'|'neutral'|'warning';disabled?:boolean}){
