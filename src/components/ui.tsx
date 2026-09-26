@@ -94,7 +94,8 @@ export function AppHeader({title,subtitle,eyebrow,trailing}:{title:string;subtit
 }
 
 export function HeroMetricCard({label,value,secondary,footer,tone='primary'}:{label:string;value:number;secondary?:string;footer?:ReactNode;tone?:'primary'|'positive'|'neutral'}){
-  return <View style={[styles.heroMetric,tone==='positive'&&styles.heroMetricPositive,tone==='neutral'&&styles.heroMetricNeutral]}><View style={styles.heroMetricGlow}/><AppText variant="caption" style={tone==='neutral'?styles.heroMetricLabelNeutral:styles.heroMetricLabel}>{label}</AppText><Money value={value} large tone={tone==='positive'?'positive':'normal'}/>{secondary?<AppText variant="caption" style={tone==='neutral'?styles.heroMetricSecondaryNeutral:styles.heroMetricSecondary}>{secondary}</AppText>:null}{footer?<View style={styles.heroMetricFooter}>{footer}</View>:null}</View>;
+  const {money}=useI18n();
+  return <View style={[styles.heroMetric,tone==='positive'&&styles.heroMetricPositive,tone==='neutral'&&styles.heroMetricNeutral]}><View style={styles.heroMetricGlow}/><AppText variant="caption" style={tone==='neutral'?styles.heroMetricLabelNeutral:styles.heroMetricLabel}>{label}</AppText><Text style={[styles.heroMetricAmount,tone==='positive'&&styles.heroMetricAmountPositive,tone==='neutral'&&styles.heroMetricAmountNeutral]}>{money(value)}</Text>{secondary?<AppText variant="caption" style={tone==='neutral'?styles.heroMetricSecondaryNeutral:styles.heroMetricSecondary}>{secondary}</AppText>:null}{footer?<View style={styles.heroMetricFooter}>{footer}</View>:null}</View>;
 }
 
 export function MetricCard({label,value,tone='normal',hint}:{label:string;value:number;tone?:'normal'|'positive'|'negative';hint?:string}){
@@ -189,6 +190,9 @@ const styles=StyleSheet.create({
   heroMetricNeutral:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
   heroMetricGlow:{position:'absolute',width:150,height:150,borderRadius:75,right:-56,top:-64,backgroundColor:'rgba(255,255,255,.09)'},
   heroMetricLabel:{color:'#D9E8FF',fontWeight:'800'},
+  heroMetricAmount:{fontSize:typography.amountLarge,fontWeight:'800',letterSpacing:-.55,color:colors.onPrimary,fontVariant:['tabular-nums']},
+  heroMetricAmountPositive:{color:colors.positive},
+  heroMetricAmountNeutral:{color:colors.text},
   heroMetricLabelNeutral:{color:colors.textMuted,fontWeight:'800'},
   heroMetricSecondary:{color:'#E7F0FF',lineHeight:18},
   heroMetricSecondaryNeutral:{color:colors.textMuted,lineHeight:18},
