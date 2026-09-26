@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -24,11 +24,12 @@ export function RecordsScreen(){
   const db=useSQLiteContext(),{t,date,locale,isRTL,errorMessage}=useI18n(),auth=useAuth(),today=localDay(),ar=locale==='ar',params=useLocalSearchParams<{documentId?:string}>(),deepDocumentId=typeof params.documentId==='string'?params.documentId:'';
   const [items,setItems]=useState<DocumentRecord[]>([]),[search,setSearch]=useState(''),[kind,setKind]=useState<DocumentRecord['kind']|''>('sale');
   const [period,setPeriod]=useState<Period>('today'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[dateSheet,setDateSheet]=useState(false);
-  const [selected,setSelected]=useState<DocumentRecord|null>(null),[openingId,setOpeningId]=useState<string|null>(null),[deepOpenedId,setDeepOpenedId]=useState('');
+  const [selected,setSelected]=useState<DocumentRecord|null>(null),[openingId,setOpeningId]=useState<string|null>(null);
+  const deepOpenedId=useRef('');
   const load=useCallback(async()=>{if(!auth.has('records.view'))return;const rows=await listDocumentHeaders(db,{search,kind:kind||undefined,from:period==='today'?today:period==='custom'?from||undefined:undefined,to:period==='today'?today:period==='custom'?to||undefined:undefined,status:'posted',limit:200});setItems(rows)},[auth,db,from,kind,period,search,to,today]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
   const openDocument=useCallback(async(id:string)=>{if(openingId)return;setOpeningId(id);try{const doc=await getDocumentById(db,id);if(doc)setSelected(doc);else Alert.alert(t('error'),ar?'المستند غير موجود.':'Document introuvable.')}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setOpeningId(null)}},[ar,db,errorMessage,openingId,t]);
-  useEffect(()=>{if(!deepDocumentId||deepOpenedId===deepDocumentId||!auth.has('records.view'))return;setDeepOpenedId(deepDocumentId);void openDocument(deepDocumentId)},[auth,deepDocumentId,deepOpenedId,openDocument]);
+  useEffect(()=>{if(!deepDocumentId||deepOpenedId.current===deepDocumentId||!auth.has('records.view'))return;deepOpenedId.current=deepDocumentId;void openDocument(deepDocumentId)},[auth,deepDocumentId,openDocument]);
   if(!auth.has('records.view'))return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض سجل الفواتير':'Vous n’avez pas accès à l’historique des documents.'}/></Screen>;
   const periodLabel=period==='today'?(ar?'اليوم':'Aujourd’hui'):period==='all'?(ar?'كل المدة':'Toute la période'):`${from} → ${to}`;
   return <Screen padded={false}>

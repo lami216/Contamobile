@@ -1,7 +1,7 @@
 name: Mobile quality
 on:
   push:
-    branches: [mobile-v1, main]
+    branches: [mobile-v1, main, ui-redesign-v2]
   pull_request:
     branches: [main, mobile-v1]
 permissions:

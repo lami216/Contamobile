@@ -1,0 +1,82 @@
+name: GitHub Pages web preview
+
+on:
+  push:
+    branches: [ui-redesign-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Export Expo web app
+        run: npx expo export --platform web --output-dir dist
+
+      - name: Prepare GitHub Pages runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("dist/index.html")
+          html = path.read_text(encoding="utf-8")
+          registration = """<script>
+          if ('serviceWorker' in navigator && !window.crossOriginIsolated) {
+            navigator.serviceWorker.register('/Contamobile/coi-serviceworker.js', { scope: '/Contamobile/' })
+              .then(function () {
+                if (!navigator.serviceWorker.controller) {
+                  return navigator.serviceWorker.ready.then(function () {
+                    window.location.reload();
+                  });
+                }
+              })
+              .catch(function (error) {
+                console.error('Cross-origin isolation service worker failed', error);
+              });
+          }
+          </script>"""
+          if "coi-serviceworker.js" not in html:
+              html = html.replace("</head>", registration + "</head>")
+          path.write_text(html, encoding="utf-8")
+          Path("dist/404.html").write_text(html, encoding="utf-8")
+          Path("dist/.nojekyll").touch()
+          PY
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

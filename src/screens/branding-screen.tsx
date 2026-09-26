@@ -28,6 +28,7 @@ export function BrandingScreen(){
       const result=await DocumentPicker.getDocumentAsync({type:['image/png','image/jpeg','image/webp'],copyToCacheDirectory:true,multiple:false});
       if(result.canceled)return;
       const asset=result.assets[0];
+      if(!asset)return;
       if(asset.size&&asset.size>350000)throw new Error(ar?'حجم الشعار كبير. اختر صورة أصغر من 350KB.':'Le logo est trop volumineux. Choisissez une image de moins de 350 Ko.');
       const lower=asset.name.toLowerCase();
       const mime=asset.mimeType==='image/png'||asset.mimeType==='image/jpeg'||asset.mimeType==='image/webp'?asset.mimeType:lower.endsWith('.png')?'image/png':lower.endsWith('.webp')?'image/webp':'image/jpeg';

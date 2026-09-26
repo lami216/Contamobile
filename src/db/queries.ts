@@ -88,6 +88,21 @@ export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord
   return result;
 }
 
+export type StockOverviewItem={id:string;name:string;sku:string;barcode:string;quantity:number;unitCost:number;inventoryValue:number};
+
+export async function stockOverview(db:SQLiteDatabase,warehouseId:string):Promise<StockOverviewItem[]> {
+  if(!warehouseId)return [];
+  const rows=await db.getAllAsync<{id:string;name:string;sku:string;barcode:string;quantity:number|null;unit_cost:number|null}>(
+    `SELECT p.id,p.name,p.sku,p.barcode,COALESCE(s.quantity,0) quantity,COALESCE(p.last_purchase_cost,p.piece_cost,0) unit_cost
+     FROM products p
+     LEFT JOIN product_stocks s ON s.product_id=p.id AND s.warehouse_id=?
+     WHERE p.is_archived=0
+     ORDER BY p.name COLLATE NOCASE`,
+    [warehouseId],
+  );
+  return rows.map(row=>{const quantity=Number(row.quantity??0),unitCost=Number(row.unit_cost??0);return{id:row.id,name:row.name,sku:row.sku,barcode:row.barcode,quantity,unitCost,inventoryValue:quantity*unitCost}});
+}
+
 export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSummary> {
   const day=new Date().toISOString().slice(0,10);
   const sale=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='sale' AND status='posted' AND business_date=?",[day]);
@@ -97,4 +112,33 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
   const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id');
   const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT product_id,SUM(quantity) q FROM product_stocks GROUP BY product_id HAVING q<=5)');
   return{todaySales:sale?.total??0,todayProfit:profit?.total??0,todayExpenses:expense?.total??0,receivable:debt?.receivable??0,payable:debt?.payable??0,inventoryValue:inventory?.value??0,lowStockCount:low?.count??0};
+}
+
+
+export type DashboardTrendPoint={date:string;sales:number};
+export type DashboardTopProduct={productId:string|null;name:string;quantity:number;revenue:number};
+export type DashboardInsights={trend:DashboardTrendPoint[];topProducts:DashboardTopProduct[]};
+
+export async function dashboardInsights(db:SQLiteDatabase,days=7):Promise<DashboardInsights>{
+  const safeDays=Math.max(1,Math.min(31,Math.trunc(days)||7));
+  const dates=Array.from({length:safeDays},(_,index)=>{
+    const value=new Date();
+    value.setUTCDate(value.getUTCDate()-(safeDays-1-index));
+    return value.toISOString().slice(0,10);
+  });
+  const from=dates[0]??new Date().toISOString().slice(0,10);
+  const salesRows=await db.getAllAsync<{business_date:string;total:number|null}>(
+    "SELECT business_date,COALESCE(SUM(total),0) total FROM documents WHERE kind='sale' AND status='posted' AND business_date>=? GROUP BY business_date ORDER BY business_date",
+    [from],
+  );
+  const salesByDate=new Map(salesRows.map(row=>[row.business_date,Number(row.total??0)]));
+  const trend=dates.map(date=>({date,sales:salesByDate.get(date)??0}));
+  const productRows=await db.getAllAsync<{product_id:string|null;description:string;quantity:number|null;revenue:number|null}>(
+    "SELECT l.product_id,l.description,COALESCE(SUM(l.quantity),0) quantity,COALESCE(SUM(l.line_total),0) revenue FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date>=? GROUP BY l.product_id,l.description ORDER BY revenue DESC LIMIT 3",
+    [from],
+  );
+  return {
+    trend,
+    topProducts:productRows.map(row=>({productId:row.product_id,name:row.description,quantity:Number(row.quantity??0),revenue:Number(row.revenue??0)})),
+  };
 }
