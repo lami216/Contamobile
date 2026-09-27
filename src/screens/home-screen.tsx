@@ -83,19 +83,17 @@ export function HomeScreen(){
   };
   const time=(value:string)=>new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit'}).format(new Date(value));
 
-  const metricCards=[
-    canExpenses?{kind:'expense' as const,label:t('todayExpenses'),value:summary.todayExpenses,onPress:()=>router.push('/sales/expenses')}:null,
-    canCustomers?{kind:'receivable' as const,label:t('receivable'),value:summary.receivable,onPress:()=>router.push('/parties/customers')}:null,
-    canSuppliers?{kind:'payable' as const,label:t('payable'),value:summary.payable,onPress:()=>router.push('/parties/suppliers')}:null,
-    canInventoryValue?{kind:'inventory' as const,label:t('inventoryValue'),value:summary.inventoryValue,onPress:canStock?()=>router.push('/inventory/stock'):undefined}:null,
-  ].filter((item):item is {kind:MetricKind;label:string;value:number;onPress?:()=>void}=>Boolean(item));
+  const metricCards:{kind:MetricKind;label:string;value:number;onPress?:()=>void}[]=[];
+  if(canExpenses)metricCards.push({kind:'expense',label:t('todayExpenses'),value:summary.todayExpenses,onPress:()=>router.push('/sales/expenses')});
+  if(canCustomers)metricCards.push({kind:'receivable',label:t('receivable'),value:summary.receivable,onPress:()=>router.push('/parties/customers')});
+  if(canSuppliers)metricCards.push({kind:'payable',label:t('payable'),value:summary.payable,onPress:()=>router.push('/parties/suppliers')});
+  if(canInventoryValue)metricCards.push({kind:'inventory',label:t('inventoryValue'),value:summary.inventoryValue,onPress:canStock?()=>router.push('/inventory/stock'):undefined});
 
-  const actions=[
-    canSale?{kind:'sale' as const,title:t('newSale'),caption:t('homeNewSaleCaption'),onPress:()=>router.push('/sales/pos')}:null,
-    canPurchases?{kind:'purchase' as const,title:t('purchases'),caption:t('homePurchaseCaption'),onPress:()=>router.push('/sales/purchases')}:null,
-    canStock?{kind:'stock' as const,title:t('stock'),caption:t('homeInventoryCaption'),onPress:()=>router.push('/inventory/stock')}:null,
-    canReports?{kind:'report' as const,title:t('reports'),caption:t('homeReportsCaption'),onPress:()=>router.push('/more/reports')}:null,
-  ].filter((item):item is {kind:ActionKind;title:string;caption:string;onPress:()=>void}=>Boolean(item));
+  const actions:{kind:ActionKind;title:string;caption:string;onPress:()=>void}[]=[];
+  if(canSale)actions.push({kind:'sale',title:t('newSale'),caption:t('homeNewSaleCaption'),onPress:()=>router.push('/sales/pos')});
+  if(canPurchases)actions.push({kind:'purchase',title:t('purchases'),caption:t('homePurchaseCaption'),onPress:()=>router.push('/sales/purchases')});
+  if(canStock)actions.push({kind:'stock',title:t('stock'),caption:t('homeInventoryCaption'),onPress:()=>router.push('/inventory/stock')});
+  if(canReports)actions.push({kind:'report',title:t('reports'),caption:t('homeReportsCaption'),onPress:()=>router.push('/more/reports')});
 
   return <Screen padded={false}>
     <ScrollView
