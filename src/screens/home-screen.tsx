@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { DashboardSummary, DocumentRecord } from '@/domain/types';
@@ -19,7 +19,9 @@ type BadgeTone='neutral'|'primary'|'positive'|'negative'|'warning';
 
 export function HomeScreen(){
   const db=useSQLiteContext(),{t,isRTL,locale,money,number}=useI18n(),auth=useAuth();
+  const {width}=useWindowDimensions();
   const [summary,setSummary]=useState(empty),[insights,setInsights]=useState(emptyInsights),[recent,setRecent]=useState<DocumentRecord[]>([]);
+  const [selectedDate,setSelectedDate]=useState<string|null>(null);
   const [refreshing,setRefreshing]=useState(false),[loaded,setLoaded]=useState(false),[loadError,setLoadError]=useState(false);
 
   const canSale=auth.has('pos.create');
@@ -43,6 +45,7 @@ export function HomeScreen(){
       ]);
       setSummary(nextSummary);
       setInsights(nextInsights);
+      setSelectedDate(current=>nextInsights.trend.some(point=>point.date===current)?current:(nextInsights.trend[nextInsights.trend.length-1]?.date??null));
       setRecent(nextRecent);
       setLoadError(false);
     }catch{
@@ -58,7 +61,26 @@ export function HomeScreen(){
   const localeTag=locale==='ar'?'ar-MR-u-nu-latn':'fr-MR-u-nu-latn';
   const date=new Intl.DateTimeFormat(localeTag,{weekday:'long',day:'numeric',month:'long'}).format(new Date());
   const maxTrend=useMemo(()=>Math.max(1,...insights.trend.map(point=>point.sales)),[insights.trend]);
+  const selectedIndex=useMemo(()=>{const index=insights.trend.findIndex(point=>point.date===selectedDate);return index>=0?index:insights.trend.length-1},[insights.trend,selectedDate]);
+  const selectedPoint=selectedIndex>=0?insights.trend[selectedIndex]??null:null;
+  const previousPoint=selectedIndex>0?insights.trend[selectedIndex-1]??null:null;
+  const stackLists=width<360;
   const lowStockDescription=t('homeLowStockDescription').replace('{count}',number(summary.lowStockCount));
+  const trendDate=(value:string)=>new Intl.DateTimeFormat(localeTag,{weekday:'short',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(value+'T00:00:00Z'));
+  const percentNumber=(value:number)=>new Intl.NumberFormat(localeTag,{maximumFractionDigits:1,minimumFractionDigits:0,numberingSystem:'latn'}).format(Math.abs(value));
+  let comparisonText='—',comparisonTone:'neutral'|'positive'|'negative'='neutral',comparisonIndicator='';
+  if(selectedPoint&&previousPoint){
+    if(previousPoint.sales===0){
+      if(selectedPoint.sales===0)comparisonText='0%';
+      else comparisonText=t('homeComparisonNew');
+    }else{
+      const change=((selectedPoint.sales-previousPoint.sales)/previousPoint.sales)*100;
+      if(Math.abs(change)<.05)comparisonText='0%';
+      else if(change>0){comparisonText=`+${percentNumber(change)}%`;comparisonTone='positive';comparisonIndicator='↑'}
+      else{comparisonText=`-${percentNumber(change)}%`;comparisonTone='negative';comparisonIndicator='↓'}
+    }
+  }
+  const chartAccessibility=(point:DashboardInsights['trend'][number])=>t('homeChartAccessibility').replace('{date}',trendDate(point.date)).replace('{sales}',money(point.sales)).replace('{count}',number(point.saleCount));
 
   const documentLabel=(doc:DocumentRecord)=>{
     if(doc.kind==='sale')return t('sales');
@@ -168,7 +190,7 @@ export function HomeScreen(){
         <AppText variant="heading" style={styles.warningChevron}>{isRTL?'‹':'›'}</AppText>
       </Pressable>:null}
 
-      {(canRecords||canReports)?<View style={[styles.listsGrid,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      {(canRecords||canReports)?<View style={[styles.listsGrid,{flexDirection:stackLists?'column':isRTL?'row-reverse':'row'}]}>
         {canRecords?<CompactPanel title={t('homeRecentActivity')} action={t('homeViewAll')} onAction={()=>router.push('/sales/records')}>
           {!loaded?<CompactLoading/>:recent.length?recent.map((doc,index)=><Pressable
             accessibilityRole="button"
@@ -183,7 +205,7 @@ export function HomeScreen(){
             <AppText variant="caption" numberOfLines={1} style={styles.recentTitle}>{doc.partyName||doc.title||doc.number}</AppText>
             <View style={[styles.recentBottom,{flexDirection:isRTL?'row-reverse':'row'}]}>
               <AppText variant="caption" muted numberOfLines={1} style={styles.documentNumber}>{doc.number}</AppText>
-              <AppText variant="caption" numberOfLines={1} style={[styles.compactAmount,doc.status==='voided'&&styles.negativeText]}>{money(doc.total)}</AppText>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.8} style={[styles.compactAmount,{textAlign:isRTL?'right':'left'},doc.status==='voided'&&styles.negativeText]}>{money(doc.total)}</Text>
             </View>
           </Pressable>):<CompactEmpty text={t('homeNoRecent')}/>}
         </CompactPanel>:null}
