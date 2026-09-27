@@ -238,7 +238,7 @@ export function HomeScreen(){
 
 function DayMetric({label,value,tone='neutral',indicator}:{label:string;value:string;tone?:'neutral'|'positive'|'negative';indicator?:string}){
   return <View style={styles.selectedMetric}>
-    <AppText variant="caption" muted numberOfLines={1} style={styles.selectedMetricLabel}>{label}</AppText>
+    <AppText variant="caption" muted numberOfLines={2} style={styles.selectedMetricLabel}>{label}</AppText>
     <View style={styles.selectedMetricValueRow}>
       {indicator?<AppText variant="caption" style={[styles.selectedMetricIndicator,tone==='positive'&&styles.detailPositive,tone==='negative'&&styles.detailNegative]}>{indicator}</AppText>:null}
       <AppText variant="caption" numberOfLines={1} style={[styles.selectedMetricValue,tone==='positive'&&styles.detailPositive,tone==='negative'&&styles.detailNegative]}>{value}</AppText>
@@ -250,11 +250,11 @@ function FinancialCard({kind,label,value,onPress,loaded}:{kind:MetricKind;label:
   const {money,isRTL}=useI18n();
   const body=<>
     <View style={[styles.metricIconTile,kind==='receivable'&&styles.metricIconPositive,(kind==='expense'||kind==='payable')&&styles.metricIconNegative]}><MetricGlyph kind={kind}/></View>
-    <View style={styles.metricCopy}>
+    <View style={[styles.metricCopy,onPress&&(isRTL?styles.metricCopyWithChevronRTL:styles.metricCopyWithChevronLTR)]}>
       <AppText variant="caption" muted numberOfLines={1}>{label}</AppText>
       <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.8} style={[styles.metricAmount,{textAlign:isRTL?'right':'left'},kind==='receivable'&&styles.positiveText,(kind==='expense'||kind==='payable')&&styles.negativeText]}>{loaded?money(value):'—'}</Text>
     </View>
-    {onPress?<AppText variant="heading" style={styles.metricChevron}>›</AppText>:null}
+    {onPress?<AppText variant="heading" style={[styles.metricChevron,isRTL?styles.metricChevronRTL:styles.metricChevronLTR]}>{isRTL?'‹':'›'}</AppText>:null}
   </>;
   return onPress?<Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.metricCard,pressed&&styles.metricPressed]}>{body}</Pressable>:<View style={styles.metricCard}>{body}</View>;
 }
@@ -375,7 +375,7 @@ const styles=StyleSheet.create({
   selectedDateLabel:{color:colors.primaryStrong,fontWeight:'800'},
   selectedMetrics:{alignItems:'stretch'},
   selectedMetric:{flex:1,minWidth:0,gap:2,paddingHorizontal:7},
-  selectedMetricLabel:{fontSize:9.5,lineHeight:13},
+  selectedMetricLabel:{fontSize:9,lineHeight:12,minHeight:24},
   selectedMetricValueRow:{minHeight:18,flexDirection:'row',alignItems:'center',gap:3},
   selectedMetricValue:{fontSize:11.5,lineHeight:16,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
   selectedMetricIndicator:{fontSize:11,lineHeight:16,fontWeight:'900'},
@@ -383,14 +383,18 @@ const styles=StyleSheet.create({
   detailPositive:{color:colors.positive},
   detailNegative:{color:colors.negative},
   metricGrid:{flexWrap:'wrap',gap:10},
-  metricCard:{width:'48.4%',minHeight:74,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:10,paddingVertical:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,...elevation.subtle},
+  metricCard:{position:'relative',width:'48.4%',minHeight:74,flexDirection:'row',alignItems:'center',gap:7,paddingHorizontal:9,paddingVertical:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,...elevation.subtle},
   metricPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
-  metricIconTile:{width:40,height:40,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
+  metricIconTile:{width:38,height:38,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
   metricIconPositive:{backgroundColor:'#E4F8EF'},
   metricIconNegative:{backgroundColor:'#FDE9EB'},
   metricCopy:{flex:1,minWidth:0,gap:4},
-  metricAmount:{fontSize:14.5,lineHeight:19,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
-  metricChevron:{color:colors.primary,fontSize:22,lineHeight:24,flexShrink:0},
+  metricCopyWithChevronRTL:{paddingLeft:12},
+  metricCopyWithChevronLTR:{paddingRight:12},
+  metricAmount:{fontSize:14,lineHeight:19,fontWeight:'800',letterSpacing:-.15,color:colors.text,fontVariant:['tabular-nums']},
+  metricChevron:{position:'absolute',top:24,color:colors.primary,fontSize:21,lineHeight:22},
+  metricChevronRTL:{left:6},
+  metricChevronLTR:{right:6},
   positiveText:{color:colors.positive},
   negativeText:{color:colors.negative},
   quickPanel:{backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,overflow:'hidden',...elevation.subtle},
@@ -425,12 +429,12 @@ const styles=StyleSheet.create({
   compactAmount:{fontSize:11.5,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
   rowPressed:{backgroundColor:colors.surfaceMuted},
   lastCompactRow:{borderBottomWidth:0},
-  productRow:{minHeight:60,alignItems:'center',gap:6,paddingHorizontal:spacing.sm,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  rankBadge:{width:28,height:28,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  productRow:{minHeight:60,alignItems:'center',gap:5,paddingHorizontal:8,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  rankBadge:{width:26,height:26,borderRadius:9,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
   rankText:{color:colors.primary,fontSize:11,fontWeight:'800'},
   productCopy:{flex:1,minWidth:0,gap:3},
   productName:{fontSize:11.5,fontWeight:'700'},
-  productRevenue:{fontSize:10.5,lineHeight:14,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums'],width:72,flexShrink:1},
+  productRevenue:{fontSize:10.5,lineHeight:14,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums'],width:64,flexShrink:1},
   compactBadge:{maxWidth:86,borderRadius:8,paddingHorizontal:6,paddingVertical:3,backgroundColor:colors.surfaceMuted},
   badgePrimary:{backgroundColor:colors.primarySoft},
   badgePositive:{backgroundColor:colors.positiveSoft},
