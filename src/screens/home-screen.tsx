@@ -140,34 +140,52 @@ export function HomeScreen(){
         </Pressable>
       </View>:null}
 
-      <View style={[styles.analyticsCard,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <View style={[styles.salesSummary,!canTrend&&styles.salesSummaryWide]}>
-          <View style={[styles.analyticsLabelRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <View style={styles.analyticsIcon}><MiniBars/></View>
-            <AppText variant="subheading" numberOfLines={1}>{t('todaySales')}</AppText>
+      <View style={styles.analyticsCard}>
+        <View style={[styles.analyticsMain,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <View style={[styles.salesSummary,!canTrend&&styles.salesSummaryWide]}>
+            <View style={[styles.analyticsLabelRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+              <View style={styles.analyticsIcon}><MiniBars/></View>
+              <AppText variant="subheading" numberOfLines={1}>{t('todaySales')}</AppText>
+            </View>
+            <AppText variant="display" numberOfLines={1} style={styles.salesAmount}>{loaded?money(summary.todaySales):'—'}</AppText>
+            <View style={styles.profitChip}>
+              <AppText variant="caption" muted>{t('todayProfit')}</AppText>
+              <AppText variant="caption" style={styles.profitValue}>{loaded?money(summary.todayProfit):'—'}</AppText>
+            </View>
           </View>
-          <AppText variant="display" numberOfLines={1} style={styles.salesAmount}>{loaded?money(summary.todaySales):'—'}</AppText>
-          <View style={styles.profitChip}>
-            <AppText variant="caption" muted>{t('todayProfit')}</AppText>
-            <AppText variant="caption" style={styles.profitValue}>{loaded?money(summary.todayProfit):'—'}</AppText>
-          </View>
+
+          {canTrend?<><View style={styles.analyticsDivider}/><View style={styles.chartArea}>
+            <View style={styles.chartBars}>
+              {insights.trend.map(point=>{
+                const selected=point.date===selectedPoint?.date;
+                const height=point.sales>0?16+Math.round((point.sales/maxTrend)*54):4;
+                return <Pressable
+                  key={point.date}
+                  accessibilityRole="button"
+                  accessibilityState={{selected}}
+                  accessibilityLabel={chartAccessibility(point)}
+                  hitSlop={2}
+                  onPress={()=>setSelectedDate(point.date)}
+                  style={({pressed})=>[styles.chartColumn,pressed&&styles.chartColumnPressed]}
+                >
+                  <View style={styles.barTrack}><View style={[styles.bar,{height},point.sales===0&&styles.barZero,selected&&styles.barSelected]}/></View>
+                  <AppText variant="caption" style={[styles.dayLabel,selected&&styles.dayLabelSelected]}>{point.date.slice(8)}</AppText>
+                </Pressable>;
+              })}
+            </View>
+          </View></>:null}
         </View>
 
-        {canTrend?<><View style={styles.analyticsDivider}/><View style={styles.chartArea}>
-          <View style={[styles.chartHeader,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <View style={[styles.weekPill,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.weekChevron}/><AppText variant="caption" style={styles.weekText}>{t('homeCurrentWeek')}</AppText></View>
+        {canTrend&&selectedPoint?<View style={styles.selectedDayStrip}>
+          <AppText variant="caption" style={styles.selectedDateLabel}>{trendDate(selectedPoint.date)}</AppText>
+          <View style={[styles.selectedMetrics,{flexDirection:isRTL?'row-reverse':'row'}]}>
+            <DayMetric label={t('homeSelectedSales')} value={money(selectedPoint.sales)}/>
+            <View style={styles.selectedMetricDivider}/>
+            <DayMetric label={t('homeSelectedInvoices')} value={number(selectedPoint.saleCount)}/>
+            <View style={styles.selectedMetricDivider}/>
+            <DayMetric label={t('homePreviousDay')} value={comparisonText} tone={comparisonTone} indicator={comparisonIndicator}/>
           </View>
-          <View style={[styles.chartBars,{flexDirection:'row'}]}>
-            {insights.trend.map(point=>{
-              const selected=point.sales>0&&point.sales===maxTrend;
-              const height=point.sales>0?16+Math.round((point.sales/maxTrend)*54):7;
-              return <View key={point.date} style={styles.chartColumn}>
-                <View style={styles.barTrack}><View style={[styles.bar,{height},selected&&styles.barSelected]}/></View>
-                <AppText variant="caption" style={[styles.dayLabel,selected&&styles.dayLabelSelected]}>{point.date.slice(8)}</AppText>
-              </View>;
-            })}
-          </View>
-        </View></>:null}
+        </View>:null}
       </View>
 
       {metricCards.length?<View style={[styles.metricGrid,{flexDirection:isRTL?'row-reverse':'row'}]}>
