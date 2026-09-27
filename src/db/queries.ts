@@ -115,7 +115,7 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
 }
 
 
-export type DashboardTrendPoint={date:string;sales:number};
+export type DashboardTrendPoint={date:string;sales:number;saleCount:number};
 export type DashboardTopProduct={productId:string|null;name:string;quantity:number;revenue:number};
 export type DashboardInsights={trend:DashboardTrendPoint[];topProducts:DashboardTopProduct[]};
 
@@ -127,12 +127,12 @@ export async function dashboardInsights(db:SQLiteDatabase,days=7):Promise<Dashbo
     return value.toISOString().slice(0,10);
   });
   const from=dates[0]??new Date().toISOString().slice(0,10);
-  const salesRows=await db.getAllAsync<{business_date:string;total:number|null}>(
-    "SELECT business_date,COALESCE(SUM(total),0) total FROM documents WHERE kind='sale' AND status='posted' AND business_date>=? GROUP BY business_date ORDER BY business_date",
+  const salesRows=await db.getAllAsync<{business_date:string;total:number|null;sale_count:number|null}>(
+    "SELECT business_date,COALESCE(SUM(total),0) total,COUNT(*) sale_count FROM documents WHERE kind='sale' AND status='posted' AND business_date>=? GROUP BY business_date ORDER BY business_date",
     [from],
   );
-  const salesByDate=new Map(salesRows.map(row=>[row.business_date,Number(row.total??0)]));
-  const trend=dates.map(date=>({date,sales:salesByDate.get(date)??0}));
+  const salesByDate=new Map(salesRows.map(row=>[row.business_date,{sales:Number(row.total??0),saleCount:Number(row.sale_count??0)}]));
+  const trend=dates.map(date=>({date,sales:salesByDate.get(date)?.sales??0,saleCount:salesByDate.get(date)?.saleCount??0}));
   const productRows=await db.getAllAsync<{product_id:string|null;description:string;quantity:number|null;revenue:number|null}>(
     "SELECT l.product_id,l.description,COALESCE(SUM(l.quantity),0) quantity,COALESCE(SUM(l.line_total),0) revenue FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date>=? GROUP BY l.product_id,l.description ORDER BY revenue DESC LIMIT 3",
     [from],
