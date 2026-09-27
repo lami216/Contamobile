@@ -268,7 +268,7 @@ function ProductsStage({
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
     <PosHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack} trailing={lines.length?<CartIndicator count={lines.reduce((sum,line)=>sum+line.quantity,0)}/>:undefined}/>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,lines.length&&styles.stageScrollWithBar]}>
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,lines.length>0&&styles.stageScrollWithBar]}>
       <View style={[styles.compactControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <PricingSwitch value={pricingMode} onChange={changeMode}/>
         {warehouses.length>1?<View style={styles.warehouseLabel}><AppText variant="caption" muted numberOfLines={1}>{selectedWarehouse?.name??t('warehouse')}</AppText></View>:null}
