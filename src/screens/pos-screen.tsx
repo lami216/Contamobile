@@ -41,7 +41,7 @@ function format(template:string,values:Record<string,string|number>){
 }
 
 export function PosScreen(){
-  const db=useSQLiteContext(),{t,isRTL,number,money,date,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,number,money,errorMessage}=useI18n(),auth=useAuth();
   const allowed=auth.has('pos.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
