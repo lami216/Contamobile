@@ -236,11 +236,24 @@ export function HomeScreen(){
   </Screen>;
 }
 
+function DayMetric({label,value,tone='neutral',indicator}:{label:string;value:string;tone?:'neutral'|'positive'|'negative';indicator?:string}){
+  return <View style={styles.selectedMetric}>
+    <AppText variant="caption" muted numberOfLines={1} style={styles.selectedMetricLabel}>{label}</AppText>
+    <View style={styles.selectedMetricValueRow}>
+      {indicator?<AppText variant="caption" style={[styles.selectedMetricIndicator,tone==='positive'&&styles.detailPositive,tone==='negative'&&styles.detailNegative]}>{indicator}</AppText>:null}
+      <AppText variant="caption" numberOfLines={1} style={[styles.selectedMetricValue,tone==='positive'&&styles.detailPositive,tone==='negative'&&styles.detailNegative]}>{value}</AppText>
+    </View>
+  </View>;
+}
+
 function FinancialCard({kind,label,value,onPress,loaded}:{kind:MetricKind;label:string;value:number;onPress?:()=>void;loaded:boolean}){
-  const {money}=useI18n();
+  const {money,isRTL}=useI18n();
   const body=<>
     <View style={[styles.metricIconTile,kind==='receivable'&&styles.metricIconPositive,(kind==='expense'||kind==='payable')&&styles.metricIconNegative]}><MetricGlyph kind={kind}/></View>
-    <View style={styles.metricCopy}><AppText variant="caption" muted numberOfLines={1}>{label}</AppText><AppText variant="amount" numberOfLines={1} style={[styles.metricAmount,kind==='receivable'&&styles.positiveText,(kind==='expense'||kind==='payable')&&styles.negativeText]}>{loaded?money(value):'—'}</AppText></View>
+    <View style={styles.metricCopy}>
+      <AppText variant="caption" muted numberOfLines={1}>{label}</AppText>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.8} style={[styles.metricAmount,{textAlign:isRTL?'right':'left'},kind==='receivable'&&styles.positiveText,(kind==='expense'||kind==='payable')&&styles.negativeText]}>{loaded?money(value):'—'}</Text>
+    </View>
     {onPress?<AppText variant="heading" style={styles.metricChevron}>›</AppText>:null}
   </>;
   return onPress?<Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.metricCard,pressed&&styles.metricPressed]}>{body}</Pressable>:<View style={styles.metricCard}>{body}</View>;
@@ -276,7 +289,7 @@ function TopProductRow({product,rank,isLast,canOpen}:{product:DashboardTopProduc
   >
     <View style={styles.rankBadge}><AppText variant="caption" style={styles.rankText}>{number(rank)}</AppText></View>
     <View style={styles.productCopy}><AppText variant="caption" numberOfLines={1} style={styles.productName}>{product.name}</AppText><AppText variant="caption" muted numberOfLines={1}>{t('homeQuantity')} {number(product.quantity)}</AppText></View>
-    <AppText variant="caption" numberOfLines={1} style={styles.productRevenue}>{money(product.revenue)}</AppText>
+    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.8} style={[styles.productRevenue,{textAlign:isRTL?'right':'left'}]}>{money(product.revenue)}</Text>
   </Pressable>;
 }
 
@@ -297,17 +310,34 @@ function MiniBars(){
 }
 
 function MetricGlyph({kind}:{kind:MetricKind}){
-  if(kind==='receivable')return <View style={styles.peopleGlyph}><View style={styles.peopleHead}/><View style={styles.peopleHeadSecond}/><View style={styles.peopleBody}/></View>;
-  if(kind==='expense')return <View style={styles.walletGlyph}><View style={styles.walletBody}/><View style={styles.walletClip}/></View>;
-  if(kind==='payable')return <View style={styles.truckGlyph}><View style={styles.truckBody}/><View style={styles.truckCab}/><View style={[styles.truckWheel,{left:2}]}/><View style={[styles.truckWheel,{right:1}]}/></View>;
-  return <View style={styles.boxGlyph}><View style={styles.boxFace}/><View style={styles.boxLine}/></View>;
+  if(kind==='receivable')return <View style={styles.customersGlyph}>
+    <View style={styles.customerHeadPrimary}/><View style={styles.customerHeadSecondary}/>
+    <View style={styles.customerShouldersPrimary}/><View style={styles.customerShouldersSecondary}/>
+  </View>;
+  if(kind==='expense')return <View style={styles.receiptGlyph}>
+    <View style={styles.receiptPaper}><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/><View style={styles.receiptMinus}/></View>
+  </View>;
+  if(kind==='payable')return <View style={styles.supplierGlyph}>
+    <View style={styles.supplierBox}/><View style={styles.supplierCab}/><View style={[styles.supplierWheel,{left:3}]}/><View style={[styles.supplierWheel,{right:2}]}/>
+  </View>;
+  return <View style={styles.packageGlyph}>
+    <View style={styles.packageBody}/><View style={styles.packageFlap}/><View style={styles.packageSeam}/>
+  </View>;
 }
 
 function ActionGlyph({kind}:{kind:ActionKind}){
-  if(kind==='sale')return <View style={styles.plusGlyph}><View style={styles.plusHorizontal}/><View style={styles.plusVertical}/></View>;
-  if(kind==='purchase')return <View style={styles.arrowGlyph}><View style={styles.arrowStem}/><View style={styles.arrowHead}/></View>;
-  if(kind==='stock')return <View style={styles.cubeGlyph}><View style={styles.cubeSquare}/><View style={styles.cubeLine}/></View>;
-  return <View style={styles.reportGlyph}><View style={[styles.reportBar,{height:9}]}/><View style={[styles.reportBar,{height:15}]}/><View style={[styles.reportBar,{height:21}]}/></View>;
+  if(kind==='sale')return <View style={styles.saleGlyph}>
+    <View style={styles.salePaper}/><View style={styles.salePlusHorizontal}/><View style={styles.salePlusVertical}/>
+  </View>;
+  if(kind==='purchase')return <View style={styles.purchaseGlyphRefined}>
+    <View style={styles.purchaseStem}/><View style={styles.purchaseHead}/><View style={styles.purchaseTray}/>
+  </View>;
+  if(kind==='stock')return <View style={styles.stockGlyphRefined}>
+    <View style={styles.stockBox}/><View style={styles.stockFlap}/><View style={styles.stockSeam}/>
+  </View>;
+  return <View style={styles.reportGlyphRefined}>
+    <View style={[styles.reportOutlineBar,{height:10}]}/><View style={[styles.reportOutlineBar,{height:16}]}/><View style={[styles.reportOutlineBar,{height:22}]}/>
+  </View>;
 }
 
 const styles=StyleSheet.create({
@@ -321,7 +351,8 @@ const styles=StyleSheet.create({
   errorCopy:{flex:1,gap:spacing.xxs},
   retryButton:{minHeight:touch.min,justifyContent:'center',paddingHorizontal:spacing.sm},
   retryText:{color:colors.negative,fontWeight:'800'},
-  analyticsCard:{minHeight:178,overflow:'hidden',backgroundColor:'#EAF3FF',borderRadius:22,borderWidth:1,borderColor:'#D5E5F8',...elevation.subtle},
+  analyticsCard:{overflow:'hidden',backgroundColor:'#EAF3FF',borderRadius:22,borderWidth:1,borderColor:'#D5E5F8',...elevation.subtle},
+  analyticsMain:{minHeight:178},
   salesSummary:{width:'37%',minWidth:112,paddingVertical:spacing.sm,paddingHorizontal:spacing.sm,gap:spacing.xs,justifyContent:'center',backgroundColor:'rgba(255,255,255,.56)'},
   salesSummaryWide:{width:'100%'},
   analyticsLabelRow:{alignItems:'center',gap:spacing.xs},
@@ -330,27 +361,36 @@ const styles=StyleSheet.create({
   profitChip:{gap:3,paddingTop:spacing.xs,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:'#D7E4F3'},
   profitValue:{color:colors.positive,fontWeight:'800',fontVariant:['tabular-nums']},
   analyticsDivider:{width:StyleSheet.hairlineWidth,backgroundColor:'#D5E4F4',marginVertical:spacing.md},
-  chartArea:{flex:1,padding:spacing.sm,gap:spacing.xs},
-  chartHeader:{alignItems:'center',justifyContent:'space-between'},
-  weekPill:{alignSelf:'flex-start',alignItems:'center',gap:spacing.xs,paddingHorizontal:spacing.sm,paddingVertical:6,borderRadius:radius.md,backgroundColor:'rgba(255,255,255,.78)'},
-  weekChevron:{width:7,height:7,borderRightWidth:2,borderBottomWidth:2,borderColor:colors.primary,transform:[{rotate:'45deg'}],marginTop:-3},
-  weekText:{fontWeight:'700',color:colors.text},
-  chartBars:{flex:1,minHeight:104,alignItems:'flex-end',gap:spacing.xs,paddingTop:spacing.xs},
-  chartColumn:{flex:1,height:100,alignItems:'center',justifyContent:'flex-end',gap:6},
-  barTrack:{height:76,width:'68%',minWidth:13,maxWidth:28,justifyContent:'flex-end'},
-  bar:{width:'100%',minHeight:8,borderRadius:8,backgroundColor:'#7DB5FA'},
+  chartArea:{flex:1,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs},
+  chartBars:{flex:1,minHeight:116,flexDirection:'row',alignItems:'flex-end',gap:2},
+  chartColumn:{flex:1,minWidth:0,height:112,alignItems:'center',justifyContent:'flex-end',gap:6,borderRadius:radius.sm},
+  chartColumnPressed:{backgroundColor:'rgba(23,105,224,.06)'},
+  barTrack:{height:84,width:'100%',justifyContent:'flex-end',alignItems:'center'},
+  bar:{width:18,minHeight:4,borderRadius:7,backgroundColor:'#8ABCF8'},
+  barZero:{backgroundColor:'#C8D7E8'},
   barSelected:{backgroundColor:colors.primary},
-  dayLabel:{fontSize:10,color:colors.textMuted,fontWeight:'600'},
+  dayLabel:{fontSize:10,color:colors.textMuted,fontWeight:'600',minWidth:22,textAlign:'center'},
   dayLabelSelected:{color:colors.primary,fontWeight:'800'},
+  selectedDayStrip:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:'#D4E2F2',backgroundColor:'rgba(255,255,255,.46)',paddingHorizontal:spacing.sm,paddingVertical:8,gap:6},
+  selectedDateLabel:{color:colors.primaryStrong,fontWeight:'800'},
+  selectedMetrics:{alignItems:'stretch'},
+  selectedMetric:{flex:1,minWidth:0,gap:2,paddingHorizontal:7},
+  selectedMetricLabel:{fontSize:9.5,lineHeight:13},
+  selectedMetricValueRow:{minHeight:18,flexDirection:'row',alignItems:'center',gap:3},
+  selectedMetricValue:{fontSize:11.5,lineHeight:16,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
+  selectedMetricIndicator:{fontSize:11,lineHeight:16,fontWeight:'900'},
+  selectedMetricDivider:{width:StyleSheet.hairlineWidth,backgroundColor:'#D4E2F2'},
+  detailPositive:{color:colors.positive},
+  detailNegative:{color:colors.negative},
   metricGrid:{flexWrap:'wrap',gap:10},
-  metricCard:{width:'48.4%',minHeight:74,flexDirection:'row',alignItems:'center',gap:spacing.sm,padding:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,...elevation.subtle},
+  metricCard:{width:'48.4%',minHeight:74,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:10,paddingVertical:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,...elevation.subtle},
   metricPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
-  metricIconTile:{width:42,height:42,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  metricIconTile:{width:40,height:40,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
   metricIconPositive:{backgroundColor:'#E4F8EF'},
   metricIconNegative:{backgroundColor:'#FDE9EB'},
   metricCopy:{flex:1,minWidth:0,gap:4},
-  metricAmount:{fontSize:15,lineHeight:19,color:colors.text,fontVariant:['tabular-nums']},
-  metricChevron:{color:colors.primary,fontSize:25,lineHeight:26},
+  metricAmount:{fontSize:14.5,lineHeight:19,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
+  metricChevron:{color:colors.primary,fontSize:22,lineHeight:24,flexShrink:0},
   positiveText:{color:colors.positive},
   negativeText:{color:colors.negative},
   quickPanel:{backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,overflow:'hidden',...elevation.subtle},
@@ -390,7 +430,7 @@ const styles=StyleSheet.create({
   rankText:{color:colors.primary,fontSize:11,fontWeight:'800'},
   productCopy:{flex:1,minWidth:0,gap:3},
   productName:{fontSize:11.5,fontWeight:'700'},
-  productRevenue:{fontSize:10.5,fontWeight:'800',fontVariant:['tabular-nums'],maxWidth:68},
+  productRevenue:{fontSize:10.5,lineHeight:14,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums'],width:72,flexShrink:1},
   compactBadge:{maxWidth:86,borderRadius:8,paddingHorizontal:6,paddingVertical:3,backgroundColor:colors.surfaceMuted},
   badgePrimary:{backgroundColor:colors.primarySoft},
   badgePositive:{backgroundColor:colors.positiveSoft},
@@ -435,4 +475,44 @@ const styles=StyleSheet.create({
   cubeLine:{position:'absolute',width:2,height:16,backgroundColor:'#EA920E'},
   reportGlyph:{width:26,height:25,flexDirection:'row',alignItems:'flex-end',justifyContent:'center',gap:3},
   reportBar:{width:5,borderRadius:3,backgroundColor:'#6C3DE1'},
+
+  customersGlyph:{width:28,height:25,position:'relative'},
+  customerHeadPrimary:{position:'absolute',top:1,left:4,width:8,height:8,borderRadius:4,borderWidth:2,borderColor:colors.positive},
+  customerHeadSecondary:{position:'absolute',top:3,right:3,width:7,height:7,borderRadius:4,borderWidth:2,borderColor:colors.positive},
+  customerShouldersPrimary:{position:'absolute',left:0,bottom:1,width:16,height:10,borderWidth:2,borderBottomWidth:0,borderColor:colors.positive,borderTopLeftRadius:9,borderTopRightRadius:9},
+  customerShouldersSecondary:{position:'absolute',right:0,bottom:1,width:14,height:9,borderWidth:2,borderBottomWidth:0,borderColor:colors.positive,borderTopLeftRadius:8,borderTopRightRadius:8},
+
+  receiptGlyph:{width:25,height:26,alignItems:'center',justifyContent:'center'},
+  receiptPaper:{width:20,height:23,borderWidth:2,borderColor:colors.negative,borderRadius:4,paddingHorizontal:4,paddingTop:5,gap:3},
+  receiptLine:{height:2,borderRadius:2,backgroundColor:colors.negative,width:'100%'},
+  receiptLineShort:{height:2,borderRadius:2,backgroundColor:colors.negative,width:'65%'},
+  receiptMinus:{position:'absolute',left:5,right:5,bottom:4,height:2,borderRadius:2,backgroundColor:colors.negative},
+
+  supplierGlyph:{width:29,height:24,position:'relative'},
+  supplierBox:{position:'absolute',left:0,top:5,width:17,height:12,borderWidth:2,borderColor:colors.negative,borderRadius:3},
+  supplierCab:{position:'absolute',right:1,top:8,width:10,height:9,borderWidth:2,borderColor:colors.negative,borderRadius:3},
+  supplierWheel:{position:'absolute',bottom:1,width:6,height:6,borderRadius:3,borderWidth:2,borderColor:colors.negative,backgroundColor:'transparent'},
+
+  packageGlyph:{width:26,height:24,alignItems:'center',justifyContent:'center'},
+  packageBody:{width:22,height:19,borderWidth:2,borderColor:colors.primary,borderRadius:4},
+  packageFlap:{position:'absolute',top:3,width:22,height:2,backgroundColor:colors.primary},
+  packageSeam:{position:'absolute',top:3,width:2,height:8,backgroundColor:colors.primary},
+
+  saleGlyph:{width:26,height:27,alignItems:'center',justifyContent:'center'},
+  salePaper:{width:20,height:23,borderWidth:2,borderColor:colors.primary,borderRadius:4},
+  salePlusHorizontal:{position:'absolute',width:10,height:2,borderRadius:2,backgroundColor:colors.primary},
+  salePlusVertical:{position:'absolute',width:2,height:10,borderRadius:2,backgroundColor:colors.primary},
+
+  purchaseGlyphRefined:{width:27,height:27,alignItems:'center',justifyContent:'center'},
+  purchaseStem:{position:'absolute',top:2,width:2,height:14,borderRadius:2,backgroundColor:colors.positive},
+  purchaseHead:{position:'absolute',top:9,width:9,height:9,borderRightWidth:2,borderBottomWidth:2,borderColor:colors.positive,transform:[{rotate:'45deg'}]},
+  purchaseTray:{position:'absolute',bottom:2,width:22,height:7,borderWidth:2,borderTopWidth:0,borderColor:colors.positive,borderBottomLeftRadius:4,borderBottomRightRadius:4},
+
+  stockGlyphRefined:{width:26,height:24,alignItems:'center',justifyContent:'center'},
+  stockBox:{width:22,height:19,borderWidth:2,borderColor:'#EA920E',borderRadius:4},
+  stockFlap:{position:'absolute',top:3,width:22,height:2,backgroundColor:'#EA920E'},
+  stockSeam:{position:'absolute',top:3,width:2,height:8,backgroundColor:'#EA920E'},
+
+  reportGlyphRefined:{width:27,height:24,flexDirection:'row',alignItems:'flex-end',justifyContent:'center',gap:3},
+  reportOutlineBar:{width:5,borderWidth:2,borderColor:'#6C3DE1',borderRadius:3},
 });
