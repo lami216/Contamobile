@@ -21,7 +21,7 @@ function format(template:string,values:Record<string,string|number>){
 }
 
 export function PurchaseScreen(){
-  const db=useSQLiteContext(),{t,isRTL,number,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,isRTL,errorMessage}=useI18n(),auth=useAuth();
   const allowed=auth.has('purchases.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
