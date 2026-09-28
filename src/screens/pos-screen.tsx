@@ -19,7 +19,7 @@ import { getDocumentById } from '@/db/document-queries';
 import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postSale } from '@/services/accounting-service';
 import { PartyPicker } from '@/components/pickers';
-import { AppText, Button, EmptyState, Field, Money, Screen } from '@/components/ui';
+import { AppText, Button, EmptyState, Field, Money, PageHeader, Screen } from '@/components/ui';
 import { QuantityStepper, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -277,7 +277,7 @@ function InvoiceStage({
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PosHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack}/>
+    <PageHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack}/>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
       <View style={[styles.compactControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <PricingSwitch value={pricingMode} onChange={changeMode}/>
@@ -314,7 +314,7 @@ function PaymentStage({
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PosHeader title={t('posCheckoutTitle')} onBack={onBack}/>
+    <PageHeader title={t('posCheckoutTitle')} onBack={onBack}/>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
       <View style={styles.paymentSection}>
         <AppText variant="heading">{t('customer')}</AppText>
@@ -385,19 +385,6 @@ function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onN
       <SuccessAction label={t('posNewSaleAction')} primary onPress={onNewSale}/>
     </View>
   </ScrollView>;
-}
-
-function PosHeader({title,subtitle,onBack}:{title:string;subtitle?:string;onBack:()=>void}){
-  const {isRTL}=useI18n();
-  return <View style={[styles.header,{flexDirection:isRTL?'row-reverse':'row'}]}>
-    <HeaderIconButton accessibilityLabel="back" onPress={onBack}><AppText variant="heading" style={styles.backArrow}>{isRTL?'›':'‹'}</AppText></HeaderIconButton>
-    <View style={styles.headerTitle}><AppText variant="heading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</View>
-    <View style={styles.headerSpacer}/>
-  </View>;
-}
-
-function HeaderIconButton({accessibilityLabel,onPress,children}:{accessibilityLabel:string;onPress:()=>void;children:ReactNode}){
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({pressed})=>[styles.headerButton,pressed&&styles.iconPressed]}>{children}</Pressable>;
 }
 
 function PricingSwitch({value,onChange}:{value:PricingMode;onChange:(value:PricingMode)=>void}){
@@ -494,12 +481,6 @@ const styles=StyleSheet.create({
   stage:{flex:1},
   stageScroll:{padding:spacing.md,gap:spacing.sm,paddingBottom:spacing.lg},
   stageScrollWithBar:{paddingBottom:116},
-  header:{minHeight:62,alignItems:'center',borderBottomWidth:1,borderBottomColor:colors.border,backgroundColor:colors.surface,paddingHorizontal:spacing.sm,gap:spacing.sm},
-  headerButton:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
-  iconPressed:{backgroundColor:colors.surfaceMuted},
-  headerTitle:{flex:1,alignItems:'center',gap:2},
-  headerSpacer:{width:touch.min,height:touch.min},
-  backArrow:{color:colors.text,lineHeight:24,fontSize:27},
   compactControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
   pricingSwitch:{flexDirection:'row',padding:3,borderRadius:radius.md,backgroundColor:colors.surfaceStrong,borderWidth:1,borderColor:colors.border},
   pricingOption:{minHeight:38,minWidth:68,paddingHorizontal:spacing.sm,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
