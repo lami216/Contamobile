@@ -6,6 +6,10 @@ on:
     branches: [main, mobile-v1]
 permissions:
   contents: read
+
+concurrency:
+  group: mobile-quality-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     runs-on: ubuntu-latest
