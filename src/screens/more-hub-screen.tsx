@@ -9,7 +9,7 @@ type MoreItem={title:string;description:string;icon:'accounts'|'reports'|'settin
 
 export function MoreHubScreen(){
   const {t,isRTL}=useI18n(),auth=useAuth();
-  const items:MoreItem[]=[
+  const items=[
     auth.has('banks.view')?{title:t('accounts'),description:t('moreAccountsHint'),icon:'accounts',onPress:()=>router.push('/more/accounts'),primary:true}:null,
     auth.has('reports.view')?{title:t('reports'),description:t('moreReportsHint'),icon:'reports',onPress:()=>router.push('/more/reports')}:null,
     auth.has('settings.view')?{title:t('settings'),description:t('moreSettingsHint'),icon:'settings',onPress:()=>router.push('/more/settings')}:null,
