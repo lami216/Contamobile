@@ -185,7 +185,7 @@ export function PurchaseScreen(){
       <View style={styles.paymentBlock}><AppText variant="caption" muted>{t('paymentMethod')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(account=><Chip key={account.id} label={account.name} active={paymentMethod===account.id||paymentMethod===account.code} onPress={()=>{setPaymentMethod(account.id);setTender(String(total))}}/>)}<Chip label={t('onCredit')} active={paymentMethod==='note'} onPress={()=>{setPaymentMethod('note');setTender('0')}}/></View></View>
       {paymentMethod!=='note'?<Field label={t('purchasePaidAmount')} value={tender} onChangeText={setTender} keyboardType="number-pad" selectTextOnFocus/>:null}
       <View style={[styles.summary,{flexDirection:isRTL?'row-reverse':'row'}]}><View><AppText variant="caption" muted>{t('paid')}</AppText><Money value={paid} tone="positive"/></View><View><AppText variant="caption" muted>{t('due')}</AppText><Money value={due} tone={due>0?'negative':'normal'}/></View></View>
-      <SelectRow label={t('supplier')} value={supplier?.name??(needsSupplier?t('posChooseCustomer'):t('purchaseDirect'))} hint={needsSupplier&&!supplier?t('purchaseSupplierRequired'):undefined} onPress={()=>setSupplierPicker(true)}/>
+      <SelectRow label={t('supplier')} value={supplier?.name??(needsSupplier?t('supplier'):t('purchaseDirect'))} hint={needsSupplier&&!supplier?t('purchaseSupplierRequired'):undefined} onPress={()=>setSupplierPicker(true)}/>
       {underpaid?<View style={styles.warningCard}><AppText variant="caption" style={styles.warningText}>{t('purchasePartialPayment')}</AppText></View>:needsSupplier&&!supplier?<View style={styles.warningCard}><AppText variant="caption" style={styles.warningText}>{t('purchaseSupplierRequired')}</AppText></View>:null}
     </Sheet>
 
@@ -204,9 +204,9 @@ export function PurchaseScreen(){
 }
 
 function PurchaseProductRow({product,last,onAdd}:{product:Product;last:boolean;onAdd:()=>void}){
-  const {money}=useI18n();
+  const {money,isRTL}=useI18n();
   const meta=[product.categoryName,product.sku?'#'+product.sku:null,product.barcode].filter(Boolean).join(' • ');
-  return <View style={[styles.productRow,last&&styles.lastRow]}>
+  return <View style={[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},last&&styles.lastRow]}>
     <View style={styles.productCopy}><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText>{meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}</View>
     <View style={styles.productEnd}><AppText variant="subheading">{money(Number(product.lastPurchaseCost??product.pieceCost??0))}</AppText><Pressable accessibilityRole="button" onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.pressed]}><AppText variant="heading" style={styles.plusText}>+</AppText></Pressable></View>
   </View>;
