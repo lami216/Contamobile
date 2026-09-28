@@ -25,8 +25,8 @@ import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, elevation, radius, spacing, touch } from '@/theme';
 
-type CartLine={product:Product;quantity:number;unitPrice:number;stock:number};
-type PosStage='products'|'cart'|'payment'|'success';
+type InvoiceLine={product:Product;quantity:number;unitPrice:number;stock:number;priceOverridden:boolean};
+type PosStage='invoice'|'payment'|'success';
 type SuccessState={
   documentId:string;
   document:DocumentRecord|null;
@@ -41,15 +41,16 @@ function format(template:string,values:Record<string,string|number>){
 }
 
 export function PosScreen(){
-  const db=useSQLiteContext(),{t,number,money,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,number,money,errorMessage,isRTL}=useI18n(),auth=useAuth();
   const allowed=auth.has('pos.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
   const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[pricingMode,setPricingMode]=useState<PricingMode>('retail');
-  const [lines,setLines]=useState<CartLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
-  const [stage,setStage]=useState<PosStage>('products');
+  const [lines,setLines]=useState<InvoiceLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
+  const [stage,setStage]=useState<PosStage>('invoice'),[productPicker,setProductPicker]=useState(false);
   const [paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
   const [quantityLineId,setQuantityLineId]=useState<string|null>(null),[quantityDraft,setQuantityDraft]=useState('1');
+  const [priceLineId,setPriceLineId]=useState<string|null>(null),[priceDraft,setPriceDraft]=useState('');
   const [success,setSuccess]=useState<SuccessState|null>(null);
 
   const loadBase=useCallback(async()=>{
@@ -81,9 +82,9 @@ export function PosScreen(){
   },[allowed,categoryId,db,errorMessage,search,t,warehouseId]);
 
   const total=useMemo(()=>lines.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice),0),[lines]);
-  const itemCount=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
   const selectedParty=parties.find(p=>p.id===partyId)??null;
   const selectedWarehouse=warehouses.find(w=>w.id===warehouseId)??null;
+  const priceLine=lines.find(line=>line.product.id===priceLineId)??null;
   const tenderValue=paymentMethod==='note'?0:Number(tender.trim()===''?total:tender);
   const normalizedTender=Number.isFinite(tenderValue)&&tenderValue>=0?tenderValue:0;
   const underpaid=paymentMethod!=='note'&&normalizedTender<total;
@@ -98,9 +99,8 @@ export function PosScreen(){
     setLines(current=>{
       const existing=current.find(line=>line.product.id===product.id);
       if(existing)return current.map(line=>line.product.id===product.id?{...line,quantity:Math.min(line.quantity+1,stock)}:line);
-      return [{product,quantity:Math.min(1,stock),unitPrice:sellingPrice(product,pricingMode),stock},...current];
+      return [{product,quantity:Math.min(1,stock),unitPrice:sellingPrice(product,pricingMode),stock,priceOverridden:false},...current];
     });
-    setSearch('');
   };
 
   const changeQuantity=(productId:string,next:number)=>setLines(current=>{
@@ -110,7 +110,7 @@ export function PosScreen(){
     return current.map(x=>x.product.id===productId?{...x,quantity:Math.min(next,x.stock)}:x);
   });
 
-  const openQuantity=(line:CartLine)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
+  const openQuantity=(line:InvoiceLine)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
   const saveQuantity=()=>{
     if(!quantityLineId)return;
     const value=Number(quantityDraft);
@@ -118,9 +118,19 @@ export function PosScreen(){
     setQuantityLineId(null);
   };
 
+  const openPrice=(line:InvoiceLine)=>{setPriceLineId(line.product.id);setPriceDraft(String(line.unitPrice))};
+  const closePrice=()=>{setPriceLineId(null);setPriceDraft('')};
+  const savePrice=()=>{
+    if(!priceLineId||!priceLine)return;
+    const value=Number(priceDraft);
+    if(!Number.isSafeInteger(value)||value<=0){Alert.alert(t('error'),format(t('posInvalidSalePrice'),{product:priceLine.product.name}));return}
+    setLines(current=>current.map(line=>line.product.id===priceLineId?{...line,unitPrice:value,priceOverridden:true}:line));
+    closePrice();
+  };
+
   const changeMode=(mode:PricingMode)=>{
     setPricingMode(mode);
-    setLines(current=>current.map(line=>({...line,unitPrice:sellingPrice(line.product,mode)})));
+    setLines(current=>current.map(line=>line.priceOverridden?line:{...line,unitPrice:sellingPrice(line.product,mode)}));
   };
 
   const validationMessage=(code:string,productName='')=>{
@@ -167,23 +177,17 @@ export function PosScreen(){
       let document:DocumentRecord|null=null;
       try{document=await getDocumentById(db,documentId)}catch{}
       const lowStock=completedLines.map(line=>({name:line.product.name,remaining:Math.max(0,line.stock-line.quantity)})).filter(item=>item.remaining<=3);
-      setLines([]);setPartyId(null);setTender('');setSearch('');
+      setLines([]);setPartyId(null);setTender('');setSearch('');setProductPicker(false);closePrice();setQuantityLineId(null);
       setSuccess({documentId,document,total:completedTotal,change:completedChange,occurredAt:document?.occurredAt??completedAt,warnings:lowStock});
       setStage('success');
       const fresh=await listProducts(db,'',warehouseId,false,18,0,categoryId);setResults(fresh);
     }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
   };
 
-  const clearCart=()=>Alert.alert(t('posClearCartTitle'),t('posClearCartDescription'),[
-    {text:t('cancel'),style:'cancel'},
-    {text:t('confirm'),style:'destructive',onPress:()=>setLines([])},
-  ]);
-
-  const startNewSale=()=>{setSuccess(null);setPartyId(null);setTender('');setSearch('');setStage('products')};
+  const startNewSale=()=>{setSuccess(null);setPartyId(null);setTender('');setSearch('');setProductPicker(false);closePrice();setQuantityLineId(null);setStage('invoice')};
   const back=()=>{
-    if(stage==='products'){router.back();return}
-    if(stage==='cart'){setStage('products');return}
-    if(stage==='payment'){setStage('cart');return}
+    if(stage==='invoice'){router.back();return}
+    if(stage==='payment'){setStage('invoice');return}
     startNewSale();
   };
 
@@ -200,15 +204,8 @@ export function PosScreen(){
 
   return <Screen padded={false}>
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS==='ios'?'padding':undefined}>
-      {stage==='products'?<ProductsStage
+      {stage==='invoice'?<InvoiceStage
         onBack={back}
-        results={results}
-        searching={searching}
-        search={search}
-        setSearch={setSearch}
-        categories={categories}
-        categoryId={categoryId}
-        setCategoryId={setCategoryId}
         pricingMode={pricingMode}
         changeMode={changeMode}
         warehouses={warehouses}
@@ -216,17 +213,10 @@ export function PosScreen(){
         selectedWarehouse={selectedWarehouse}
         lines={lines}
         setWarehouseId={setWarehouseId}
-        addProduct={addProduct}
-      />:null}
-
-      {stage==='cart'?<CartStage
-        lines={lines}
-        total={total}
-        onBack={back}
-        onClear={clearCart}
+        onAddProduct={()=>setProductPicker(true)}
         onChangeQuantity={changeQuantity}
         onEditQuantity={openQuantity}
-        onBrowse={()=>setStage('products')}
+        onEditPrice={openPrice}
       />:null}
 
       {stage==='payment'?<PaymentStage
@@ -246,29 +236,49 @@ export function PosScreen(){
         onBack={back}
       />:null}
 
-      {stage==='products'&&lines.length?<PosBottomBar kind="cart" label={t('posViewCart')} total={total} count={itemCount} onPress={()=>setStage('cart')}/>:null}
-      {stage==='cart'?<PosBottomBar kind="next" label={t('posContinuePayment')} total={total} disabled={!lines.length} onPress={openPayment}/>:null}
-      {stage==='payment'?<PosBottomBar kind="next" label={t('completeSale')} total={total} disabled={underpaid||(needsParty&&!selectedParty)||!lines.length} loading={busy} onPress={()=>void completeSale()}/>:null}
+      {stage==='invoice'?<InvoiceBottomBar label={t('posContinuePayment')} total={total} count={lines.length} disabled={!lines.length} onPress={openPayment}/>:null}
+      {stage==='payment'?<PaymentBottomBar label={t('completeSale')} disabled={underpaid||(needsParty&&!selectedParty)||!lines.length} loading={busy} onPress={()=>void completeSale()}/>:null}
     </KeyboardAvoidingView>
+
+    <Sheet visible={productPicker} title={t('posProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/> }>
+      <View style={styles.pickerControls}>
+        <SearchBar value={search} onChangeText={setSearch} loading={searching} placeholder={t('posSearchPlaceholder')}/>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <FilterChip label={t('posAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
+          {categories.map(category=><FilterChip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
+        </ScrollView>
+      </View>
+      <View style={styles.productPanel}>
+        {results.length?results.map((product,index)=><ProductSaleRow key={product.id} product={product} warehouseId={warehouseId} pricingMode={pricingMode} onAdd={()=>addProduct(product)} last={index===results.length-1}/>):<EmptyState title={searching?t('loading'):t('noResults')}/>} 
+      </View>
+    </Sheet>
 
     <PartyPicker visible={partyPicker} parties={parties} directLabel={t('posCashCustomer')} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??null)}/>
 
     <Sheet visible={Boolean(quantityLineId)} title={t('posEditQuantity')} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}>
       <Field label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
     </Sheet>
+
+    <Sheet visible={Boolean(priceLineId)} title={t('posEditSalePrice')} onClose={closePrice} footer={<View style={[styles.sheetActions,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.sheetAction}><Button title={t('cancel')} variant="secondary" onPress={closePrice}/></View><View style={styles.sheetAction}><Button title={t('save')} onPress={savePrice}/></View></View>}>
+      {priceLine?<View style={styles.priceEditor}>
+        <AppText variant="subheading">{priceLine.product.name}</AppText>
+        <View style={[styles.currentPrice,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{t('posCurrentPrice')}</AppText><Money value={priceLine.unitPrice}/></View>
+        <Field label={t('salePrice')} value={priceDraft} onChangeText={setPriceDraft} keyboardType="number-pad" autoFocus selectTextOnFocus/>
+      </View>:null}
+    </Sheet>
   </Screen>;
 }
 
-function ProductsStage({
-  onBack,results,searching,search,setSearch,categories,categoryId,setCategoryId,pricingMode,changeMode,warehouses,warehouseId,selectedWarehouse,lines,setWarehouseId,addProduct,
+function InvoiceStage({
+  onBack,pricingMode,changeMode,warehouses,warehouseId,selectedWarehouse,lines,setWarehouseId,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
 }:{
-  onBack:()=>void;results:Product[];searching:boolean;search:string;setSearch:(value:string)=>void;categories:ProductCategory[];categoryId:string;setCategoryId:(value:string)=>void;
-  pricingMode:PricingMode;changeMode:(mode:PricingMode)=>void;warehouses:Warehouse[];warehouseId:string;selectedWarehouse:Warehouse|null;lines:CartLine[];setWarehouseId:(id:string)=>void;addProduct:(product:Product)=>void;
+  onBack:()=>void;pricingMode:PricingMode;changeMode:(mode:PricingMode)=>void;warehouses:Warehouse[];warehouseId:string;selectedWarehouse:Warehouse|null;lines:InvoiceLine[];setWarehouseId:(id:string)=>void;
+  onAddProduct:()=>void;onChangeQuantity:(id:string,value:number)=>void;onEditQuantity:(line:InvoiceLine)=>void;onEditPrice:(line:InvoiceLine)=>void;
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PosHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack} trailing={lines.length?<CartIndicator count={lines.reduce((sum,line)=>sum+line.quantity,0)}/>:undefined}/>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,lines.length>0&&styles.stageScrollWithBar]}>
+    <PosHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack}/>
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
       <View style={[styles.compactControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <PricingSwitch value={pricingMode} onChange={changeMode}/>
         {warehouses.length>1?<View style={styles.warehouseLabel}><AppText variant="caption" muted numberOfLines={1}>{selectedWarehouse?.name??t('warehouse')}</AppText></View>:null}
@@ -278,29 +288,20 @@ function ProductsStage({
         {warehouses.map(warehouse=><FilterChip key={warehouse.id} label={warehouse.name} active={warehouse.id===warehouseId} disabled={lines.length>0&&warehouse.id!==warehouseId} onPress={()=>setWarehouseId(warehouse.id)}/>)}
       </ScrollView>:null}
 
-      <SearchBar value={search} onChangeText={setSearch} loading={searching} placeholder={t('posSearchPlaceholder')}/>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <FilterChip label={t('posAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
-        {categories.map(category=><FilterChip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
-      </ScrollView>
-
-      <View style={styles.productPanel}>
-        {results.length?results.map((product,index)=><ProductSaleRow key={product.id} product={product} warehouseId={warehouseId} pricingMode={pricingMode} onAdd={()=>addProduct(product)} last={index===results.length-1}/>):<EmptyState title={searching?t('loading'):t('noResults')}/>}
+      <View style={[styles.sectionHeader,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <AppText variant="heading">{t('posInvoiceLines')}</AppText>
+        <Pressable accessibilityRole="button" onPress={onAddProduct} style={({pressed})=>[styles.addProductButton,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.controlPressed]}>
+          <AppText variant="heading" style={styles.addProductPlus}>+</AppText><AppText variant="caption" style={styles.addProductText}>{t('posAddProduct')}</AppText>
+        </Pressable>
       </View>
-    </ScrollView>
-  </View>;
-}
 
-function CartStage({lines,total,onBack,onClear,onChangeQuantity,onEditQuantity,onBrowse}:{lines:CartLine[];total:number;onBack:()=>void;onClear:()=>void;onChangeQuantity:(id:string,value:number)=>void;onEditQuantity:(line:CartLine)=>void;onBrowse:()=>void}){
-  const {t}=useI18n();
-  return <View style={styles.stage}>
-    <PosHeader title={t('posCartTitle')} onBack={onBack} trailing={lines.length?<HeaderIconButton accessibilityLabel={t('delete')} onPress={onClear}><TrashGlyph/></HeaderIconButton>:undefined}/>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      {lines.length?<View style={styles.cartPanel}>
-        {lines.map((line,index)=><CartLineRow key={line.product.id} line={line} last={index===lines.length-1} onDecrease={()=>onChangeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>onChangeQuantity(line.product.id,line.quantity+1)} onEdit={()=>onEditQuantity(line)} onRemove={()=>onChangeQuantity(line.product.id,0)}/>)}
-      </View>:<View style={styles.emptyCart}><EmptyState title={t('posCartEmptyTitle')} description={t('posCartEmptyDescription')} action={<Button title={t('products')} variant="secondary" onPress={onBrowse}/>}/></View>}
-      <View style={styles.cartSummary}><AppText variant="subheading">{t('total')}</AppText><Money value={total} large/></View>
+      {lines.length?<View style={styles.invoicePanel}>
+        {lines.map((line,index)=><InvoiceLineRow key={line.product.id} line={line} last={index===lines.length-1} onDecrease={()=>onChangeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>onChangeQuantity(line.product.id,line.quantity+1)} onEditQuantity={()=>onEditQuantity(line)} onEditPrice={()=>onEditPrice(line)} onRemove={()=>onChangeQuantity(line.product.id,0)}/>)}
+      </View>:<View style={styles.emptyInvoice}>
+        <AppText variant="subheading">{t('posNoLinesTitle')}</AppText>
+        <AppText variant="caption" muted>{t('posNoLinesDescription')}</AppText>
+        <Button title={'+ '+t('posAddProduct')} variant="secondary" compact onPress={onAddProduct}/>
+      </View>}
     </ScrollView>
   </View>;
 }
@@ -386,22 +387,17 @@ function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onN
   </ScrollView>;
 }
 
-function PosHeader({title,subtitle,onBack,trailing}:{title:string;subtitle?:string;onBack:()=>void;trailing?:ReactNode}){
+function PosHeader({title,subtitle,onBack}:{title:string;subtitle?:string;onBack:()=>void}){
   const {isRTL}=useI18n();
   return <View style={[styles.header,{flexDirection:isRTL?'row-reverse':'row'}]}>
     <HeaderIconButton accessibilityLabel="back" onPress={onBack}><AppText variant="heading" style={styles.backArrow}>{isRTL?'›':'‹'}</AppText></HeaderIconButton>
     <View style={styles.headerTitle}><AppText variant="heading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</View>
-    <View style={styles.headerTrailing}>{trailing??<View style={styles.headerSpacer}/>}</View>
+    <View style={styles.headerSpacer}/>
   </View>;
 }
 
 function HeaderIconButton({accessibilityLabel,onPress,children}:{accessibilityLabel:string;onPress:()=>void;children:ReactNode}){
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({pressed})=>[styles.headerButton,pressed&&styles.iconPressed]}>{children}</Pressable>;
-}
-
-function CartIndicator({count}:{count:number}){
-  const {number}=useI18n();
-  return <View style={styles.cartIndicator}><CartGlyph/><View style={styles.cartBadge}><AppText variant="caption" style={styles.cartBadgeText}>{number(count)}</AppText></View></View>;
 }
 
 function PricingSwitch({value,onChange}:{value:PricingMode;onChange:(value:PricingMode)=>void}){
@@ -427,20 +423,29 @@ function SearchBar({value,onChangeText,placeholder,loading}:{value:string;onChan
 function ProductSaleRow({product,warehouseId,pricingMode,onAdd,last}:{product:Product;warehouseId:string;pricingMode:PricingMode;onAdd:()=>void;last:boolean}){
   const {t,isRTL,money,number}=useI18n();
   const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode),disabled=stock<=0;
-  const icon=<View style={styles.productIcon}><ProductGlyph/></View>;
-  const body=<View style={styles.productBody}><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><AppText variant="caption" style={styles.productMoney}>{money(price)}</AppText><AppText variant="caption" muted numberOfLines={1}>{disabled?t('posOutOfStock'):format(t('posAvailable'),{count:number(stock)})}{product.categoryName?' • '+product.categoryName:''}</AppText></View>;
-  const action=<Pressable accessibilityRole="button" accessibilityLabel={t('add')} disabled={disabled} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.addPressed,disabled&&styles.disabled]}><AppText variant="heading" style={styles.addPlus}>+</AppText></Pressable>;
-  return <View style={[styles.productRow,last&&styles.lastRow,disabled&&styles.disabledRow,{flexDirection:isRTL?'row-reverse':'row'}]}>{isRTL?<>{action}{body}{icon}</>:<>{icon}{body}{action}</>}</View>;
+  const meta=[product.categoryName,product.sku?'#'+product.sku:null].filter(Boolean).join(' • ');
+  const body=<View style={styles.productBody}><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText>{meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}<AppText variant="caption" muted numberOfLines={1}>{disabled?t('posOutOfStock'):format(t('posAvailable'),{count:number(stock)})}</AppText></View>;
+  const side=<View style={styles.productSide}><AppText variant="subheading" style={styles.productMoney}>{money(price)}</AppText><Pressable accessibilityRole="button" accessibilityLabel={t('add')} disabled={disabled} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.addPressed,disabled&&styles.disabled]}><AppText variant="heading" style={styles.addPlus}>+</AppText></Pressable></View>;
+  return <View style={[styles.productRow,last&&styles.lastRow,disabled&&styles.disabledRow,{flexDirection:isRTL?'row-reverse':'row'}]}>{body}{side}</View>;
 }
 
-function CartLineRow({line,last,onDecrease,onIncrease,onEdit,onRemove}:{line:CartLine;last:boolean;onDecrease:()=>void;onIncrease:()=>void;onEdit:()=>void;onRemove:()=>void}){
+function InvoiceLineRow({line,last,onDecrease,onIncrease,onEditQuantity,onEditPrice,onRemove}:{line:InvoiceLine;last:boolean;onDecrease:()=>void;onIncrease:()=>void;onEditQuantity:()=>void;onEditPrice:()=>void;onRemove:()=>void}){
   const {t,isRTL,money,number}=useI18n();
-  const icon=<View style={styles.cartProductIcon}><ProductGlyph/></View>;
-  const body=<View style={styles.cartLineBody}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted>{money(line.unitPrice)} • {format(t('posAvailable'),{count:number(line.stock)})}</AppText></View>;
-  const remove=<Pressable accessibilityRole="button" accessibilityLabel={t('delete')} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>;
-  return <View style={[styles.cartLine,last&&styles.lastRow]}>
-    <View style={[styles.cartLineTop,{flexDirection:isRTL?'row-reverse':'row'}]}>{isRTL?<>{remove}{body}{icon}</>:<>{icon}{body}{remove}</>}</View>
-    <View style={[styles.cartLineBottom,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEdit}/><View style={styles.lineTotal}><AppText variant="caption" muted>{t('total')}</AppText><AppText variant="subheading">{money(Math.round(line.quantity*line.unitPrice))}</AppText></View></View>
+  const meta=[format(t('posAvailable'),{count:number(line.stock)}),line.product.categoryName,line.product.sku?'#'+line.product.sku:null].filter(Boolean).join(' • ');
+  return <View style={[styles.invoiceLine,last&&styles.lastRow]}>
+    <View style={[styles.invoiceLineTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      <View style={styles.invoiceLineBody}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted numberOfLines={1}>{meta}</AppText></View>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('delete')} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>
+    </View>
+    <View style={[styles.invoiceLineControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      <QuantityStepper value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEditQuantity}/>
+      <Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.priceCell,pressed&&styles.rowPressed]}>
+        <AppText variant="caption" muted>{t('salePrice')}</AppText>
+        <AppText variant="subheading" style={styles.priceValue}>{money(line.unitPrice)}</AppText>
+        {line.priceOverridden?<AppText variant="caption" style={styles.customPrice}>{t('posCustomPrice')}</AppText>:null}
+      </Pressable>
+      <View style={styles.lineTotal}><AppText variant="caption" muted>{t('total')}</AppText><AppText variant="subheading">{money(Math.round(line.quantity*line.unitPrice))}</AppText></View>
+    </View>
   </View>;
 }
 
@@ -453,14 +458,21 @@ function SummaryRow({label,value,tone='normal',large=false}:{label:string;value:
   return <View style={[styles.summaryRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant={large?'subheading':'caption'} muted={!large}>{label}</AppText><Money value={value} tone={tone} large={large}/></View>;
 }
 
-function PosBottomBar({kind,label,total,count,onPress,disabled=false,loading=false}:{kind:'cart'|'next';label:string;total:number;count?:number;onPress:()=>void;disabled?:boolean;loading?:boolean}){
-  const insets=useSafeAreaInsets(),{isRTL,money,number}=useI18n();
+function InvoiceBottomBar({label,total,count,onPress,disabled=false}:{label:string;total:number;count:number;onPress:()=>void;disabled?:boolean}){
+  const insets=useSafeAreaInsets(),{t,isRTL,money}=useI18n();
+  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}>
+    <View style={[styles.invoiceBottomRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      <View style={styles.invoiceBottomSummary}><AppText variant="caption" muted>{format(t('posProductsCount'),{count})}</AppText><AppText variant="subheading" style={styles.invoiceBottomTotal}>{money(total)}</AppText></View>
+      <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.invoiceNext,pressed&&styles.bottomPrimaryPressed,disabled&&styles.disabled]}><AppText variant="subheading" style={styles.bottomText}>{label}</AppText><AppText variant="heading" style={styles.bottomArrow}>{isRTL?'←':'→'}</AppText></Pressable>
+    </View>
+  </View>;
+}
+
+function PaymentBottomBar({label,onPress,disabled=false,loading=false}:{label:string;onPress:()=>void;disabled?:boolean;loading?:boolean}){
+  const insets=useSafeAreaInsets(),{isRTL}=useI18n();
   return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}>
     <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.bottomPrimary,pressed&&styles.bottomPrimaryPressed,(disabled||loading)&&styles.disabled]}>
-      {loading?<ActivityIndicator color={colors.onPrimary}/>:kind==='cart'?<View style={[styles.bottomCartContent,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <View style={[styles.bottomCartLabel,{flexDirection:isRTL?'row-reverse':'row'}]}><CartGlyph light/><AppText variant="subheading" style={styles.bottomText}>{label}{typeof count==='number'?' ('+number(count)+')':''}</AppText></View>
-        <AppText variant="subheading" style={styles.bottomText}>{money(total)}</AppText>
-      </View>:<View style={[styles.bottomNextContent,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" style={styles.bottomText}>{label}</AppText><AppText variant="heading" style={styles.bottomArrow}>{isRTL?'←':'→'}</AppText></View>}
+      {loading?<ActivityIndicator color={colors.onPrimary}/>:<View style={[styles.bottomNextContent,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" style={styles.bottomText}>{label}</AppText><AppText variant="heading" style={styles.bottomArrow}>{isRTL?'←':'→'}</AppText></View>}
     </Pressable>
   </View>;
 }
@@ -470,30 +482,24 @@ function SuccessAction({label,primary,onPress}:{label:string;primary:boolean;onP
 }
 
 function SearchGlyph(){return <View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View>}
-function ProductGlyph(){return <View style={styles.packageGlyph}><View style={styles.packageBox}/><View style={styles.packageTop}/><View style={styles.packageSeam}/></View>}
 function CustomerGlyph(){return <View style={styles.customerGlyph}><View style={styles.customerHead}/><View style={styles.customerBody}/></View>}
 function PaymentGlyph(){return <View style={styles.paymentGlyph}><View style={styles.paymentCard}/><View style={styles.paymentLine}/><View style={styles.paymentDot}/></View>}
 function CreditGlyph(){return <View style={styles.creditGlyph}><View style={styles.creditPage}/><View style={styles.creditLine}/><View style={styles.creditLineShort}/></View>}
 function ReceiptGlyph(){return <View style={styles.receiptGlyph}><View style={styles.receiptPage}/><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/></View>}
 function TrashGlyph(){return <View style={styles.trashGlyph}><View style={styles.trashLid}/><View style={styles.trashCan}/><View style={styles.trashLineOne}/><View style={styles.trashLineTwo}/></View>}
 function CheckGlyph(){return <View style={styles.checkGlyph}><View style={styles.checkShort}/><View style={styles.checkLong}/></View>}
-function CartGlyph({light=false}:{light?:boolean}){return <View style={styles.cartGlyph}><View style={[styles.cartBasket,light&&styles.cartStrokeLight]}/><View style={[styles.cartHandle,light&&styles.cartHandleLight]}/><View style={[styles.cartWheel,styles.cartWheelLeft,light&&styles.cartFillLight]}/><View style={[styles.cartWheel,styles.cartWheelRight,light&&styles.cartFillLight]}/></View>}
 
 const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
   stageScroll:{padding:spacing.md,gap:spacing.sm,paddingBottom:spacing.lg},
-  stageScrollWithBar:{paddingBottom:104},
+  stageScrollWithBar:{paddingBottom:116},
   header:{minHeight:62,alignItems:'center',borderBottomWidth:1,borderBottomColor:colors.border,backgroundColor:colors.surface,paddingHorizontal:spacing.sm,gap:spacing.sm},
   headerButton:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
   iconPressed:{backgroundColor:colors.surfaceMuted},
   headerTitle:{flex:1,alignItems:'center',gap:2},
-  headerTrailing:{width:touch.min,alignItems:'center'},
   headerSpacer:{width:touch.min,height:touch.min},
   backArrow:{color:colors.text,lineHeight:24,fontSize:27},
-  cartIndicator:{width:44,height:44,alignItems:'center',justifyContent:'center'},
-  cartBadge:{position:'absolute',top:2,right:0,minWidth:18,height:18,borderRadius:9,paddingHorizontal:4,backgroundColor:colors.negative,alignItems:'center',justifyContent:'center'},
-  cartBadgeText:{fontSize:10,color:colors.onPrimary,fontWeight:'800'},
   compactControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
   pricingSwitch:{flexDirection:'row',padding:3,borderRadius:radius.md,backgroundColor:colors.surfaceStrong,borderWidth:1,borderColor:colors.border},
   pricingOption:{minHeight:38,minWidth:68,paddingHorizontal:spacing.sm,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
@@ -508,34 +514,40 @@ const styles=StyleSheet.create({
   filterChipTextActive:{color:colors.onPrimary},
   controlPressed:{opacity:.7,transform:[{scale:.99}]},
   disabled:{opacity:.42},
+  sectionHeader:{minHeight:touch.min,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,marginTop:spacing.xs},
+  addProductButton:{minHeight:40,alignItems:'center',gap:6,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.primarySoft,borderWidth:1,borderColor:colors.primarySoft},
+  addProductPlus:{color:colors.primary,fontSize:22,lineHeight:24},
+  addProductText:{color:colors.primary,fontWeight:'800'},
+  invoicePanel:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,...elevation.subtle},
+  invoiceLine:{padding:spacing.sm,gap:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  invoiceLineTop:{alignItems:'center',gap:spacing.sm},
+  invoiceLineBody:{flex:1,minWidth:0,gap:4},
+  invoiceLineControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.xs},
+  priceCell:{minWidth:80,alignItems:'center',justifyContent:'center',gap:1,paddingHorizontal:spacing.xs,paddingVertical:4,borderRadius:radius.sm,backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft},
+  priceValue:{fontSize:14},
+  customPrice:{color:colors.primary,fontWeight:'700',fontSize:10},
+  lineTotal:{minWidth:76,alignItems:'flex-end',gap:2},
+  deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
+  deletePressed:{backgroundColor:colors.negativeSoft},
+  emptyInvoice:{alignItems:'center',gap:spacing.xs,paddingVertical:spacing.lg,paddingHorizontal:spacing.md,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
+  pickerControls:{gap:spacing.sm},
   searchBar:{minHeight:52,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
   searchInput:{flex:1,minWidth:0,fontSize:15,color:colors.text,fontWeight:'500',paddingVertical:0},
   searchGlyph:{width:21,height:21,position:'relative'},
   searchCircle:{position:'absolute',left:2,top:2,width:13,height:13,borderRadius:7,borderWidth:2,borderColor:colors.textSoft},
   searchHandle:{position:'absolute',right:2,bottom:3,width:8,height:2,borderRadius:2,backgroundColor:colors.textSoft,transform:[{rotate:'45deg'}]},
   productPanel:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,...elevation.subtle},
-  productRow:{minHeight:86,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:10,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  productIcon:{width:46,height:58,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft,flexShrink:0},
-  productBody:{flex:1,minWidth:0,gap:4},
-  productMoney:{fontWeight:'800',color:colors.text},
-  addButton:{width:touch.min,height:touch.min,borderRadius:14,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0},
+  productRow:{minHeight:70,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  productBody:{flex:1,minWidth:0,gap:2},
+  productSide:{minWidth:92,alignItems:'flex-end',justifyContent:'center',gap:4},
+  productMoney:{fontWeight:'800',color:colors.text,fontSize:14},
+  addButton:{width:36,height:32,borderRadius:10,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0},
   addPressed:{backgroundColor:'#D9E9FF',transform:[{scale:.97}]},
-  addPlus:{color:colors.primary,fontSize:25,lineHeight:27},
+  addPlus:{color:colors.primary,fontSize:22,lineHeight:24},
   disabledRow:{backgroundColor:colors.surfaceMuted},
   lastRow:{borderBottomWidth:0},
-  rowPressed:{backgroundColor:colors.surfaceMuted},
+  rowPressed:{backgroundColor:colors.surfaceMuted,borderRadius:radius.sm},
   flex:{flex:1,minWidth:0},
-  cartPanel:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,...elevation.subtle},
-  cartLine:{padding:spacing.sm,gap:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  cartLineTop:{alignItems:'center',gap:spacing.sm},
-  cartProductIcon:{width:48,height:54,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft,flexShrink:0},
-  cartLineBody:{flex:1,minWidth:0,gap:4},
-  deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
-  deletePressed:{backgroundColor:colors.negativeSoft},
-  cartLineBottom:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
-  lineTotal:{alignItems:'flex-end',gap:2},
-  emptyCart:{backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border},
-  cartSummary:{minHeight:74,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:spacing.md,padding:spacing.md,borderRadius:radius.lg,backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft},
   paymentSection:{gap:spacing.sm},
   customerCard:{minHeight:74,alignItems:'center',gap:spacing.sm,padding:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
   customerCardRequired:{borderColor:colors.warning,backgroundColor:colors.warningSoft},
@@ -555,13 +567,19 @@ const styles=StyleSheet.create({
   warningCard:{padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.warningSoft,borderWidth:1,borderColor:'#F0D39B'},
   warningText:{color:'#9A620F',fontWeight:'700',lineHeight:18},
   bottomBar:{position:'absolute',left:0,right:0,bottom:0,paddingTop:spacing.sm,paddingHorizontal:spacing.md,backgroundColor:colors.surface,borderTopWidth:1,borderTopColor:colors.border,...elevation.floating},
+  invoiceBottomRow:{alignItems:'center',gap:spacing.md},
+  invoiceBottomSummary:{flex:1,gap:2},
+  invoiceBottomTotal:{fontVariant:['tabular-nums']},
+  invoiceNext:{minHeight:54,minWidth:158,borderRadius:radius.md,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:spacing.sm,backgroundColor:colors.primary,paddingHorizontal:spacing.md},
   bottomPrimary:{minHeight:56,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primary,paddingHorizontal:spacing.md},
   bottomPrimaryPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.995}]},
-  bottomCartContent:{width:'100%',alignItems:'center',justifyContent:'space-between',gap:spacing.md},
-  bottomCartLabel:{alignItems:'center',gap:spacing.sm},
   bottomNextContent:{alignItems:'center',justifyContent:'center',gap:spacing.md},
   bottomText:{color:colors.onPrimary},
   bottomArrow:{color:colors.onPrimary,fontSize:23,lineHeight:24},
+  sheetActions:{gap:spacing.sm},
+  sheetAction:{flex:1},
+  priceEditor:{gap:spacing.md},
+  currentPrice:{alignItems:'center',justifyContent:'space-between',gap:spacing.md,padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surfaceMuted},
   successScreen:{flexGrow:1,padding:spacing.md,paddingTop:spacing.xl,paddingBottom:spacing.xl,gap:spacing.lg,backgroundColor:colors.background},
   successHero:{alignItems:'center',gap:spacing.sm,paddingTop:spacing.md},
   successMark:{width:72,height:72,borderRadius:36,alignItems:'center',justifyContent:'center',backgroundColor:colors.positive},
@@ -582,10 +600,6 @@ const styles=StyleSheet.create({
   successActionSecondary:{backgroundColor:colors.surface,borderColor:colors.primary},
   successActionPrimaryText:{color:colors.onPrimary},
   successActionSecondaryText:{color:colors.primary},
-  packageGlyph:{width:27,height:25,alignItems:'center',justifyContent:'center'},
-  packageBox:{width:22,height:18,borderWidth:2,borderColor:colors.primary,borderRadius:4},
-  packageTop:{position:'absolute',top:4,width:22,height:2,backgroundColor:colors.primary},
-  packageSeam:{position:'absolute',top:4,width:2,height:8,backgroundColor:colors.primary},
   customerGlyph:{width:25,height:24,alignItems:'center',justifyContent:'flex-end'},
   customerHead:{position:'absolute',top:1,width:9,height:9,borderRadius:5,borderWidth:2,borderColor:colors.primary},
   customerBody:{width:20,height:11,borderWidth:2,borderBottomWidth:0,borderColor:colors.primary,borderTopLeftRadius:10,borderTopRightRadius:10},
@@ -609,13 +623,4 @@ const styles=StyleSheet.create({
   checkGlyph:{width:34,height:30,position:'relative',transform:[{rotate:'-8deg'}]},
   checkShort:{position:'absolute',left:3,top:15,width:13,height:5,borderRadius:3,backgroundColor:colors.onPrimary,transform:[{rotate:'45deg'}]},
   checkLong:{position:'absolute',left:11,top:11,width:22,height:5,borderRadius:3,backgroundColor:colors.onPrimary,transform:[{rotate:'-45deg'}]},
-  cartGlyph:{width:25,height:24,position:'relative'},
-  cartBasket:{position:'absolute',left:4,top:6,width:18,height:11,borderWidth:2,borderColor:colors.primary,borderTopWidth:2,borderRadius:3},
-  cartHandle:{position:'absolute',left:1,top:3,width:7,height:2,backgroundColor:colors.primary,transform:[{rotate:'20deg'}]},
-  cartWheel:{position:'absolute',bottom:1,width:5,height:5,borderRadius:3,backgroundColor:colors.primary},
-  cartWheelLeft:{left:7},
-  cartWheelRight:{right:2},
-  cartStrokeLight:{borderColor:colors.onPrimary},
-  cartHandleLight:{backgroundColor:colors.onPrimary},
-  cartFillLight:{backgroundColor:colors.onPrimary},
 });
