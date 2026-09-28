@@ -1,15 +1,19 @@
 name: Mobile quality
+
 on:
   push:
     branches: [mobile-v1, main, ui-redesign-v2]
   pull_request:
     branches: [main, mobile-v1]
+  workflow_dispatch:
+
 permissions:
   contents: read
 
 concurrency:
-  group: mobile-quality-${{ github.ref }}
+  group: mobile-ci-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -17,13 +21,140 @@ jobs:
     env:
       CI: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - name: Export Android bundle
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Export Android JavaScript bundle
         run: npx expo export --platform android --output-dir dist-check
+
+  web-preview:
+    if: ${{ github.ref == 'refs/heads/ui-redesign-v2' && github.event_name != 'pull_request' }}
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Export Expo web app
+        run: npx expo export --platform web --output-dir dist
+
+      - name: Prepare Pages runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("dist/index.html")
+          html = path.read_text(encoding="utf-8")
+          registration = """<script>
+          if ('serviceWorker' in navigator && !window.crossOriginIsolated) {
+            navigator.serviceWorker.register('/Contamobile/coi-serviceworker.js', { scope: '/Contamobile/' })
+              .then(function () {
+                if (!navigator.serviceWorker.controller) {
+                  return navigator.serviceWorker.ready.then(function () {
+                    window.location.reload();
+                  });
+                }
+              })
+              .catch(function (error) {
+                console.error('Cross-origin isolation service worker failed', error);
+              });
+          }
+          </script>"""
+          if "coi-serviceworker.js" not in html:
+              html = html.replace("</head>", registration + "</head>")
+          path.write_text(html, encoding="utf-8")
+          Path("dist/404.html").write_text(html, encoding="utf-8")
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy-pages:
+    if: ${{ github.ref == 'refs/heads/ui-redesign-v2' && github.event_name != 'pull_request' }}
+    needs: web-preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: ui-redesign-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  android-preview:
+    if: ${{ github.ref == 'refs/heads/ui-redesign-v2' && github.event_name != 'pull_request' }}
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build standalone preview APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache
+          cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
+          test -s alkarna-ux-preview.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-ux-preview-apk-${{ github.sha }}
+          path: alkarna-ux-preview.apk
+          if-no-files-found: error
+          retention-days: 14
