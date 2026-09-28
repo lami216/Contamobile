@@ -1,60 +1,69 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { DashboardSummary, DocumentLine, DocumentRecord, Party, PaymentAccount, Product, Warehouse } from '@/domain/types';
+import type { DashboardSummary, DocumentLine, DocumentRecord, Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
 
 const bool = (value: number) => value === 1;
-type ProductRow = { id:string;sku:string;name:string;barcode:string;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;is_archived:number;created_at:string;updated_at:string };
+type ProductRow = { id:string;sku:string;name:string;barcode:string;piece_cost:number|null;last_purchase_cost:number|null;last_purchase_at:string|null;piece_price:number|null;wholesale_price:number|null;expiry_date:string|null;note:string|null;category_id:string|null;is_archived:number;created_at:string;updated_at:string };
 type WarehouseRow = {id:string;name:string;is_sales_default:number;is_archived:number;archived_at:string|null};
-type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;created_at:string};
-type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;opening_balance:number;balance:number};
-type DocumentRow = {id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
+type PartyRow = {id:string;name:string;phone:string;party_type:'customer'|'supplier';receivable:number;payable:number;net:number;is_archived:number;archived_at:string|null;created_at:string};
+type AccountRow = {id:string;code:string;name:string;color:string;icon:string;is_active:number;is_archived:number;archived_at:string|null;opening_balance:number;balance:number};
+type DocumentRow = {id:string;number:string;sequence:number|null;kind:DocumentRecord['kind'];status:DocumentRecord['status'];party_id:string|null;party_name:string|null;warehouse_id:string|null;warehouse_name:string|null;destination_warehouse_id:string|null;destination_warehouse_name:string|null;payment_method:string|null;title:string|null;note:string|null;account_adjustment_direction:'deposit'|'withdrawal'|null;from_account_id:string|null;to_account_id:string|null;transfer_id:string|null;total:number;due_total:number;paid_total:number;cash_amount:number;party_cash_direction:'receive'|'pay'|null;party_balance_before:number|null;party_balance_delta:number|null;party_balance_after:number|null;business_date:string|null;daily_sequence:number|null;pricing_mode:DocumentRecord['pricingMode'];occurred_at:string;updated_at:string|null;revision:number;voided_at:string|null};
 type LineRow = {id:string;product_id:string|null;description:string;quantity:number;unit_price:number;line_total:number;cost_at_sale:number|null;gross_profit:number|null;balance_before:number|null;balance_after:number|null};
 export type PartyFinancialSummary={partyId:string;cashIn:number;cashOut:number;customerTradeTotal:number;customerGrossProfit:number;supplierTradeTotal:number;supplierInvoiceCount:number};
 type PartySummaryRow={party_id:string;cash_in:number|null;cash_out:number|null;customer_trade_total:number|null;customer_gross_profit:number|null;supplier_trade_total:number|null;supplier_invoice_count:number|null};
 
-export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?: string, includeArchived = false, limit = 100, offset = 0): Promise<Product[]> {
+export async function listProducts(db: SQLiteDatabase, search = '', warehouseId?: string, includeArchived = false, limit = 100, offset = 0, categoryId?: string): Promise<Product[]> {
   const q = `%${search.trim()}%`;
-  const rows = await db.getAllAsync<ProductRow>('SELECT * FROM products WHERE (?=1 OR is_archived=0) AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ?) ORDER BY name LIMIT ? OFFSET ?',[includeArchived?1:0,q,q,q,limit,offset]);
+  const rows = await db.getAllAsync<ProductRow>('SELECT * FROM products WHERE (?=1 OR is_archived=0) AND (?=\'\' OR category_id=?) AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ?) ORDER BY name LIMIT ? OFFSET ?',[includeArchived?1:0,categoryId??'',categoryId??'',q,q,q,limit,offset]);
   const result: Product[] = [];
   for (const row of rows) {
     const stocks = warehouseId
       ? await db.getAllAsync<{warehouse_id:string;quantity:number}>('SELECT warehouse_id,quantity FROM product_stocks WHERE product_id=? AND warehouse_id=?',[row.id,warehouseId])
       : await db.getAllAsync<{warehouse_id:string;quantity:number}>('SELECT warehouse_id,quantity FROM product_stocks WHERE product_id=?',[row.id]);
-    result.push({id:row.id,sku:row.sku,name:row.name,barcode:row.barcode,pieceCost:row.piece_cost,lastPurchaseCost:row.last_purchase_cost,lastPurchaseAt:row.last_purchase_at,piecePrice:row.piece_price,wholesalePrice:row.wholesale_price,expiryDate:row.expiry_date,note:row.note,isArchived:bool(row.is_archived),createdAt:row.created_at,updatedAt:row.updated_at,stocks:Object.fromEntries(stocks.map(s=>[s.warehouse_id,s.quantity]))});
+    result.push({id:row.id,sku:row.sku,name:row.name,barcode:row.barcode,pieceCost:row.piece_cost,lastPurchaseCost:row.last_purchase_cost,lastPurchaseAt:row.last_purchase_at,piecePrice:row.piece_price,wholesalePrice:row.wholesale_price,expiryDate:row.expiry_date,note:row.note,categoryId:row.category_id,isArchived:bool(row.is_archived),createdAt:row.created_at,updatedAt:row.updated_at,stocks:Object.fromEntries(stocks.map(s=>[s.warehouse_id,s.quantity]))});
   }
   return result;
 }
+
+export async function listProductCategories(db:SQLiteDatabase):Promise<ProductCategory[]>{const rows=await db.getAllAsync<{id:string;name:string;created_at:string;updated_at:string}>('SELECT id,name,created_at,updated_at FROM product_categories ORDER BY name');return rows.map(row=>({id:row.id,name:row.name,createdAt:row.created_at,updatedAt:row.updated_at}))}
 
 export async function listWarehouses(db: SQLiteDatabase, includeArchived=false): Promise<Warehouse[]> {
   const rows=await db.getAllAsync<WarehouseRow>('SELECT id,name,is_sales_default,is_archived,archived_at FROM warehouses WHERE (?=1 OR is_archived=0) ORDER BY is_sales_default DESC,name',[includeArchived?1:0]);
   return rows.map(r=>({id:r.id,name:r.name,isSalesDefault:bool(r.is_sales_default),isArchived:bool(r.is_archived),archivedAt:r.archived_at}));
 }
 
-export async function listParties(db:SQLiteDatabase,type:'customer'|'supplier',search='',limit=100):Promise<Party[]> {
+export async function listParties(db:SQLiteDatabase,type:'customer'|'supplier',search='',limit=100,includeArchived=false):Promise<Party[]> {
   const q=`%${search.trim()}%`;
-  const rows=await db.getAllAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,created_at FROM parties WHERE party_type=? AND (name LIKE ? OR phone LIKE ?) ORDER BY name LIMIT ?',[type,q,q,limit]);
-  return rows.map(r=>({id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,createdAt:r.created_at}));
+  const rows=await db.getAllAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,is_archived,archived_at,created_at FROM parties WHERE party_type=? AND (?=1 OR is_archived=0) AND (name LIKE ? OR phone LIKE ?) ORDER BY is_archived,name LIMIT ?',[type,includeArchived?1:0,q,q,limit]);
+  return rows.map(r=>({id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,isArchived:bool(r.is_archived),archivedAt:r.archived_at,createdAt:r.created_at}));
 }
 
 export async function getParty(db:SQLiteDatabase,id:string):Promise<Party|null> {
-  const r=await db.getFirstAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,created_at FROM parties WHERE id=?',[id]);
-  return r?{id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,createdAt:r.created_at}:null;
+  const r=await db.getFirstAsync<PartyRow>('SELECT id,name,phone,party_type,receivable,payable,net,is_archived,archived_at,created_at FROM parties WHERE id=?',[id]);
+  return r?{id:r.id,name:r.name,phone:r.phone,partyType:r.party_type,receivable:r.receivable,payable:r.payable,net:r.net,isArchived:bool(r.is_archived),archivedAt:r.archived_at,createdAt:r.created_at}:null;
 }
 
 function mapPartySummary(row:PartySummaryRow):PartyFinancialSummary{return{partyId:row.party_id,cashIn:Number(row.cash_in??0),cashOut:Number(row.cash_out??0),customerTradeTotal:Number(row.customer_trade_total??0),customerGrossProfit:Number(row.customer_gross_profit??0),supplierTradeTotal:Number(row.supplier_trade_total??0),supplierInvoiceCount:Number(row.supplier_invoice_count??0)}}
 const partySummarySql=`SELECT p.id party_id,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_in,
-  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id) cash_out,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='in' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND fm.status<>'reversed' AND fm.is_reversal=0) cash_in,
+  (SELECT COALESCE(SUM(CASE WHEN fm.direction='out' THEN fm.amount ELSE 0 END),0) FROM financial_movements fm WHERE fm.party_id=p.id AND fm.status<>'reversed' AND fm.is_reversal=0) cash_out,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_trade_total,
   (SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(l.gross_profit,0) ELSE COALESCE(l.gross_profit,0) END),0) FROM documents d JOIN document_lines l ON l.document_id=d.id WHERE d.party_id=p.id AND d.status='posted' AND d.kind IN ('sale','return')) customer_gross_profit,
   (SELECT COALESCE(SUM(d.total),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_trade_total,
   (SELECT COUNT(*) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_invoice_count
 FROM parties p`;
-export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier'):Promise<PartyFinancialSummary[]>{const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${type?' WHERE p.party_type=?':''}`,type?[type]:[]);return rows.map(mapPartySummary)}
-export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string):Promise<PartyFinancialSummary>{const row=await db.getFirstAsync<PartySummaryRow>(`${partySummarySql} WHERE p.id=?`,[partyId]);return row?mapPartySummary(row):{partyId,cashIn:0,cashOut:0,customerTradeTotal:0,customerGrossProfit:0,supplierTradeTotal:0,supplierInvoiceCount:0}}
+export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier',includeArchived=false):Promise<PartyFinancialSummary[]>{const clauses:string[]=[];const args:(string|number)[]=[];if(type){clauses.push('p.party_type=?');args.push(type)}if(!includeArchived)clauses.push('p.is_archived=0');const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${clauses.length?` WHERE ${clauses.join(' AND ')}`:''}`,args);return rows.map(mapPartySummary)}
+export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string,from?:string,to?:string):Promise<PartyFinancialSummary>{
+  const dateClause=(column:string)=>`${from?` AND substr(${column},1,10)>=?`:''}${to?` AND substr(${column},1,10)<=?`:''}`;
+  const dateArgs=()=>[...(from?[from]:[]),...(to?[to]:[])];
+  const cash=await db.getFirstAsync<{cash_in:number|null;cash_out:number|null}>(`SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount ELSE 0 END),0) cash_in,COALESCE(SUM(CASE WHEN direction='out' THEN amount ELSE 0 END),0) cash_out FROM financial_movements WHERE party_id=? AND status<>'reversed' AND is_reversal=0${dateClause('occurred_at')}`,[partyId,...dateArgs()]);
+  const customer=await db.getFirstAsync<{trade:number|null;profit:number|null}>(`SELECT COALESCE(SUM(CASE WHEN d.kind='return' THEN -d.total ELSE d.total END),0) trade,COALESCE(SUM(CASE WHEN d.kind='return' THEN -COALESCE(x.profit,0) ELSE COALESCE(x.profit,0) END),0) profit FROM documents d LEFT JOIN (SELECT document_id,SUM(gross_profit) profit FROM document_lines GROUP BY document_id) x ON x.document_id=d.id WHERE d.party_id=? AND d.status='posted' AND d.kind IN ('sale','return')${dateClause('d.occurred_at')}`,[partyId,...dateArgs()]);
+  const supplier=await db.getFirstAsync<{trade:number|null;count:number}>(`SELECT COALESCE(SUM(d.total),0) trade,COUNT(*) count FROM documents d WHERE d.party_id=? AND d.status='posted' AND d.kind='purchase'${dateClause('d.occurred_at')}`,[partyId,...dateArgs()]);
+  return{partyId,cashIn:Number(cash?.cash_in??0),cashOut:Number(cash?.cash_out??0),customerTradeTotal:Number(customer?.trade??0),customerGrossProfit:Number(customer?.profit??0),supplierTradeTotal:Number(supplier?.trade??0),supplierInvoiceCount:Number(supplier?.count??0)};
+}
 
 export async function listPaymentAccounts(db:SQLiteDatabase,includeArchived=false):Promise<PaymentAccount[]> {
-  const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
-  return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),openingBalance:r.opening_balance,balance:r.balance}));
+  const rows=await db.getAllAsync<AccountRow>('SELECT id,code,name,color,icon,is_active,is_archived,archived_at,opening_balance,balance FROM payment_accounts WHERE (?=1 OR is_archived=0) ORDER BY code="cash" DESC,name',[includeArchived?1:0]);
+  return rows.map(r=>({id:r.id,code:r.code,name:r.name,color:r.color,icon:r.icon,isActive:bool(r.is_active),isArchived:bool(r.is_archived),archivedAt:r.archived_at,openingBalance:r.opening_balance,balance:r.balance}));
 }
 
 export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord['kind'];partyId?:string;search?:string;from?:string;to?:string;limit?:number}={}):Promise<DocumentRecord[]> {
@@ -70,7 +79,7 @@ export async function listDocuments(db:SQLiteDatabase,opts:{kind?:DocumentRecord
   const result:DocumentRecord[]=[];
   for(const r of rows){
     const lines=await db.getAllAsync<LineRow>('SELECT id,product_id,description,quantity,unit_price,line_total,cost_at_sale,gross_profit,balance_before,balance_after FROM document_lines WHERE document_id=? ORDER BY rowid',[r.id]);
-    result.push({id:r.id,number:r.number,sequence:r.sequence,kind:r.kind,status:r.status,partyId:r.party_id,partyName:r.party_name,warehouseId:r.warehouse_id,warehouseName:r.warehouse_name,destinationWarehouseId:r.destination_warehouse_id,destinationWarehouseName:r.destination_warehouse_name,paymentMethod:r.payment_method,title:r.title,total:r.total,dueTotal:r.due_total,paidTotal:r.paid_total,cashAmount:r.cash_amount,partyCashDirection:r.party_cash_direction,partyBalanceBefore:r.party_balance_before,partyBalanceDelta:r.party_balance_delta,partyBalanceAfter:r.party_balance_after,businessDate:r.business_date,dailySequence:r.daily_sequence,pricingMode:r.pricing_mode,occurredAt:r.occurred_at,updatedAt:r.updated_at,revision:r.revision,voidedAt:r.voided_at,lines:lines.map((l):DocumentLine=>({id:l.id,productId:l.product_id,description:l.description,quantity:l.quantity,unitPrice:l.unit_price,lineTotal:l.line_total,costAtSale:l.cost_at_sale,grossProfit:l.gross_profit,balanceBefore:l.balance_before,balanceAfter:l.balance_after}))});
+    result.push({id:r.id,number:r.number,sequence:r.sequence,kind:r.kind,status:r.status,partyId:r.party_id,partyName:r.party_name,warehouseId:r.warehouse_id,warehouseName:r.warehouse_name,destinationWarehouseId:r.destination_warehouse_id,destinationWarehouseName:r.destination_warehouse_name,paymentMethod:r.payment_method,title:r.title,note:r.note,accountAdjustmentDirection:r.account_adjustment_direction,fromAccountId:r.from_account_id,toAccountId:r.to_account_id,transferId:r.transfer_id,total:r.total,dueTotal:r.due_total,paidTotal:r.paid_total,cashAmount:r.cash_amount,partyCashDirection:r.party_cash_direction,partyBalanceBefore:r.party_balance_before,partyBalanceDelta:r.party_balance_delta,partyBalanceAfter:r.party_balance_after,businessDate:r.business_date,dailySequence:r.daily_sequence,pricingMode:r.pricing_mode,occurredAt:r.occurred_at,updatedAt:r.updated_at,revision:r.revision,voidedAt:r.voided_at,lines:lines.map((l):DocumentLine=>({id:l.id,productId:l.product_id,description:l.description,quantity:l.quantity,unitPrice:l.unit_price,lineTotal:l.line_total,costAtSale:l.cost_at_sale,grossProfit:l.gross_profit,balanceBefore:l.balance_before,balanceAfter:l.balance_after}))});
   }
   return result;
 }
@@ -80,8 +89,8 @@ export async function dashboardSummary(db:SQLiteDatabase):Promise<DashboardSumma
   const sale=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='sale' AND status='posted' AND business_date=?",[day]);
   const profit=await db.getFirstAsync<{total:number|null}>("SELECT SUM(l.gross_profit) total FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.kind='sale' AND d.status='posted' AND d.business_date=?",[day]);
   const expense=await db.getFirstAsync<{total:number|null}>("SELECT SUM(total) total FROM documents WHERE kind='expense' AND status='posted' AND substr(occurred_at,1,10)=?",[day]);
-  const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties');
+  const debt=await db.getFirstAsync<{receivable:number|null;payable:number|null}>('SELECT SUM(receivable) receivable,SUM(payable) payable FROM parties WHERE is_archived=0');
   const inventory=await db.getFirstAsync<{value:number|null}>('SELECT SUM(s.quantity*COALESCE(p.last_purchase_cost,p.piece_cost,0)) value FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0');
-  const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT product_id,SUM(quantity) q FROM product_stocks GROUP BY product_id HAVING q<=5)');
+  const low=await db.getFirstAsync<{count:number}>('SELECT COUNT(*) count FROM (SELECT s.product_id,SUM(s.quantity) q FROM product_stocks s JOIN products p ON p.id=s.product_id WHERE p.is_archived=0 GROUP BY s.product_id HAVING q<=5)');
   return{todaySales:sale?.total??0,todayProfit:profit?.total??0,todayExpenses:expense?.total??0,receivable:debt?.receivable??0,payable:debt?.payable??0,inventoryValue:inventory?.value??0,lowStockCount:low?.count??0};
 }

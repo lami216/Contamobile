@@ -1,0 +1,73 @@
+name: Diagnose Android Release
+
+on:
+  push:
+    branches: [feat/mobile-ui-parity-20260923]
+    paths:
+      - '.github/workflows/android-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download last release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Alkarna-Android-Release
+          path: release
+          github-token: ${{ github.token }}
+          run-id: 35917426897
+
+      - name: Verify downloaded APK
+        run: |
+          set -euxo pipefail
+          ls -lh release
+          test -f release/Alkarna-release.apk
+          unzip -l release/Alkarna-release.apk | grep 'assets/index.android.bundle'
+          if unzip -l release/Alkarna-release.apk | grep -Ei 'expo-dev-launcher|expo-dev-menu'; then
+            echo 'Unexpected development client modules found'
+            exit 1
+          fi
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch APK in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -eu
+            mkdir -p diagnostics
+            adb install -r release/Alkarna-release.apk
+            adb logcat -c
+            adb shell am force-stop mr.alkarna.mobile
+            adb shell am start -W -n mr.alkarna.mobile/.MainActivity | tee diagnostics/start.txt
+            sleep 12
+            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' > diagnostics/focus.txt || true
+            adb exec-out screencap -p > diagnostics/launch.png
+            adb logcat -d -v threadtime > diagnostics/logcat.txt
+            grep -Ei 'FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|Expo|SQLite|Error|Exception' diagnostics/logcat.txt | tail -n 400 > diagnostics/errors.txt || true
+
+      - name: Upload launch diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alkarna-Release-Diagnostics
+          path: diagnostics
+          if-no-files-found: warn
+          retention-days: 7

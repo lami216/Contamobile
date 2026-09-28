@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 3;
 const now = () => new Date().toISOString();
 
 export async function migrateDatabase(db: SQLiteDatabase) {
@@ -44,6 +44,55 @@ export async function migrateDatabase(db: SQLiteDatabase) {
       for (const [id,code,name,color] of accounts) await tx.runAsync('INSERT OR IGNORE INTO payment_accounts(id,code,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?)',[id,code,name,color,stamp,stamp]);
       for (const key of ['product','sale','purchase','expense']) await tx.runAsync('INSERT OR IGNORE INTO counters(key,value) VALUES(?,0)', [key]);
       await tx.runAsync('PRAGMA user_version = 1');
+    });
+  }
+  if (version < 2) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS product_categories(id TEXT PRIMARY KEY,name TEXT NOT NULL COLLATE NOCASE UNIQUE,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        ALTER TABLE products ADD COLUMN category_id TEXT;
+        CREATE INDEX IF NOT EXISTS products_category ON products(category_id);
+        ALTER TABLE parties ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE parties ADD COLUMN archived_at TEXT;
+        CREATE INDEX IF NOT EXISTS parties_role_archived_name ON parties(party_type,is_archived,name);
+      `);
+      await tx.runAsync('PRAGMA user_version = 2');
+    });
+  }
+  if (version < 3) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(`
+        ALTER TABLE payment_accounts ADD COLUMN archived_at TEXT;
+        ALTER TABLE stock_movements ADD COLUMN document_revision INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE financial_movements ADD COLUMN status TEXT NOT NULL DEFAULT 'posted';
+        ALTER TABLE financial_movements ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE financial_movements ADD COLUMN is_reversal INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE financial_movements ADD COLUMN reversal_of_movement_id TEXT;
+        ALTER TABLE financial_movements ADD COLUMN reversal_movement_id TEXT;
+        ALTER TABLE financial_movements ADD COLUMN reversal_reason TEXT;
+        ALTER TABLE financial_movements ADD COLUMN reversed_at TEXT;
+        ALTER TABLE account_transfers ADD COLUMN document_id TEXT;
+        ALTER TABLE account_transfers ADD COLUMN status TEXT NOT NULL DEFAULT 'posted';
+        ALTER TABLE account_transfers ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE account_transfers ADD COLUMN updated_at TEXT;
+        ALTER TABLE account_transfers ADD COLUMN voided_at TEXT;
+        ALTER TABLE documents ADD COLUMN note TEXT;
+        ALTER TABLE documents ADD COLUMN account_adjustment_direction TEXT;
+        ALTER TABLE documents ADD COLUMN from_account_id TEXT;
+        ALTER TABLE documents ADD COLUMN to_account_id TEXT;
+        ALTER TABLE documents ADD COLUMN transfer_id TEXT;
+        CREATE INDEX IF NOT EXISTS financial_active_document ON financial_movements(document_id,status,is_reversal,type);
+        CREATE INDEX IF NOT EXISTS transfers_status_date ON account_transfers(status,occurred_at DESC);
+      `);
+      await tx.runAsync('UPDATE account_transfers SET document_id=id WHERE document_id IS NULL');
+      await tx.execAsync(`
+        INSERT OR IGNORE INTO documents(id,number,kind,status,payment_method,title,note,total,due_total,paid_total,cash_amount,from_account_id,to_account_id,transfer_id,occurred_at,revision)
+        SELECT COALESCE(document_id,id),number,'account-transfer',status,from_account_id,'تحويل بين الحسابات',note,amount,0,amount,amount,from_account_id,to_account_id,id,occurred_at,revision FROM account_transfers;
+        INSERT OR IGNORE INTO documents(id,number,kind,status,payment_method,title,note,total,due_total,paid_total,cash_amount,account_adjustment_direction,occurred_at,revision)
+        SELECT document_id,document_number,'account-adjustment','posted',payment_method,CASE WHEN type='manual-deposit' THEN 'إيداع' ELSE 'سحب' END,note,amount,0,amount,amount,CASE WHEN type='manual-deposit' THEN 'deposit' ELSE 'withdrawal' END,occurred_at,COALESCE(revision,0)
+        FROM financial_movements WHERE type IN ('manual-deposit','manual-withdrawal') AND is_reversal=0;
+      `);
+      await tx.runAsync('PRAGMA user_version = 3');
     });
   }
 }
