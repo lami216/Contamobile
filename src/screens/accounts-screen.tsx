@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PaymentAccount } from '@/domain/types';
@@ -12,7 +12,7 @@ import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
 import { useAuth } from '@/auth/provider';
-import { colors, radius, spacing, touch } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 type ModalMode='create'|'transfer'|'deposit'|'withdrawal'|'edit'|'correct'|null;
 type BankTab='accounts'|'movements'|'transfers'|'adjustments';
