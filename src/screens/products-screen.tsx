@@ -6,7 +6,7 @@ import type { Product, ProductCategory, Warehouse } from '@/domain/types';
 import { getProduct, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { archiveProduct, createProduct } from '@/services/accounting-service';
 import { createProductCategory, deleteProductCategory, renameProductCategory, updateProduct } from '@/services/management-service';
-import { AppText, Badge, Button, Chip, EmptyState, Field, FormSection, GroupedList, Money, PageHeader, Screen, SearchField, SectionTitle, Surface } from '@/components/ui';
+import { AppText, Badge, Button, Chip, EmptyState, Field, FormSection, Money, PageHeader, Screen, SearchField, SectionTitle } from '@/components/ui';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -17,13 +17,13 @@ const stockOf=(item:Product)=>Object.values(item.stocks??{}).reduce((a,b)=>a+b,0
 function expiryTone(value:string|null){if(!value)return null;const today=new Date();today.setHours(0,0,0,0);const target=new Date(`${value}T00:00:00`);const days=Math.ceil((target.getTime()-today.getTime())/86400000);if(days<0)return'expired' as const;if(days<=30)return'soon' as const;return null}
 
 export function ProductsScreen(){
-  const db=useSQLiteContext(),{t,number,locale,isRTL,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar',params=useLocalSearchParams<{productId?:string}>(),deepProductId=typeof params.productId==='string'?params.productId:'';
+  const db=useSQLiteContext(),{t,number,isRTL,errorMessage}=useI18n(),auth=useAuth(),params=useLocalSearchParams<{productId?:string}>(),deepProductId=typeof params.productId==='string'?params.productId:'';
   const [items,setItems]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState(''),[search,setSearch]=useState(''),[showArchived,setShowArchived]=useState(false),[viewing,setViewing]=useState<Product|undefined>(undefined),[editing,setEditing]=useState<Product|null|undefined>(undefined),[busy,setBusy]=useState(false);
   const [categoryManager,setCategoryManager]=useState(false),[categoryDraft,setCategoryDraft]=useState(''),[categoryEditing,setCategoryEditing]=useState<ProductCategory|null>(null);
   const deepOpenedId=useRef('');
   const load=useCallback(async()=>{if(!auth.has('products.view'))return;const [all,wh,cats]=await Promise.all([listProducts(db,search,undefined,showArchived,150,0,categoryId),listWarehouses(db),listProductCategories(db)]);setItems(showArchived?all.filter(item=>item.isArchived):all);setWarehouses(wh);setCategories(cats);if(categoryId&&!cats.some(category=>category.id===categoryId))setCategoryId('')},[auth,categoryId,db,search,showArchived]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
-  useEffect(()=>{if(!deepProductId||deepOpenedId.current===deepProductId||!auth.has('products.view'))return;deepOpenedId.current=deepProductId;void getProduct(db,deepProductId).then(product=>{if(product)setViewing(product);else Alert.alert(t('error'),ar?'المنتج غير موجود.':'Produit introuvable.')}).catch(error=>Alert.alert(t('error'),errorMessage(error)))},[ar,auth,db,deepProductId,errorMessage,t]);
+  useEffect(()=>{if(!deepProductId||deepOpenedId.current===deepProductId||!auth.has('products.view'))return;deepOpenedId.current=deepProductId;void getProduct(db,deepProductId).then(product=>{if(product)setViewing(product);else Alert.alert(t('error'),t('productNotFound'))}).catch(error=>Alert.alert(t('error'),errorMessage(error)))},[auth,db,deepProductId,errorMessage,t]);
 
   if(!auth.has('products.view'))return <Screen><EmptyState title={t('productsNoPermission')}/></Screen>;
   const canCreate=auth.has('products.create'),canEdit=auth.has('products.edit'),canDelete=auth.has('products.delete'),canManageCategories=canCreate||canEdit||canDelete;
@@ -109,8 +109,6 @@ function ProductDetail({product,warehouses,canEdit,onClose,onEdit}:{product:Prod
 
 function DetailMoney({label,value,last=false}:{label:string;value:number;last?:boolean}){return <View style={[styles.detailMoney,last&&styles.lastMetric]}><AppText variant="caption" muted>{label}</AppText><Money value={value}/></View>}
 
-function MiniMetric({label,value,tone='normal',last=false}:{label:string;value:string;tone?:'normal'|'warning';last?:boolean}){return <View style={[styles.miniMetric,last&&styles.lastMetric]}><View style={[styles.metricRule,tone==='warning'&&styles.metricRuleWarning]}/><AppText variant="caption" muted>{label}</AppText><AppText variant="heading" style={tone==='warning'?styles.warning:undefined}>{value}</AppText></View>}
-
 type Form={name:string;barcode:string;categoryId:string;pieceCost:string;piecePrice:string;wholesalePrice:string;expiryDate:string;note:string;openingStock:string;openingWarehouseId:string};
 function ProductEditor({product,warehouses,categories,busy,onClose,onSave,onArchive}:{product:Product|null;warehouses:Warehouse[];categories:ProductCategory[];busy:boolean;onClose:()=>void;onSave:(input:{name:string;barcode:string;categoryId:string|null;pieceCost:number|null;piecePrice:number|null;wholesalePrice:number|null;expiryDate:string|null;note:string|null;openingStock?:number;openingWarehouseId?:string})=>Promise<void>;onArchive?:()=>void}){
   const {t,isRTL}=useI18n();
@@ -126,10 +124,10 @@ function ProductEditor({product,warehouses,categories,busy,onClose,onSave,onArch
   return <Modal animationType="slide" onRequestClose={onClose}><Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modal}>
     <PageHeader title={product?product.name:t('createProduct')} subtitle={product?t('productEditHint'):t('productCreateHint')} onBack={onClose}/>
     <View style={styles.formPanel}>
-      <FormSection title={t('productIdentity')}><Field label={t('name')} value={form.name} onChangeText={set('name')} autoFocus={!product}/><Field label={t('barcode')} value={form.barcode} onChangeText={set('barcode')} autoCapitalize="none"/>{categories.length?<><AppText variant="caption" muted>{t('category')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('productNoCategory')} active={!form.categoryId} onPress={()=>set('categoryId')('')}/>{categories.map(category=><Chip key={category.id} label={category.name} active={form.categoryId===category.id} onPress={()=>set('categoryId')(category.id)}/>)}</View></>:null}</FormSection>
-      <FormSection title={t('productPrices')}><View style={[styles.pair,{flexDirection:isRTL?'row-reverse':'row'}]}><Field label={t('purchasePrice')} value={form.pieceCost} onChangeText={set('pieceCost')} keyboardType="number-pad" containerStyle={styles.flex}/><Field label={t('salePrice')} value={form.piecePrice} onChangeText={set('piecePrice')} keyboardType="number-pad" containerStyle={styles.flex}/></View><Field label={t('wholesalePrice')} value={form.wholesalePrice} onChangeText={set('wholesalePrice')} keyboardType="number-pad"/></FormSection>
-      <FormSection title={t('productAdditionalDetails')}><Field label={t('expiryDate')} value={form.expiryDate} onChangeText={set('expiryDate')} placeholder="YYYY-MM-DD"/><Field label={t('note')} value={form.note} onChangeText={set('note')} multiline numberOfLines={3}/></FormSection>
-      {!product?<FormSection title={t('openingBalance')} subtitle={t('productOpeningStockHelp')}><Field label={t('quantity')} value={form.openingStock} onChangeText={set('openingStock')} keyboardType="decimal-pad"/><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={form.openingWarehouseId===w.id} onPress={()=>set('openingWarehouseId')(w.id)}/>)}</View></FormSection>:null}
+      <FormSection title={t('productIdentity')} style={styles.formSection}><Field label={t('name')} value={form.name} onChangeText={set('name')} autoFocus={!product}/><Field label={t('barcode')} value={form.barcode} onChangeText={set('barcode')} autoCapitalize="none"/>{categories.length?<><AppText variant="caption" muted>{t('productCategoryLabel')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('productNoCategory')} active={!form.categoryId} onPress={()=>set('categoryId')('')}/>{categories.map(category=><Chip key={category.id} label={category.name} active={form.categoryId===category.id} onPress={()=>set('categoryId')(category.id)}/>)}</View></>:null}</FormSection>
+      <FormSection title={t('productPrices')} style={styles.formSection}><View style={[styles.pair,{flexDirection:isRTL?'row-reverse':'row'}]}><Field label={t('purchasePrice')} value={form.pieceCost} onChangeText={set('pieceCost')} keyboardType="number-pad" containerStyle={styles.flex}/><Field label={t('salePrice')} value={form.piecePrice} onChangeText={set('piecePrice')} keyboardType="number-pad" containerStyle={styles.flex}/></View><Field label={t('wholesalePrice')} value={form.wholesalePrice} onChangeText={set('wholesalePrice')} keyboardType="number-pad"/></FormSection>
+      <FormSection title={t('productAdditionalDetails')} style={styles.formSection}><Field label={t('expiryDate')} value={form.expiryDate} onChangeText={set('expiryDate')} placeholder="YYYY-MM-DD"/><Field label={t('note')} value={form.note} onChangeText={set('note')} multiline numberOfLines={3}/></FormSection>
+      {!product?<FormSection title={t('openingBalance')} subtitle={t('productOpeningStockHelp')} style={[styles.formSection,styles.formSectionLast]}><Field label={t('quantity')} value={form.openingStock} onChangeText={set('openingStock')} keyboardType="decimal-pad"/><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={form.openingWarehouseId===w.id} onPress={()=>set('openingWarehouseId')(w.id)}/>)}</View></FormSection>:null}
     </View>
     <Button loading={busy} disabled={!form.name.trim()} title={t('save')} onPress={()=>void save()}/>{onArchive?<Button title={t('productArchiveTitle')} variant="danger" onPress={onArchive}/>:null}<Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onClose}/>
   </ScrollView></Screen></Modal>;
@@ -159,6 +157,7 @@ const styles=StyleSheet.create({
   detailStock:{alignItems:'flex-end',gap:spacing.xs},
   priceStrip:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
   detailMoney:{flex:1,minWidth:100,padding:spacing.md,gap:spacing.xs,borderRightWidth:StyleSheet.hairlineWidth,borderRightColor:colors.border},
+  lastMetric:{borderRightWidth:0},
   stockPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
   stockRow:{minHeight:64,alignItems:'center',gap:spacing.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
   lastStockRow:{borderBottomWidth:0},
@@ -166,6 +165,8 @@ const styles=StyleSheet.create({
   infoLine:{gap:spacing.xs},
   actions:{gap:spacing.sm},
   formPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
+  formSection:{padding:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  formSectionLast:{borderBottomWidth:0,backgroundColor:colors.primaryFaint},
   pair:{gap:spacing.sm},
   flex:{flex:1},
   chips:{flexWrap:'wrap',gap:spacing.xs},
