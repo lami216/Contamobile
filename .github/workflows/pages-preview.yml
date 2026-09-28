@@ -1,36 +1,37 @@
 name: GitHub Pages web preview
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Mobile quality"]
+    types: [completed]
     branches: [ui-redesign-v2]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
+  group: pages-preview-ui-redesign-v2
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-deploy:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 15
     env:
       CI: true
     steps:
-      - name: Checkout
+      - name: Checkout validated commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -66,17 +67,25 @@ jobs:
               html = html.replace("</head>", registration + "</head>")
           path.write_text(html, encoding="utf-8")
           Path("dist/404.html").write_text(html, encoding="utf-8")
-          Path("dist/.nojekyll").touch()
           PY
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: ui-redesign-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
