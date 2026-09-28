@@ -198,7 +198,7 @@ function AccountRow({account,last,archived=false,canEdit=false,busy=false,onEdit
       <View style={[styles.accountTitle,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1}>{account.name}</AppText>{archived?<Badge label={t('accountsArchivedBadge')} tone="neutral"/>:!account.isActive?<Badge label={t('accountsInactive')} tone="warning"/>:null}</View>
       <AppText variant="caption" muted>{account.code}</AppText>
     </View>
-    {archived?<Button compact title={t('restore')} variant="secondary" disabled={busy} onPress={onRestore}/>:<View style={styles.accountEnd}><Money value={account.balance} tone={account.balance<0?'negative':'normal'}/>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={onEdit}/>:null}</View>}
+    {archived?<Button compact title={t('restore')} variant="secondary" disabled={busy} onPress={()=>onRestore?.()}/>:<View style={styles.accountEnd}><Money value={account.balance} tone={account.balance<0?'negative':'normal'}/>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>onEdit?.()}/>:null}</View>}
   </View>;
 }
 
