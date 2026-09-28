@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -89,12 +89,12 @@ export function ReportsScreen(){
     search:search||undefined,
   }),[accountId,allTime,categoryId,debtSide,direction,movementType,partyId,productId,search]);
 
-  const rangeMessage=(issue:DateRangeIssue)=>{
+  const rangeMessage=useCallback((issue:DateRangeIssue)=>{
     if(issue==='missing')return t('reportsRangeMissing');
     if(issue==='invalid')return t('reportsRangeInvalid');
     if(issue==='reversed')return t('reportsRangeReversed');
     return t('reportsRangeTooLong');
-  };
+  },[t]);
 
   const load=useCallback(async()=>{
     if(!allowed)return;
@@ -128,13 +128,13 @@ export function ReportsScreen(){
     }finally{
       setLoaded(true);
     }
-  },[allowed,allTime,db,filters,from,t,to,type]);
+  },[allowed,allTime,db,filters,from,rangeMessage,t,to,type]);
 
   useFocusEffect(useCallback(()=>{void load()},[load]));
 
   if(!allowed)return <Screen><EmptyState title={t('reportsNoPermission')}/></Screen>;
 
-  const currentReport=reportTypes.find(report=>report.id===type)??reportTypes[0];
+  const currentReport=reportTypes.find(report=>report.id===type)??reportTypes[0]!;
   const filteredProducts=categoryId?products.filter(product=>product.categoryId===categoryId):products;
   const selectedProduct=products.find(product=>product.id===productId);
   const selectedParty=parties.find(party=>party.id===partyId);
@@ -302,7 +302,7 @@ export function ReportsScreen(){
   </Screen>;
 }
 
-function FilterBlock({label,children}:{label:string;children:React.ReactNode}){
+function FilterBlock({label,children}:{label:string;children:ReactNode}){
   return <View style={styles.filterBlock}><AppText variant="caption" muted>{label}</AppText>{children}</View>;
 }
 
