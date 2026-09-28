@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -38,11 +38,10 @@ export function PartyDetailScreen(){
         getPartyFinancialSummary(db,id),
       ]);
       setParty(p);setDocs(d);setAccounts(a.filter(account=>account.isActive&&!account.isArchived));setSummary(s);setLoadError(false);
-    }catch(error){
+    }catch{
       setLoadError(true);
-      if(loaded)Alert.alert(t('error'),errorMessage(error));
     }finally{setLoaded(true)}
-  },[db,errorMessage,from,id,loaded,period,t,to,today]);
+  },[db,from,id,period,to,today]);
 
   useFocusEffect(useCallback(()=>{void load()},[load]));
 
@@ -197,7 +196,7 @@ export function PartyDetailScreen(){
   </Screen>;
 }
 
-function ActionSlot({children}:{children:React.ReactNode}){return <View style={styles.actionSlot}>{children}</View>}
+function ActionSlot({children}:{children:ReactNode}){return <View style={styles.actionSlot}>{children}</View>}
 
 function BalanceMini({label,value,tone}:{label:string;value:number;tone:'positive'|'negative'}){
   return <View style={styles.balanceMini}><AppText variant="caption" muted>{label}</AppText><Money value={value} tone={value>0?tone:'normal'}/></View>;
