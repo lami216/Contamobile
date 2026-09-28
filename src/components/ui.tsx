@@ -29,6 +29,56 @@ export function AppText({children,variant='body',muted=false,style,numberOfLines
 export function Card({children,style,tone='default'}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning'}){
   return <View style={[styles.card,tone==='muted'&&styles.cardMuted,tone==='primary'&&styles.cardPrimary,tone==='warning'&&styles.cardWarning,style]}>{children}</View>;
 }
+export function Surface({children,style,tone='default',padded=true}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning';padded?:boolean}){
+  return <View style={[styles.surface,padded&&styles.surfacePadded,tone==='muted'&&styles.surfaceMuted,tone==='primary'&&styles.surfacePrimary,tone==='warning'&&styles.surfaceWarning,style]}>{children}</View>;
+}
+
+export function GroupedList({children,style}:{children:ReactNode;style?:StyleProp<ViewStyle>}){
+  return <View style={[styles.groupedList,style]}>{children}</View>;
+}
+
+export function IconTile({children,tone='primary',size='md'}:{children:ReactNode;tone?:'primary'|'positive'|'negative'|'warning'|'neutral';size?:'sm'|'md'}){
+  return <View style={[
+    styles.iconTile,
+    size==='sm'&&styles.iconTileSmall,
+    tone==='positive'&&styles.iconTilePositive,
+    tone==='negative'&&styles.iconTileNegative,
+    tone==='warning'&&styles.iconTileWarning,
+    tone==='neutral'&&styles.iconTileNeutral,
+  ]}>{children}</View>;
+}
+
+export function PageHeader({title,subtitle,onBack,trailing}:{title:string;subtitle?:string;onBack?:()=>void;trailing?:ReactNode}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.pageHeader,{flexDirection:isRTL?'row-reverse':'row'}]}>
+    {onBack?<Pressable accessibilityRole="button" accessibilityLabel="back" onPress={onBack} style={({pressed})=>[styles.pageHeaderButton,pressed&&styles.pageHeaderButtonPressed]}><AppText variant="heading" style={styles.pageHeaderArrow}>{isRTL?'›':'‹'}</AppText></Pressable>:<View style={styles.pageHeaderSlot}/>}
+    <View style={styles.pageHeaderCopy}><AppText variant="heading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</View>
+    <View style={styles.pageHeaderSlot}>{trailing}</View>
+  </View>;
+}
+
+export function FormSection({title,subtitle,children,style}:{title?:string;subtitle?:string;children:ReactNode;style?:StyleProp<ViewStyle>}){
+  return <View style={[styles.formSection,style]}>{title?<View style={styles.formSectionHead}><AppText variant="subheading">{title}</AppText>{subtitle?<AppText variant="caption" muted>{subtitle}</AppText>:null}</View>:null}{children}</View>;
+}
+
+export function SelectRow({label,value,hint,onPress,leading,disabled=false}:{label:string;value?:string;hint?:string;onPress:()=>void;leading?:ReactNode;disabled?:boolean}){
+  const {isRTL}=useI18n();
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.selectRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,disabled&&styles.disabled]}>
+    {leading}
+    <View style={styles.selectRowCopy}><AppText variant="caption" muted>{label}</AppText>{value?<AppText variant="subheading" numberOfLines={1}>{value}</AppText>:null}{hint?<AppText variant="caption" muted numberOfLines={1}>{hint}</AppText>:null}</View>
+    <AppText variant="heading" style={styles.selectRowArrow}>{isRTL?'‹':'›'}</AppText>
+  </Pressable>;
+}
+
+export function LoadingState({label}:{label?:string}){
+  const {t}=useI18n();
+  return <View style={styles.stateBlock}><ActivityIndicator color={colors.primary}/><AppText variant="caption" muted>{label??t('loading')}</AppText></View>;
+}
+
+export function ErrorState({title,description,action}:{title:string;description?:string;action?:ReactNode}){
+  return <View style={[styles.stateBlock,styles.errorState]}><View style={styles.errorStateMark}/><AppText variant="subheading">{title}</AppText>{description?<AppText variant="caption" muted style={styles.emptyDescription}>{description}</AppText>:null}{action}</View>;
+}
+
 
 export function SectionTitle({title,action,subtitle}:{title:string;action?:ReactNode;subtitle?:string}){
   const {isRTL}=useI18n();
@@ -135,6 +185,32 @@ const styles=StyleSheet.create({
   cardMuted:{backgroundColor:colors.surfaceMuted,borderColor:colors.surfaceMuted},
   cardPrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
   cardWarning:{backgroundColor:colors.warningSoft,borderColor:colors.warningSoft},
+  surface:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border},
+  surfacePadded:{padding:spacing.md},
+  surfaceMuted:{backgroundColor:colors.surfaceMuted},
+  surfacePrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
+  surfaceWarning:{backgroundColor:colors.warningSoft,borderColor:'#F4D9A8'},
+  groupedList:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border},
+  iconTile:{width:44,height:44,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
+  iconTileSmall:{width:36,height:36,borderRadius:radius.sm},
+  iconTilePositive:{backgroundColor:colors.positiveSoft},
+  iconTileNegative:{backgroundColor:colors.negativeSoft},
+  iconTileWarning:{backgroundColor:colors.warningSoft},
+  iconTileNeutral:{backgroundColor:colors.surfaceStrong},
+  pageHeader:{minHeight:60,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs},
+  pageHeaderButton:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
+  pageHeaderButtonPressed:{backgroundColor:colors.surfaceMuted},
+  pageHeaderArrow:{fontSize:27,lineHeight:28,color:colors.text},
+  pageHeaderCopy:{flex:1,minWidth:0,alignItems:'center',gap:2},
+  pageHeaderSlot:{width:touch.min,minHeight:touch.min,alignItems:'center',justifyContent:'center'},
+  formSection:{gap:spacing.sm},
+  formSectionHead:{gap:spacing.xxs},
+  selectRow:{minHeight:68,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  selectRowCopy:{flex:1,minWidth:0,gap:2},
+  selectRowArrow:{color:colors.textSoft,fontSize:22,lineHeight:24},
+  stateBlock:{minHeight:132,alignItems:'center',justifyContent:'center',gap:spacing.sm,padding:spacing.lg},
+  errorState:{backgroundColor:colors.negativeSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F3C9CD'},
+  errorStateMark:{width:9,height:9,borderRadius:5,backgroundColor:colors.negative},
   sectionWrap:{gap:spacing.xxs},
   sectionHead:{minHeight:touch.min,justifyContent:'space-between',alignItems:'center',gap:spacing.sm},
   button:{minHeight:touch.comfortable,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
