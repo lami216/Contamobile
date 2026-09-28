@@ -1,60 +1,61 @@
-name: Android preview APK
+name: Android preview APK (manual)
 
 on:
-  workflow_run:
-    workflows: ["Mobile quality"]
-    types: [completed]
-    branches: [ux-rebuild-v2, ui-redesign-v2]
   workflow_dispatch:
 
 concurrency:
-  group: android-preview-${{ github.event.workflow_run.head_branch || github.ref }}
+  group: android-preview-manual
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - name: Export Android JavaScript bundle
+        run: npx expo export --platform android --output-dir dist-check
+
   build-apk:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       CI: true
     steps:
-      - name: Checkout validated commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
+      - run: npm ci --no-audit --no-fund
       - name: Prebuild Android
-        run: npx expo prebuild --platform android --clean --no-install
-
+        run: npx expo prebuild --platform android --no-install
       - name: Build standalone preview APK
         shell: bash
         run: |
           set -euxo pipefail
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache
           cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
           test -s alkarna-ux-preview.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: alkarna-ux-preview-apk
           path: alkarna-ux-preview.apk
