@@ -26,7 +26,7 @@ function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.
 const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 
 export function RecordsScreen(){
-  const db=useSQLiteContext(),{t,date,isRTL,errorMessage}=useI18n(),auth=useAuth(),today=localDay(),params=useLocalSearchParams<{documentId?:string}>(),deepDocumentId=typeof params.documentId==='string'?params.documentId:'';
+  const db=useSQLiteContext(),{t,isRTL,errorMessage}=useI18n(),auth=useAuth(),today=localDay(),params=useLocalSearchParams<{documentId?:string}>(),deepDocumentId=typeof params.documentId==='string'?params.documentId:'';
   const [items,setItems]=useState<DocumentRecord[]>([]),[search,setSearch]=useState(''),[kind,setKind]=useState<DocumentRecord['kind']|''>('sale');
   const [period,setPeriod]=useState<Period>('today'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[dateSheet,setDateSheet]=useState(false);
   const [selected,setSelected]=useState<DocumentRecord|null>(null),[openingId,setOpeningId]=useState<string|null>(null);
