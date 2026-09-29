@@ -278,7 +278,7 @@ export function PurchaseScreen(){
   if(stage==='success'&&success)return <Screen padded={false}><PurchaseSuccessView
     success={success}
     onNew={startNewPurchase}
-    onView={auth.has('records.view')?()=>{setSuccess(null);router.push({pathname:'/sales/records',params:{documentId:success.documentId}})}:undefined}
+    onView={auth.has('records.view')?()=>router.push({pathname:'/sales/records',params:{documentId:success.documentId}}):undefined}
   /></Screen>;
 
   return <Screen padded={false}>
