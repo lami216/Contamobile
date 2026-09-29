@@ -70,7 +70,7 @@ export function PosScreen(){
   const allowed=auth.has('pos.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
-  const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[pricingMode,setPricingMode]=useState<PricingMode>('retail');
+  const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState('');
   const [lines,setLines]=useState<SaleLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
   const [stage,setStage]=useState<PosStage>('invoice'),[productPicker,setProductPicker]=useState(false);
   const [settlement,setSettlement]=useState<SettlementType>('payNow'),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
@@ -89,7 +89,7 @@ export function PosScreen(){
       setAccounts(active);
       setParties(p);
       setCategories(cats);
-      setWarehouseId(current=>current||selected);
+      setWarehouseId(selected);
       setCategoryId(current=>current&&cats.some(category=>category.id===current)?current:'');
       setPaymentMethod(current=>{
         const match=active.find(account=>account.id===current||account.code===current);
@@ -320,14 +320,12 @@ export function PosScreen(){
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS==='ios'?'padding':undefined}>
       {stage==='invoice'?<InvoiceStage
         onBack={back}
-        warehouses={warehouses}
         warehouseId={warehouseId}
         selectedWarehouse={selectedWarehouse}
         selectedParty={selectedParty}
         lines={lines}
         total={total}
         totalQuantity={totalQuantity}
-        setWarehouseId={setWarehouseId}
         onChooseParty={()=>setPartyPicker(true)}
         onAddProduct={()=>setProductPicker(true)}
         onChangeQuantity={changeQuantity}
@@ -371,7 +369,7 @@ export function PosScreen(){
       />:null}
     </KeyboardAvoidingView>
 
-    <Sheet visible={productPicker} title={t('posProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
+    <Sheet fixedHeight visible={productPicker} title={t('posProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
       <View style={styles.pickerControls}>
         <View style={styles.pickerSearchRow}>
           <View style={styles.flex}><SearchField value={search} onChangeText={setSearch} returnKeyType="search" autoCapitalize="none" placeholder={t('posSearchPlaceholder')}/></View>
@@ -387,14 +385,14 @@ export function PosScreen(){
           key={product.id}
           product={product}
           warehouseId={warehouseId}
-          pricingMode={'retail'}
+          added={lines.some(line=>line.product.id===product.id)}
           onAdd={()=>addProduct(product)}
           last={index===results.length-1}
         />):<EmptyState title={searching?t('loading'):t('noResults')}/>}
       </GroupedList>
     </Sheet>
 
-    <PartyPicker visible={partyPicker} parties={parties} directLabel={t('posCashCustomer')} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??null)}/>
+    <PartyPicker visible={partyPicker} parties={parties} directLabel={t('posCashCustomer')} createLabel={t('partyNewCustomer')} onCreate={()=>{setPartyPicker(false);router.push({pathname:'/parties/customers',params:{create:'1'}})}} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??null)}/>
 
     <Sheet visible={Boolean(quantityLineId)} title={t('posEditQuantity')} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}>
       <FormField label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
@@ -613,7 +611,7 @@ function ProductSaleRow({product,warehouseId,onAdd,last,added}:{product:Product;
     <View style={styles.productSide}>
       <AppText variant="subheading" style={styles.productMoney}>{money(price)}</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel={t('add')} hitSlop={4} disabled={disabled} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.addPressed,disabled&&styles.disabled]}>
-        <AppText variant="heading" style={styles.addPlus}>+</AppText>
+        <AppText variant="heading" style={[styles.addPlus,added&&styles.addCheck]}>{added?'✓':'+'}</AppText>
       </Pressable>
     </View>
   </View>;
@@ -671,6 +669,7 @@ const styles=StyleSheet.create({
   addButton:{width:38,height:38,borderRadius:radius.md,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:1,borderColor:colors.primarySoft},
   addPressed:{backgroundColor:'#D9E9FF',transform:[{scale:.97}]},
   addPlus:{color:colors.primary,fontSize:22,lineHeight:24},
+  addCheck:{color:colors.positive,fontSize:20},
   disabledRow:{backgroundColor:colors.surfaceMuted},
   lastRow:{borderBottomWidth:0},
   invoicePrice:{minHeight:34,alignItems:'center',justifyContent:'center',paddingHorizontal:2,borderRadius:radius.sm},
