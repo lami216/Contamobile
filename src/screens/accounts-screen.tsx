@@ -31,7 +31,7 @@ const format=(template:string,values:Record<string,string|number>)=>Object.entri
 export function AccountsScreen(){
   const db=useSQLiteContext(),{t,date,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[archived,setArchived]=useState<PaymentAccount[]>([]),[movements,setMovements]=useState<FinancialMovement[]>([]),[transfers,setTransfers]=useState<AccountTransfer[]>([]),[parties,setParties]=useState<Party[]>([]);
-  const [showArchived,setShowArchived]=useState(false),[mode,setMode]=useState<ModalMode>(null),[selected,setSelected]=useState<PaymentAccount|null>(null),[tab,setTab]=useState<BankTab>('accounts'),[busy,setBusy]=useState(false);
+  const [showArchived,setShowArchived]=useState(false),[filtersOpen,setFiltersOpen]=useState(false),[mode,setMode]=useState<ModalMode>(null),[selected,setSelected]=useState<PaymentAccount|null>(null),[tab,setTab]=useState<BankTab>('accounts'),[busy,setBusy]=useState(false);
   const [movementFrom,setMovementFrom]=useState(today),[movementTo,setMovementTo]=useState(today),[movementAccount,setMovementAccount]=useState(''),[movementType,setMovementType]=useState('');
   const [transferFromDate,setTransferFromDate]=useState(today),[transferToDate,setTransferToDate]=useState(today),[transferFromAccount,setTransferFromAccount]=useState(''),[transferToAccount,setTransferToAccount]=useState('');
   const [adjustFrom,setAdjustFrom]=useState(today),[adjustTo,setAdjustTo]=useState(today),[adjustAccountFilter,setAdjustAccountFilter]=useState(''),[adjustType,setAdjustType]=useState('');
@@ -150,41 +150,45 @@ export function AccountsScreen(){
       {tab==='movements'&&canMovements?<>
         <SectionTitle title={t('accountsMovementsTitle')}/>
         <DateFilter from={movementFrom} to={movementTo} setFrom={setMovementFrom} setTo={setMovementTo} reset={()=>{setMovementFrom('');setMovementTo('');setMovementAccount('');setMovementType('')}}/>
-        <Surface style={styles.filterPanel}>
-          <FilterLabel label={t('accountsFilterAccount')}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementAccount} onPress={()=>setMovementAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={movementAccount===account.id} onPress={()=>setMovementAccount(account.id)}/>)}</View>
-          <View style={styles.divider}/>
-          <FilterLabel label={t('accountsFilterType')}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementType} onPress={()=>setMovementType('')}/>{Object.entries(movementLabels).filter(([key])=>!['opening-balance','opening-balance-correction'].includes(key)).map(([key,label])=><Chip key={key} label={t(label)} active={movementType===key} onPress={()=>setMovementType(key)}/>)}</View>
-        </Surface>
+        <View style={styles.filterTrigger}><Button title={t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/></View>
         <MovementList rows={visibleMovements} label={movement=>`${t(movementLabels[movement.type]??'partyMovementOther')} • ${accountName(movement.paymentMethod)}`} subtitle={movement=>`${date(movement.occurredAt)} • ${movement.documentNumber}${movement.note?' • '+movement.note:''}`} empty={t('noData')}/>
       </>:null}
 
       {tab==='transfers'&&canTransfer?<>
         <SectionTitle title={t('accountsTransfersTitle')} action={<Button compact title={t('add')} onPress={()=>open('transfer')}/>}/>
         <DateFilter from={transferFromDate} to={transferToDate} setFrom={setTransferFromDate} setTo={setTransferToDate} reset={()=>{setTransferFromDate('');setTransferToDate('');setTransferFromAccount('');setTransferToAccount('')}}/>
-        <Surface style={styles.filterPanel}>
-          <FilterLabel label={t('from')}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!transferFromAccount} onPress={()=>setTransferFromAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={transferFromAccount===account.id} onPress={()=>setTransferFromAccount(account.id)}/>)}</View>
-          <View style={styles.divider}/>
-          <FilterLabel label={t('to')}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!transferToAccount} onPress={()=>setTransferToAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={transferToAccount===account.id} onPress={()=>setTransferToAccount(account.id)}/>)}</View>
-        </Surface>
+        <View style={styles.filterTrigger}><Button title={t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/></View>
         <TransferList rows={visibleTransfers} date={date} empty={t('noData')} isRTL={isRTL}/>
       </>:null}
 
       {tab==='adjustments'&&canAdjust?<>
         <SectionTitle title={t('accountsAdjustmentsTitle')} action={<View style={[styles.inlineActions,{flexDirection:isRTL?'row-reverse':'row'}]}><Button compact title={t('accountsDeposit')} onPress={()=>open('deposit')}/><Button compact title={t('accountsWithdrawal')} variant="secondary" onPress={()=>open('withdrawal')}/></View>}/>
         <DateFilter from={adjustFrom} to={adjustTo} setFrom={setAdjustFrom} setTo={setAdjustTo} reset={()=>{setAdjustFrom('');setAdjustTo('');setAdjustAccountFilter('');setAdjustType('')}}/>
-        <Surface style={styles.filterPanel}>
-          <FilterLabel label={t('accountsFilterAccount')}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!adjustAccountFilter} onPress={()=>setAdjustAccountFilter('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={adjustAccountFilter===account.id} onPress={()=>setAdjustAccountFilter(account.id)}/>)}</View>
-          <View style={styles.divider}/>
-          <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsDepositWithdrawal')} active={!adjustType} onPress={()=>setAdjustType('')}/><Chip label={t('accountsDeposit')} active={adjustType==='manual-deposit'} onPress={()=>setAdjustType('manual-deposit')}/><Chip label={t('accountsWithdrawal')} active={adjustType==='manual-withdrawal'} onPress={()=>setAdjustType('manual-withdrawal')}/></View>
-        </Surface>
+        <View style={styles.filterTrigger}><Button title={t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/></View>
         <MovementList rows={adjustments} label={movement=>`${t(movementLabels[movement.type]??'partyMovementOther')} • ${accountName(movement.paymentMethod)}`} subtitle={movement=>`${date(movement.occurredAt)} • ${movement.documentNumber}${movement.note?' • '+movement.note:''}`} empty={t('noData')}/>
       </>:null}
     </ScrollView>
+
+    <Sheet visible={filtersOpen&&tab!=='accounts'} title={t('reportsFilters')} onClose={()=>setFiltersOpen(false)} footer={<Button title={t('confirm')} onPress={()=>setFiltersOpen(false)}/>}>
+      {tab==='movements'?<>
+        <FilterLabel label={t('accountsFilterAccount')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementAccount} onPress={()=>setMovementAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={movementAccount===account.id} onPress={()=>setMovementAccount(account.id)}/>)}</View>
+        <FilterLabel label={t('accountsFilterType')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementType} onPress={()=>setMovementType('')}/>{Object.entries(movementLabels).filter(([key])=>!['opening-balance','opening-balance-correction'].includes(key)).map(([key,label])=><Chip key={key} label={t(label)} active={movementType===key} onPress={()=>setMovementType(key)}/>)}</View>
+      </>:null}
+      {tab==='transfers'?<>
+        <FilterLabel label={t('from')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!transferFromAccount} onPress={()=>setTransferFromAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={transferFromAccount===account.id} onPress={()=>setTransferFromAccount(account.id)}/>)}</View>
+        <FilterLabel label={t('to')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!transferToAccount} onPress={()=>setTransferToAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={transferToAccount===account.id} onPress={()=>setTransferToAccount(account.id)}/>)}</View>
+      </>:null}
+      {tab==='adjustments'?<>
+        <FilterLabel label={t('accountsFilterAccount')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!adjustAccountFilter} onPress={()=>setAdjustAccountFilter('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={adjustAccountFilter===account.id} onPress={()=>setAdjustAccountFilter(account.id)}/>)}</View>
+        <FilterLabel label={t('accountsFilterType')}/>
+        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsDepositWithdrawal')} active={!adjustType} onPress={()=>setAdjustType('')}/><Chip label={t('accountsDeposit')} active={adjustType==='manual-deposit'} onPress={()=>setAdjustType('manual-deposit')}/><Chip label={t('accountsWithdrawal')} active={adjustType==='manual-withdrawal'} onPress={()=>setAdjustType('manual-withdrawal')}/></View>
+      </>:null}
+    </Sheet>
 
     {mode&&modeAllowed(mode)?<AccountSheet mode={mode} selected={selected} accounts={activeAccounts} busy={busy} onClose={()=>{if(!busy)setMode(null)}} onRun={payload=>void runPayload(payload)} onArchive={mode==='edit'?archive:undefined} onCorrect={mode==='edit'&&selected&&canCorrect?()=>setMode('correct'):undefined}/>:null}
   </Screen>;
@@ -263,6 +267,7 @@ const styles=StyleSheet.create({
   datePanel:{gap:spacing.sm},
   dateRow:{gap:spacing.sm},
   filterPanel:{gap:spacing.sm},
+  filterTrigger:{alignItems:'stretch'},
   divider:{height:StyleSheet.hairlineWidth,backgroundColor:colors.border},
   inlineActions:{gap:spacing.xs,flexWrap:'wrap'},
   movementRow:{minHeight:70,alignItems:'center',gap:spacing.md,padding:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
