@@ -240,12 +240,12 @@ export function PartyDetailScreen(){
 }
 
 function LedgerRow({item,label,tone,moment,first,last}:{item:DocumentRecord;label:string;tone:'neutral'|'primary'|'positive'|'negative'|'warning';moment:string;first:boolean;last:boolean}){
-  const {isRTL}=useI18n();
+  const {t,isRTL}=useI18n();
   return <View style={[styles.ledgerRow,first&&styles.firstLedgerRow,last&&styles.lastLedgerRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
     <View style={styles.ledgerCopy}>
       <View style={[styles.rowTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <Badge label={label} tone={tone}/>
-        {item.status==='voided'?<Badge label="×" tone="negative"/>:null}
+        {item.status==='voided'?<Badge label={t('voided')} tone="negative"/>:null}
       </View>
       <AppText variant="subheading" numberOfLines={1}>{item.title??item.number}</AppText>
       <AppText variant="caption" muted numberOfLines={1}>{item.number} • {moment}</AppText>
