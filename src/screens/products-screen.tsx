@@ -6,7 +6,7 @@ import type { Product, ProductCategory, Warehouse } from '@/domain/types';
 import { getProduct, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { archiveProduct, createProduct } from '@/services/accounting-service';
 import { createProductCategory, deleteProductCategory, renameProductCategory, updateProduct } from '@/services/management-service';
-import { AppText, Badge, Button, Chip, EmptyState, Field, FormSection, Money, PageHeader, Screen, SearchField, SectionTitle } from '@/components/ui';
+import { AppText, Badge, Button, Chip, EmptyState, FinancialSummary, FormField, FramedSection, Money, PageHeader, Screen, SearchField, SegmentedControl } from '@/components/ui';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -14,13 +14,15 @@ import { colors, radius, spacing } from '@/theme';
 
 const num=(value:string)=>value.trim()===''?null:Number(value);
 const stockOf=(item:Product)=>Object.values(item.stocks??{}).reduce((a,b)=>a+b,0);
+type ProductState='active'|'archived';
 function expiryTone(value:string|null){if(!value)return null;const today=new Date();today.setHours(0,0,0,0);const target=new Date(`${value}T00:00:00`);const days=Math.ceil((target.getTime()-today.getTime())/86400000);if(days<0)return'expired' as const;if(days<=30)return'soon' as const;return null}
 
 export function ProductsScreen(){
   const db=useSQLiteContext(),{t,number,isRTL,errorMessage}=useI18n(),auth=useAuth(),params=useLocalSearchParams<{productId?:string}>(),deepProductId=typeof params.productId==='string'?params.productId:'';
-  const [items,setItems]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState(''),[search,setSearch]=useState(''),[showArchived,setShowArchived]=useState(false),[viewing,setViewing]=useState<Product|undefined>(undefined),[editing,setEditing]=useState<Product|null|undefined>(undefined),[busy,setBusy]=useState(false);
+  const [items,setItems]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState(''),[search,setSearch]=useState(''),[state,setState]=useState<ProductState>('active'),[viewing,setViewing]=useState<Product|undefined>(undefined),[editing,setEditing]=useState<Product|null|undefined>(undefined),[busy,setBusy]=useState(false);
   const [categoryManager,setCategoryManager]=useState(false),[categoryDraft,setCategoryDraft]=useState(''),[categoryEditing,setCategoryEditing]=useState<ProductCategory|null>(null);
   const deepOpenedId=useRef('');
+  const showArchived=state==='archived';
   const load=useCallback(async()=>{if(!auth.has('products.view'))return;const [all,wh,cats]=await Promise.all([listProducts(db,search,undefined,showArchived,150,0,categoryId),listWarehouses(db),listProductCategories(db)]);setItems(showArchived?all.filter(item=>item.isArchived):all);setWarehouses(wh);setCategories(cats);if(categoryId&&!cats.some(category=>category.id===categoryId))setCategoryId('')},[auth,categoryId,db,search,showArchived]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
   useEffect(()=>{if(!deepProductId||deepOpenedId.current===deepProductId||!auth.has('products.view'))return;deepOpenedId.current=deepProductId;void getProduct(db,deepProductId).then(product=>{if(product)setViewing(product);else Alert.alert(t('error'),t('productNotFound'))}).catch(error=>Alert.alert(t('error'),errorMessage(error)))},[auth,db,deepProductId,errorMessage,t]);
@@ -36,61 +38,41 @@ export function ProductsScreen(){
     keyboardShouldPersistTaps="handled"
     contentContainerStyle={styles.list}
     ListHeaderComponent={<View style={styles.header}>
-      <PageHeader title={t('products')}/>
+      <PageHeader
+        title={t('products')}
+        trailing={canCreate&&!showArchived?<HeaderAddButton label={t('add')} onPress={()=>setEditing(null)}/>:undefined}
+      />
       <SearchField value={search} onChangeText={setSearch} placeholder={t('productsSearchPlaceholder')}/>
+
+      <SegmentedControl
+        value={state}
+        options={[
+          {value:'active',label:t('productsActive')},
+          {value:'archived',label:t('productsArchived')},
+        ]}
+        onChange={setState}
+      />
 
       {categories.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.filters,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <Chip label={t('productsAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
         {categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
       </ScrollView>:null}
 
-      <View style={[styles.toolRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <View style={[styles.filters,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          <Chip label={t('productsActive')} active={!showArchived} onPress={()=>setShowArchived(false)}/>
-          <Chip label={t('productsArchived')} active={showArchived} onPress={()=>setShowArchived(true)}/>
-        </View>
-        <View style={[styles.toolActions,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          {canManageCategories?<Button compact title={t('productsManageCategories')} variant="ghost" onPress={()=>setCategoryManager(true)}/>:null}
-          {canCreate&&!showArchived?<Button compact title={t('add')} onPress={()=>setEditing(null)}/>:null}
-        </View>
-      </View>
+      {canManageCategories?<View style={[styles.toolsLine,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <Button compact title={t('productsManageCategories')} variant="ghost" onPress={()=>setCategoryManager(true)}/>
+        <Badge label={number(items.length)} tone="neutral"/>
+      </View>:<View style={[styles.toolsLine,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={number(items.length)} tone="neutral"/></View>}
     </View>}
     ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')}/>}
-    renderItem={({item,index})=>{
-      const qty=stockOf(item),expiry=expiryTone(item.expiryDate);
-      const status=item.isArchived?t('productArchived'):expiry==='expired'?t('productExpired'):expiry==='soon'?t('productExpiringSoon'):qty<=5?t('lowStock'):null;
-      return <Pressable
-        accessibilityRole="button"
-        onPress={()=>setViewing(item)}
-        style={({pressed})=>[
-          styles.row,
-          index===0&&styles.firstRow,
-          index===items.length-1&&styles.lastRow,
-          {flexDirection:isRTL?'row-reverse':'row'},
-          pressed&&styles.pressed,
-        ]}
-      >
-        <View style={styles.body}>
-          <View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <AppText variant="subheading" numberOfLines={2} style={styles.name}>{item.name}</AppText>
-            {status?<Badge label={status} tone={item.isArchived?'neutral':expiry==='expired'?'negative':expiry==='soon'||qty<=5?'warning':'neutral'}/>:null}
-          </View>
-          <AppText variant="caption" muted numberOfLines={1}>{[item.categoryName,item.sku?'#'+item.sku:null,item.barcode].filter(Boolean).join(' • ')}</AppText>
-          <View style={[styles.meta,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <AppText variant="caption" muted>{t('productsStock')}: {number(qty)}</AppText>
-            {item.expiryDate?<AppText variant="caption" muted>{t('expiryDate')}: {item.expiryDate}</AppText>:null}
-          </View>
-        </View>
-        <View style={styles.trailing}>
-          {item.isArchived?(canEdit?<Button compact title={t('restore')} variant="secondary" onPress={()=>void restore(item)}/>:null):<>
-            <AppText variant="caption" muted>{t('salePrice')}</AppText>
-            <Money value={item.piecePrice??0}/>
-            <AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>
-          </>}
-        </View>
-      </Pressable>;
-    }}
-  />{viewing?<ProductDetail product={viewing} warehouses={warehouses} canEdit={canEdit&&!viewing.isArchived} onClose={()=>setViewing(undefined)} onEdit={()=>{const product=viewing;setViewing(undefined);setEditing(product)}}/>:null}{editing!==undefined&&!showArchived?<ProductEditor product={editing} warehouses={warehouses} categories={categories} busy={busy} onClose={()=>setEditing(undefined)} onSave={async input=>{setBusy(true);try{if(editing){if(!canEdit)throw new Error(t('productEditDenied'));await updateProduct(db,editing.id,input)}else{if(!canCreate)throw new Error(t('productCreateDenied'));const productId=await createProduct(db,input);if(input.categoryId)await updateProduct(db,productId,input)}setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}}} onArchive={editing&&canDelete?()=>Alert.alert(t('productArchiveTitle'),editing.name,[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void (async()=>{try{await archiveProduct(db,editing.id);setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}})()}]):undefined}/>:null}
+    renderItem={({item,index})=><ProductRow
+      item={item}
+      first={index===0}
+      last={index===items.length-1}
+      canRestore={canEdit&&item.isArchived}
+      onRestore={()=>void restore(item)}
+      onPress={()=>setViewing(item)}
+    />}
+  />{viewing?<ProductDetail product={viewing} warehouses={warehouses} canEdit={canEdit&&!viewing.isArchived} onClose={()=>setViewing(undefined)} onEdit={()=>{const product=viewing;setViewing(undefined);setEditing(product)}}/>:null}{editing!==undefined&&state==='active'?<ProductEditor product={editing} warehouses={warehouses} categories={categories} busy={busy} onClose={()=>setEditing(undefined)} onSave={async input=>{setBusy(true);try{if(editing){if(!canEdit)throw new Error(t('productEditDenied'));await updateProduct(db,editing.id,input)}else{if(!canCreate)throw new Error(t('productCreateDenied'));const productId=await createProduct(db,input);if(input.categoryId)await updateProduct(db,productId,input)}setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}}} onArchive={editing&&canDelete?()=>Alert.alert(t('productArchiveTitle'),editing.name,[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void (async()=>{try{await archiveProduct(db,editing.id);setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}})()}]):undefined}/>:null}
   <Sheet visible={categoryManager} title={t('productCategoryTitle')} onClose={()=>{setCategoryManager(false);setCategoryEditing(null);setCategoryDraft('')}} footer={<Button title={t('close')} variant="ghost" onPress={()=>{setCategoryManager(false);setCategoryEditing(null);setCategoryDraft('')}}/>}>{(categoryEditing&&canEdit)||(!categoryEditing&&canCreate)?<><Field label={categoryEditing?t('productCategoryNewName'):t('productCategoryNew')} value={categoryDraft} onChangeText={setCategoryDraft} placeholder={t('productCategoryExample')}/><Button title={categoryEditing?t('productCategorySave'):t('productCategoryAdd')} loading={busy} disabled={!categoryDraft.trim()} onPress={()=>void saveCategory()}/>{categoryEditing?<Button title={t('cancel')} variant="ghost" onPress={()=>{setCategoryEditing(null);setCategoryDraft('')}}/>:null}</>:null}<View style={styles.categoryList}>{categories.length?categories.map(category=><View key={category.id} style={[styles.categoryRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" style={styles.flex}>{category.name}</AppText>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>{setCategoryEditing(category);setCategoryDraft(category.name)}}/>:null}{canDelete?<Button compact title={t('delete')} variant="danger" onPress={()=>removeCategory(category)}/>:null}</View>):<EmptyState title={t('productCategoryNone')}/>}</View></Sheet>
   </Screen>;
 }
