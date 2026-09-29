@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { DocumentRecord, Party, PaymentAccount, PricingMode, Product, ProductCategory, Warehouse } from '@/domain/types';
+import type { DocumentRecord, Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
 import { sellingPrice, validateSaleDraft } from '@/domain/accounting';
 import { getDocumentById } from '@/db/document-queries';
 import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
@@ -136,7 +136,7 @@ export function PosScreen(){
     setLines(current=>{
       const existing=current.find(line=>line.product.id===product.id);
       if(existing)return current.map(line=>line.product.id===product.id?{...line,quantity:Math.min(line.quantity+1,stock)}:line);
-      return [{product,quantity:Math.min(1,stock),unitPrice:sellingPrice(product,pricingMode),stock,priceOverridden:false},...current];
+      return [{product,quantity:Math.min(1,stock),unitPrice:sellingPrice(product,'retail'),stock,priceOverridden:false},...current];
     });
   };
 
@@ -166,11 +166,6 @@ export function PosScreen(){
     }
     setLines(current=>current.map(line=>line.product.id===priceLineId?{...line,unitPrice:value,priceOverridden:true}:line));
     closePrice();
-  };
-
-  const changeMode=(mode:PricingMode)=>{
-    setPricingMode(mode);
-    setLines(current=>current.map(line=>line.priceOverridden?line:{...line,unitPrice:sellingPrice(line.product,mode)}));
   };
 
   const changeSettlement=(next:SettlementType)=>{
@@ -255,7 +250,7 @@ export function PosScreen(){
         partyId,
         paymentMethod:method,
         cashAmount:completedPaid,
-        pricingMode,
+        pricingMode:'retail',
         lines:completedLines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice})),
       });
       let document:DocumentRecord|null=null;
@@ -325,8 +320,6 @@ export function PosScreen(){
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS==='ios'?'padding':undefined}>
       {stage==='invoice'?<InvoiceStage
         onBack={back}
-        pricingMode={pricingMode}
-        changeMode={changeMode}
         warehouses={warehouses}
         warehouseId={warehouseId}
         selectedWarehouse={selectedWarehouse}
@@ -394,7 +387,7 @@ export function PosScreen(){
           key={product.id}
           product={product}
           warehouseId={warehouseId}
-          pricingMode={pricingMode}
+          pricingMode={'retail'}
           onAdd={()=>addProduct(product)}
           last={index===results.length-1}
         />):<EmptyState title={searching?t('loading'):t('noResults')}/>}
@@ -421,19 +414,14 @@ export function PosScreen(){
 }
 
 function InvoiceStage({
-  onBack,pricingMode,changeMode,warehouses,warehouseId,selectedWarehouse,selectedParty,lines,total,totalQuantity,setWarehouseId,onChooseParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
+  onBack,selectedWarehouse,selectedParty,lines,total,totalQuantity,onChooseParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
 }:{
   onBack:()=>void;
-  pricingMode:PricingMode;
-  changeMode:(mode:PricingMode)=>void;
-  warehouses:Warehouse[];
-  warehouseId:string;
   selectedWarehouse:Warehouse|null;
   selectedParty:Party|null;
   lines:SaleLine[];
   total:number;
   totalQuantity:number;
-  setWarehouseId:(id:string)=>void;
   onChooseParty:()=>void;
   onAddProduct:()=>void;
   onChangeQuantity:(id:string,value:number)=>void;
@@ -444,8 +432,6 @@ function InvoiceStage({
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <SegmentedControl value={pricingMode} options={[{value:'retail',label:t('retail')},{value:'wholesale',label:t('wholesale')}]} onChange={changeMode}/>
-
       <GroupedList>
         <SelectRow
           label={t('customer')}
@@ -456,17 +442,6 @@ function InvoiceStage({
         />
       </GroupedList>
 
-      {warehouses.length>1?<FramedSection title={t('warehouse')}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          {warehouses.map(warehouse=><Chip
-            key={warehouse.id}
-            label={warehouse.name}
-            active={warehouse.id===warehouseId}
-            disabled={lines.length>0&&warehouse.id!==warehouseId}
-            onPress={()=>setWarehouseId(warehouse.id)}
-          />)}
-        </ScrollView>
-      </FramedSection>:null}
 
       <FramedSection
         title={t('posInvoiceLines')}
@@ -623,10 +598,10 @@ function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onN
   </ScrollView>;
 }
 
-function ProductSaleRow({product,warehouseId,pricingMode,onAdd,last}:{product:Product;warehouseId:string;pricingMode:PricingMode;onAdd:()=>void;last:boolean}){
+function ProductSaleRow({product,warehouseId,onAdd,last,added}:{product:Product;warehouseId:string;onAdd:()=>void;last:boolean;added:boolean}){
   const {t,isRTL,money,number}=useI18n();
   const stock=Number(product.stocks?.[warehouseId]??0);
-  const price=sellingPrice(product,pricingMode);
+  const price=sellingPrice(product,'retail');
   const disabled=stock<=0;
   const meta=[product.categoryName,product.sku?'#'+product.sku:null].filter(Boolean).join(' • ');
   return <View style={[styles.productRow,last&&styles.lastRow,disabled&&styles.disabledRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
