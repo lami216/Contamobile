@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PartyType } from '@/domain/types';
 import { listParties } from '@/db/queries';
@@ -28,6 +28,7 @@ const format=(template:string,values:Record<string,string|number>)=>Object.entri
 
 export function PartiesScreen({type}:{type:PartyType}){
   const db=useSQLiteContext(),{t,isRTL,number,errorMessage}=useI18n(),auth=useAuth();
+  const params=useLocalSearchParams<{create?:string}>();
   const [items,setItems]=useState<Party[]>([]),[search,setSearch]=useState(''),[state,setState]=useState<PartyState>('active');
   const [createOpen,setCreateOpen]=useState(false),[name,setName]=useState(''),[phone,setPhone]=useState(''),[busy,setBusy]=useState(false);
 
@@ -44,7 +45,7 @@ export function PartiesScreen({type}:{type:PartyType}){
     setItems(state==='archived'?rows.filter(item=>item.isArchived):state==='active'?rows.filter(item=>!item.isArchived):rows);
   },[allowed,db,includeArchived,search,state,type]);
 
-  useFocusEffect(useCallback(()=>{void load()},[load]));
+  useFocusEffect(useCallback(()=>{void load();if(params.create==='1'&&canCreate)setCreateOpen(true)},[canCreate,load,params.create]));
 
   const closeCreate=()=>{if(busy)return;setCreateOpen(false);setName('');setPhone('')};
   const saveParty=async()=>{
