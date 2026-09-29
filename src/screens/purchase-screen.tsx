@@ -337,7 +337,7 @@ export function PurchaseScreen(){
       />:null}
     </KeyboardAvoidingView>
 
-    <Sheet visible={productPicker} title={t('purchaseProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
+    <Sheet fixedHeight visible={productPicker} title={t('purchaseProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
       <View style={styles.pickerControls}>
         <View style={[styles.pickerSearchRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
           <View style={styles.flex}><SearchField value={search} onChangeText={setSearch} returnKeyType="search" autoCapitalize="none" placeholder={t('purchaseSearchPlaceholder')}/></View>
@@ -354,6 +354,7 @@ export function PurchaseScreen(){
           product={product}
           warehouseId={warehouseId}
           last={index===results.length-1}
+          added={lines.some(line=>line.product.id===product.id)}
           onAdd={()=>addProduct(product)}
         />):<EmptyState title={searching?t('loading'):t('noResults')}/>}
       </GroupedList>
@@ -371,7 +372,7 @@ export function PurchaseScreen(){
       </View>
     </Sheet>
 
-    <PartyPicker visible={supplierPicker} parties={suppliers} directLabel={t('purchaseDirect')} onClose={()=>setSupplierPicker(false)} onSelect={party=>setSupplierId(party?.id??null)}/>
+    <PartyPicker visible={supplierPicker} parties={suppliers} directLabel={t('purchaseDirect')} createLabel={t('partyNewSupplier')} onCreate={()=>{setSupplierPicker(false);router.push({pathname:'/parties/suppliers',params:{create:'1'}})}} onClose={()=>setSupplierPicker(false)} onSelect={party=>setSupplierId(party?.id??null)}/>
 
     <Sheet visible={Boolean(quantityLineId)} title={t('posEditQuantity')} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}>
       <FormField label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
@@ -554,7 +555,7 @@ function PurchasePaymentStage({
   </View>;
 }
 
-function PurchaseProductRow({product,warehouseId,last,onAdd}:{product:Product;warehouseId:string;last:boolean;onAdd:()=>void}){
+function PurchaseProductRow({product,warehouseId,last,onAdd,added}:{product:Product;warehouseId:string;last:boolean;onAdd:()=>void;added:boolean}){
   const {t,money,number,isRTL}=useI18n();
   const currentStock=Number(product.stocks?.[warehouseId]??0);
   const lastCost=Number(product.lastPurchaseCost??product.pieceCost??0);
@@ -569,7 +570,7 @@ function PurchaseProductRow({product,warehouseId,last,onAdd}:{product:Product;wa
       <AppText variant="caption" muted>{t('purchaseLastCost')}</AppText>
       <AppText variant="subheading">{money(lastCost)}</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel={t('add')} hitSlop={4} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.pressed]}>
-        <AppText variant="heading" style={styles.plusText}>+</AppText>
+        <AppText variant="heading" style={[styles.plusText,added&&styles.addedText]}>{added?'✓':'+'}</AppText>
       </Pressable>
     </View>
   </View>;
@@ -682,6 +683,7 @@ const styles=StyleSheet.create({
   productEnd:{minWidth:96,alignItems:'flex-end',gap:2},
   addButton:{width:38,height:38,borderRadius:radius.md,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.primarySoft},
   plusText:{color:colors.primary,lineHeight:24},
+  addedText:{color:colors.positive},
   lastRow:{borderBottomWidth:0},
   pressed:{opacity:.72,transform:[{scale:.99}]},
   lineMoney:{fontWeight:'800',fontVariant:['tabular-nums'],fontSize:16},
