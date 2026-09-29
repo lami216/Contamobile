@@ -8,11 +8,27 @@ import { listDocumentHeaders } from '@/db/document-queries';
 import { postPartyCash } from '@/services/accounting-service';
 import { archiveParty, updateParty } from '@/services/management-service';
 import { postOffset, postSettlement } from '@/services/party-ledger-service';
-import { AppText, Badge, Button, Chip, EmptyState, ErrorState, Field, IconTile, LoadingState, Money, PageHeader, Screen, Surface } from '@/components/ui';
+import {
+  AlertCard,
+  AppText,
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  FinancialSummary,
+  FormField,
+  FramedSection,
+  LoadingState,
+  Money,
+  PageHeader,
+  PaymentMethodCard,
+  Screen,
+  SegmentedControl,
+} from '@/components/ui';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-import { colors, elevation, radius, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 type Action='receive'|'pay'|'settlement'|'offset'|'edit'|null;
 type Period='today'|'all'|'custom';
@@ -20,9 +36,13 @@ type Period='today'|'all'|'custom';
 const emptySummary=(partyId=''):PartyFinancialSummary=>({partyId,cashIn:0,cashOut:0,customerTradeTotal:0,customerGrossProfit:0,supplierTradeTotal:0,supplierInvoiceCount:0});
 function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,'0'),d=String(value.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
 function format(template:string,values:Record<string,string|number>){return Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template)}
+function timeLabel(value:string,locale:'ar'|'fr'){
+  try{return new Intl.DateTimeFormat(locale==='ar'?'ar-MR':'fr-FR',{hour:'2-digit',minute:'2-digit'}).format(new Date(value))}
+  catch{return value.slice(11,16)}
+}
 
 export function PartyDetailScreen(){
-  const {id}=useLocalSearchParams<{id:string}>(),db=useSQLiteContext(),{t,date,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
+  const {id}=useLocalSearchParams<{id:string}>(),db=useSQLiteContext(),{t,date,isRTL,number,locale,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
   const [party,setParty]=useState<Party|null>(null),[docs,setDocs]=useState<DocumentRecord[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[summary,setSummary]=useState<PartyFinancialSummary>(()=>emptySummary(id));
   const [action,setAction]=useState<Action>(null),[period,setPeriod]=useState<Period>('today'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[dateSheet,setDateSheet]=useState(false),[busy,setBusy]=useState(false);
   const [loaded,setLoaded]=useState(false),[loadError,setLoadError]=useState(false);
@@ -37,7 +57,11 @@ export function PartyDetailScreen(){
         listPaymentAccounts(db),
         getPartyFinancialSummary(db,id),
       ]);
-      setParty(p);setDocs(d);setAccounts(a.filter(account=>account.isActive&&!account.isArchived));setSummary(s);setLoadError(false);
+      setParty(p);
+      setDocs(d);
+      setAccounts(a.filter(account=>account.isActive&&!account.isArchived));
+      setSummary(s);
+      setLoadError(false);
     }catch{
       setLoadError(true);
     }finally{setLoaded(true)}
@@ -95,7 +119,12 @@ export function PartyDetailScreen(){
     return t('partyMovementOther');
   };
 
-  const movementTone=(doc:DocumentRecord):'neutral'|'primary'|'positive'|'negative'|'warning'=>doc.kind==='sale'?'positive':doc.kind==='purchase'?'warning':doc.kind==='payment'?'primary':doc.status==='voided'?'negative':'neutral';
+  const movementTone=(doc:DocumentRecord):'neutral'|'primary'|'positive'|'negative'|'warning'=>doc.status==='voided'?'negative':doc.kind==='sale'?'positive':doc.kind==='purchase'?'warning':doc.kind==='payment'?'primary':'neutral';
+
+  const changePeriod=(value:Period)=>{
+    if(value==='custom'){setDateSheet(true);return}
+    setPeriod(value);
+  };
 
   return <Screen padded={false}>
     <FlatList
@@ -105,32 +134,30 @@ export function PartyDetailScreen(){
       ListHeaderComponent={<View style={styles.header}>
         <PageHeader title={party.name} subtitle={party.phone||undefined} onBack={()=>router.back()}/>
 
-        <Surface style={styles.balanceCard}>
-          <View style={[styles.identityRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <IconTile tone="neutral"><PersonGlyph/></IconTile>
+        <FramedSection
+          title={t('partyAccountSummary')}
+          action={<View style={[styles.badges,{flexDirection:isRTL?'row-reverse':'row'}]}>
+            <Badge label={customer?t('customer'):t('supplier')} tone="primary"/>
+            {party.isArchived?<Badge label={t('partyAccountArchived')} tone="warning"/>:null}
+          </View>}
+        >
+          <View style={[styles.primaryBalance,{flexDirection:isRTL?'row-reverse':'row'}]}>
             <View style={styles.flex}>
-              <View style={[styles.badges,{flexDirection:isRTL?'row-reverse':'row'}]}>
-                <Badge label={customer?t('customer'):t('supplier')} tone="primary"/>
-                {party.isArchived?<Badge label={t('partyAccountArchived')} tone="warning"/>:null}
-              </View>
               <AppText variant="caption" muted>{balanceTitle}</AppText>
               <Money value={Math.abs(party.net)} tone={balanceTone} large/>
             </View>
+            {(canEdit||canArchive)?<View style={styles.adminButtons}>
+              {canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>setAction('edit')}/>:null}
+              {canArchive?<Button compact title={t('partyArchive')} variant="ghost" disabled={busy} onPress={confirmArchive}/>:null}
+            </View>:null}
           </View>
+          <FinancialSummary items={[
+            {label:t('partyReceivableShort'),value:party.receivable,tone:party.receivable>0?'positive':'normal'},
+            {label:t('partyPayableShort'),value:party.payable,tone:party.payable>0?'negative':'normal'},
+          ]}/>
+        </FramedSection>
 
-          <View style={[styles.balanceSplit,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <BalanceMini label={t('partyReceivableShort')} value={party.receivable} tone="positive"/>
-            <View style={styles.balanceDivider}/>
-            <BalanceMini label={t('partyPayableShort')} value={party.payable} tone="negative"/>
-          </View>
-
-          {(canEdit||canArchive)?<View style={[styles.adminActions,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            {canEdit?<View style={styles.adminAction}><Button compact title={t('edit')} variant="ghost" onPress={()=>setAction('edit')}/></View>:null}
-            {canArchive?<View style={styles.adminAction}><Button compact title={t('partyArchive')} variant="ghost" disabled={busy} onPress={confirmArchive}/></View>:null}
-          </View>:null}
-        </Surface>
-
-        {(canMove||canLedger)?<View style={styles.actionPanel}>
+        {(canMove||canLedger)?<View style={styles.actionsPanel}>
           <View style={[styles.actionRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
             {canMove?<ActionSlot><Button title={t('receive')} onPress={()=>setAction('receive')}/></ActionSlot>:null}
             {canMove?<ActionSlot><Button title={t('pay')} variant="secondary" onPress={()=>setAction('pay')}/></ActionSlot>:null}
@@ -141,38 +168,46 @@ export function PartyDetailScreen(){
           </View>:null}
         </View>:null}
 
-        <View style={[styles.metrics,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          <MetricTile label={customer?t('partyTradeCustomer'):t('partyTradeSupplier')} value={trade}/>
-          <MetricTile label={customer?t('partyCashCustomer'):t('partyCashSupplier')} value={cash}/>
-          {customer
-            ?<MetricTile label={t('partyGrossProfit')} value={summary.customerGrossProfit} tone={summary.customerGrossProfit>=0?'positive':'negative'}/>
-            :<CountTile label={t('partyPurchaseInvoices')} value={number(summary.supplierInvoiceCount)}/>}
-        </View>
+        <FramedSection title={t('partyActivitySummary')} padded={false}>
+          <FinancialSummary items={customer?[
+            {label:t('partyTradeCustomer'),value:trade},
+            {label:t('partyCashCustomer'),value:cash,tone:cash>0?'positive':'normal'},
+            {label:t('partyGrossProfit'),value:summary.customerGrossProfit,tone:summary.customerGrossProfit>=0?'positive':'negative',emphasize:true},
+          ]:[
+            {label:t('partyTradeSupplier'),value:trade},
+            {label:t('partyCashSupplier'),value:cash,tone:cash>0?'negative':'normal'},
+            {label:t('partyPurchaseInvoices'),value:summary.supplierInvoiceCount,format:'number',emphasize:true},
+          ]}/>
+        </FramedSection>
 
         <View style={styles.ledgerHead}>
           <View style={[styles.ledgerTitleRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <AppText variant="heading">{t('partyLedger')}</AppText>
-            <AppText variant="caption" muted>{periodLabel}</AppText>
+            <View style={styles.flex}>
+              <AppText variant="heading">{t('partyLedger')}</AppText>
+              <AppText variant="caption" muted>{periodLabel}</AppText>
+            </View>
+            <Badge label={number(docs.length)} tone="neutral"/>
           </View>
-          <View style={[styles.periods,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <Chip label={t('partyToday')} active={period==='today'} onPress={()=>setPeriod('today')}/>
-            <Chip label={t('partyAllPeriod')} active={period==='all'} onPress={()=>setPeriod('all')}/>
-            <Button compact title={t('partyCustomPeriod')} variant={period==='custom'?'secondary':'ghost'} onPress={()=>setDateSheet(true)}/>
-          </View>
+          <SegmentedControl
+            value={period}
+            options={[
+              {value:'today',label:t('partyToday')},
+              {value:'all',label:t('partyAllPeriod')},
+              {value:'custom',label:t('partyCustomPeriod')},
+            ]}
+            onChange={changePeriod}
+          />
         </View>
       </View>}
       ListEmptyComponent={<EmptyState title={t('partyNoPeriodRecords')}/>}
-      renderItem={({item,index})=><View style={[styles.ledgerRow,index===0&&styles.firstLedgerRow,index===docs.length-1&&styles.lastLedgerRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <View style={styles.ledgerCopy}>
-          <View style={[styles.rowTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <Badge label={movementLabel(item)} tone={movementTone(item)}/>
-            <AppText variant="caption" muted>{date(item.occurredAt)}</AppText>
-          </View>
-          <AppText variant="subheading" numberOfLines={1}>{item.title??item.number}</AppText>
-          <AppText variant="caption" muted numberOfLines={1}>{item.number}</AppText>
-        </View>
-        <Money value={item.total}/>
-      </View>}
+      renderItem={({item,index})=><LedgerRow
+        item={item}
+        label={movementLabel(item)}
+        tone={movementTone(item)}
+        moment={`${date(item.occurredAt)} • ${timeLabel(item.occurredAt,locale)}`}
+        first={index===0}
+        last={index===docs.length-1}
+      />}
     />
 
     <Sheet visible={action==='edit'} title={t('partyEditAccount')} onClose={()=>{if(!busy)setAction(null)}}>
@@ -187,47 +222,64 @@ export function PartyDetailScreen(){
       {action==='settlement'||action==='offset'?<LedgerForm mode={action} party={party} busy={busy} onCancel={()=>setAction(null)} onSave={(amount,note)=>void run(()=>action==='offset'?postOffset(db,{partyId:party.id,amount,note}):postSettlement(db,{partyId:party.id,side:party.receivable>0?'receivable':'payable',amount,note}))}/>:null}
     </Sheet>
 
-    <Sheet visible={dateSheet} title={t('partyCustomPeriod')} onClose={()=>setDateSheet(false)} footer={<><Button title={t('confirm')} disabled={!from||!to} onPress={()=>{setPeriod('custom');setDateSheet(false)}}/><Button title={t('cancel')} variant="ghost" onPress={()=>setDateSheet(false)}/></>}>
+    <Sheet
+      visible={dateSheet}
+      title={t('partyCustomPeriod')}
+      onClose={()=>setDateSheet(false)}
+      footer={<>
+        <Button title={t('confirm')} disabled={!from||!to} onPress={()=>{setPeriod('custom');setDateSheet(false)}}/>
+        <Button title={t('cancel')} variant="ghost" onPress={()=>setDateSheet(false)}/>
+      </>}
+    >
       <View style={[styles.datePair,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <Field label={t('from')} value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" containerStyle={styles.flex}/>
-        <Field label={t('to')} value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" containerStyle={styles.flex}/>
+        <FormField label={t('from')} value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" containerStyle={styles.flex}/>
+        <FormField label={t('to')} value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" containerStyle={styles.flex}/>
       </View>
     </Sheet>
   </Screen>;
 }
 
+function LedgerRow({item,label,tone,moment,first,last}:{item:DocumentRecord;label:string;tone:'neutral'|'primary'|'positive'|'negative'|'warning';moment:string;first:boolean;last:boolean}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.ledgerRow,first&&styles.firstLedgerRow,last&&styles.lastLedgerRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+    <View style={styles.ledgerCopy}>
+      <View style={[styles.rowTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <Badge label={label} tone={tone}/>
+        {item.status==='voided'?<Badge label="×" tone="negative"/>:null}
+      </View>
+      <AppText variant="subheading" numberOfLines={1}>{item.title??item.number}</AppText>
+      <AppText variant="caption" muted numberOfLines={1}>{item.number} • {moment}</AppText>
+    </View>
+    <Money value={item.total} tone={item.status==='voided'?'normal':item.kind==='sale'?'positive':item.kind==='purchase'||item.kind==='expense'?'negative':'normal'}/>
+  </View>;
+}
+
 function ActionSlot({children}:{children:ReactNode}){return <View style={styles.actionSlot}>{children}</View>}
-
-function BalanceMini({label,value,tone}:{label:string;value:number;tone:'positive'|'negative'}){
-  return <View style={styles.balanceMini}><AppText variant="caption" muted>{label}</AppText><Money value={value} tone={value>0?tone:'normal'}/></View>;
-}
-
-function MetricTile({label,value,tone='normal'}:{label:string;value:number;tone?:'normal'|'positive'|'negative'}){
-  return <Surface style={styles.metricTile}><AppText variant="caption" muted numberOfLines={2}>{label}</AppText><Money value={value} tone={tone}/></Surface>;
-}
-
-function CountTile({label,value}:{label:string;value:string}){
-  return <Surface style={styles.metricTile}><AppText variant="caption" muted numberOfLines={2}>{label}</AppText><AppText variant="amount">{value}</AppText></Surface>;
-}
-
-function InfoNote({children,warning=false}:{children:string;warning?:boolean}){
-  return <View style={[styles.note,warning&&styles.noteWarning]}><View style={[styles.noteRule,warning&&styles.noteRuleWarning]}/><AppText variant="caption" muted>{children}</AppText></View>;
-}
 
 function EditPartyForm({party,busy,onCancel,onSave}:{party:Party;busy:boolean;onCancel:()=>void;onSave:(name:string,phone:string)=>void}){
   const {t}=useI18n();
   const [name,setName]=useState(party.name),[phone,setPhone]=useState(party.phone);
-  return <View style={styles.form}><Field label={t('name')} value={name} onChangeText={setName} autoFocus/><Field label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/><Button title={t('save')} loading={busy} disabled={!name.trim()} onPress={()=>onSave(name.trim(),phone)}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onCancel}/></View>;
+  return <View style={styles.form}>
+    <FormField label={t('name')} value={name} onChangeText={setName} autoFocus/>
+    <FormField label={t('phone')} keyboardType="phone-pad" value={phone} onChangeText={setPhone}/>
+    <Button title={t('save')} loading={busy} disabled={!name.trim()} onPress={()=>onSave(name.trim(),phone.trim())}/>
+    <Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onCancel}/>
+  </View>;
 }
 
 function CashForm({direction,accounts,busy,onCancel,onSave}:{direction:'receive'|'pay';accounts:PaymentAccount[];busy:boolean;onCancel:()=>void;onSave:(amount:number,method:string,note:string)=>void}){
   const {t,isRTL}=useI18n();
-  const [amount,setAmount]=useState(''),[method,setMethod]=useState(accounts.find(a=>a.code==='cash')?.id??accounts[0]?.id??''),[note,setNote]=useState('');
+  const [amount,setAmount]=useState(''),[method,setMethod]=useState(accounts.find(account=>account.code==='cash')?.id??accounts[0]?.id??''),[note,setNote]=useState('');
   const value=Number(amount),valid=Number.isFinite(value)&&value>0&&Boolean(method);
   return <View style={styles.form}>
-    <Field label={t('amount')} value={amount} keyboardType="number-pad" onChangeText={setAmount} autoFocus/>
-    <View style={styles.form}><AppText variant="caption" muted>{t('paymentMethod')}</AppText>{accounts.length?<View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(account=><Chip key={account.id} label={account.name} active={method===account.id} onPress={()=>setMethod(account.id)}/>)}</View>:<InfoNote warning>{t('partyNoPaymentMethod')}</InfoNote>}</View>
-    <Field label={t('note')} value={note} onChangeText={setNote}/>
+    <FormField label={t('amount')} value={amount} keyboardType="number-pad" onChangeText={setAmount} autoFocus trailing={<AppText variant="caption" muted>MRU</AppText>}/>
+    <View style={styles.formBlock}>
+      <AppText variant="caption" muted>{t('paymentMethod')}</AppText>
+      {accounts.length?<View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        {accounts.map(account=><PaymentMethodCard key={account.id} label={account.name} selected={method===account.id} onPress={()=>setMethod(account.id)} style={styles.paymentMethod}/>)}
+      </View>:<AlertCard title={t('partyNoPaymentMethod')} tone="warning"/>}
+    </View>
+    <FormField label={t('note')} value={note} onChangeText={setNote}/>
     <Button title={direction==='receive'?t('receive'):t('pay')} loading={busy} disabled={!valid} onPress={()=>onSave(value,method,note)}/>
     <Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onCancel}/>
   </View>;
@@ -239,52 +291,35 @@ function LedgerForm({mode,party,busy,onCancel,onSave}:{mode:'settlement'|'offset
   const [amount,setAmount]=useState(String(maximum)),[note,setNote]=useState('');
   const value=Number(amount),valid=Number.isFinite(value)&&value>0&&value<=maximum;
   return <View style={styles.form}>
-    <InfoNote>{mode==='offset'?t('partyOffsetHelp'):t('partySettlementHelp')}</InfoNote>
+    <AlertCard title={mode==='offset'?t('partyOffset'):t('partyAccountingSettlement')} description={mode==='offset'?t('partyOffsetHelp'):t('partySettlementHelp')} tone="primary"/>
     <AppText variant="caption" muted>{format(t('partyMaximum'),{value:maximum})}</AppText>
-    <Field label={t('amount')} value={amount} keyboardType="number-pad" onChangeText={setAmount}/>
-    <Field label={t('note')} value={note} onChangeText={setNote}/>
+    <FormField label={t('amount')} value={amount} keyboardType="number-pad" onChangeText={setAmount} trailing={<AppText variant="caption" muted>MRU</AppText>}/>
+    <FormField label={t('note')} value={note} onChangeText={setNote}/>
     <Button title={t('confirm')} loading={busy} disabled={!valid} onPress={()=>onSave(value,note)}/>
     <Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onCancel}/>
   </View>;
 }
 
-function PersonGlyph(){
-  return <View style={styles.personGlyph}><View style={styles.personHead}/><View style={styles.personBody}/></View>;
-}
-
 const styles=StyleSheet.create({
   list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
-  header:{gap:spacing.md,marginBottom:spacing.sm},
+  header:{gap:spacing.sm,marginBottom:spacing.sm},
   flex:{flex:1,minWidth:0},
-  balanceCard:{gap:spacing.md,...elevation.subtle},
-  identityRow:{alignItems:'center',gap:spacing.sm},
-  badges:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap',marginBottom:2},
-  balanceSplit:{alignItems:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border,paddingTop:spacing.sm},
-  balanceMini:{flex:1,gap:2},
-  balanceDivider:{width:StyleSheet.hairlineWidth,backgroundColor:colors.border,marginHorizontal:spacing.sm},
-  adminActions:{alignItems:'center',gap:spacing.xs,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border,paddingTop:spacing.xs},
-  adminAction:{flex:1},
-  actionPanel:{gap:spacing.xs},
+  badges:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
+  primaryBalance:{alignItems:'center',gap:spacing.md},
+  adminButtons:{alignItems:'flex-end',gap:spacing.xxs},
+  actionsPanel:{gap:spacing.xs},
   actionRow:{gap:spacing.xs},
-  actionSlot:{flex:1},
-  metrics:{gap:spacing.xs},
-  metricTile:{flex:1,minWidth:0,gap:spacing.xs,padding:spacing.sm},
+  actionSlot:{flex:1,minWidth:0},
   ledgerHead:{gap:spacing.sm},
   ledgerTitleRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
-  periods:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
-  ledgerRow:{minHeight:78,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,backgroundColor:colors.surface,borderLeftWidth:1,borderRightWidth:1,borderTopWidth:StyleSheet.hairlineWidth,borderColor:colors.border},
-  firstLedgerRow:{borderTopWidth:1,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg},
-  lastLedgerRow:{borderBottomWidth:1,borderBottomLeftRadius:radius.lg,borderBottomRightRadius:radius.lg},
+  ledgerRow:{minHeight:70,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,backgroundColor:colors.surface,borderLeftWidth:1,borderRightWidth:1,borderTopWidth:1,borderColor:colors.border},
+  firstLedgerRow:{borderTopColor:colors.borderStrong,borderLeftColor:colors.borderStrong,borderRightColor:colors.borderStrong,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg},
+  lastLedgerRow:{borderBottomWidth:1,borderBottomColor:colors.borderStrong,borderBottomLeftRadius:radius.lg,borderBottomRightRadius:radius.lg},
   ledgerCopy:{flex:1,minWidth:0,gap:3},
   rowTop:{alignItems:'center',gap:spacing.xs,flexWrap:'wrap'},
-  form:{gap:spacing.md},
-  chips:{flexWrap:'wrap',gap:spacing.xs},
+  form:{gap:spacing.sm},
+  formBlock:{gap:spacing.xs},
+  paymentMethods:{flexWrap:'wrap',gap:spacing.xs},
+  paymentMethod:{width:'48.5%',flexGrow:0,flexBasis:'48.5%',minWidth:120},
   datePair:{gap:spacing.sm},
-  note:{gap:spacing.xs,paddingVertical:spacing.xs},
-  noteWarning:{backgroundColor:colors.warningSoft,borderRadius:radius.md,padding:spacing.sm},
-  noteRule:{width:28,height:2,borderRadius:2,backgroundColor:colors.accent},
-  noteRuleWarning:{backgroundColor:colors.warning},
-  personGlyph:{width:24,height:24,alignItems:'center',justifyContent:'flex-end'},
-  personHead:{position:'absolute',top:1,width:8,height:8,borderRadius:4,borderWidth:2,borderColor:colors.textMuted},
-  personBody:{width:18,height:10,borderWidth:2,borderBottomWidth:0,borderColor:colors.textMuted,borderTopLeftRadius:9,borderTopRightRadius:9},
 });
