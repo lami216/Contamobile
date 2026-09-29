@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppText, Money } from '@/components/ui';
+import { AppText, Button, Money } from '@/components/ui';
 import { colors, elevation, radius, spacing, touch } from '@/theme';
 import { useI18n } from '@/i18n/provider';
 
@@ -26,6 +26,11 @@ export function Sheet({visible,title,onClose,children,footer}:{visible:boolean;t
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS==='ios'?'padding':undefined}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View><ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></KeyboardAvoidingView></Modal>;
 }
 
+export function FilterSheet({visible,title,onClose,children,applyLabel,onApply,resetLabel,onReset,applyDisabled=false}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;applyLabel:string;onApply:()=>void;resetLabel?:string;onReset?:()=>void;applyDisabled?:boolean}){
+  const footer=<><Button title={applyLabel} disabled={applyDisabled} onPress={onApply}/>{resetLabel&&onReset?<Button title={resetLabel} variant="ghost" onPress={onReset}/>:null}</>;
+  return <Sheet visible={visible} title={title} onClose={onClose} footer={footer}>{children}</Sheet>;
+}
+
 export function HeroAction({eyebrow,title,subtitle,actionLabel,onPress,trailing}:{eyebrow?:string;title:string;subtitle?:string;actionLabel:string;onPress:()=>void;trailing?:ReactNode}){
   const {isRTL}=useI18n();
   return <View style={styles.hero}><View style={styles.heroAccent}/><View style={[styles.heroTop,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.heroCopy}>{eyebrow?<AppText variant="caption" style={styles.heroEyebrow}>{eyebrow}</AppText>:null}<AppText variant="title" style={styles.heroTitle}>{title}</AppText>{subtitle?<AppText variant="caption" style={styles.heroSubtitle}>{subtitle}</AppText>:null}</View>{trailing}</View><Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.heroButton,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.heroButtonPressed]}><AppText variant="subheading" style={styles.heroButtonText}>{actionLabel}</AppText><AppText variant="heading" style={styles.heroArrow}>{isRTL?'←':'→'}</AppText></Pressable></View>;
@@ -37,30 +42,30 @@ export function CompactMetric({label,value,tone='normal'}:{label:string;value:nu
 
 const styles=StyleSheet.create({
   disabled:{opacity:.45},
-  stepper:{alignItems:'center',borderRadius:radius.md,backgroundColor:colors.surfaceMuted,padding:3,gap:3,borderWidth:1,borderColor:colors.border},
-  stepButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface},
+  stepper:{alignItems:'center',borderRadius:radius.md,backgroundColor:colors.surfaceStrong,padding:2,gap:2,borderWidth:1,borderColor:colors.borderStrong},
+  stepButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
   stepButtonPrimary:{backgroundColor:colors.primarySoft},
   stepValue:{minWidth:46,height:touch.min,alignItems:'center',justifyContent:'center'},
   stepNumber:{fontVariant:['tabular-nums']},
   stepSymbol:{lineHeight:25,color:colors.text},
   stepPlus:{lineHeight:25,color:colors.primary},
   stepPressed:{opacity:.68,transform:[{scale:.97}]},
-  bottomBar:{backgroundColor:colors.surface,borderTopWidth:1,borderTopColor:colors.border,paddingTop:spacing.sm,paddingHorizontal:spacing.md,...elevation.floating},
-  bottomInner:{alignItems:'center',gap:spacing.md},
+  bottomBar:{backgroundColor:colors.surface,borderTopWidth:1,borderTopColor:colors.borderStrong,paddingTop:spacing.xs,paddingHorizontal:spacing.md,...elevation.subtle},
+  bottomInner:{alignItems:'center',gap:spacing.sm},
   bottomSummary:{flex:1,gap:spacing.xxs},
   secondarySlot:{flex:1},
-  checkout:{minHeight:54,minWidth:148,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:colors.primary},
+  checkout:{minHeight:48,minWidth:144,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:colors.primary,borderWidth:1,borderColor:colors.primary},
   checkoutPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.99}]},
   checkoutText:{color:colors.onPrimary},
   overlay:{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay},
-  sheet:{maxHeight:'88%',backgroundColor:colors.surface,borderTopLeftRadius:radius.xl,borderTopRightRadius:radius.xl,paddingTop:spacing.xs,paddingHorizontal:spacing.md,...elevation.floating},
+  sheet:{maxHeight:'90%',backgroundColor:colors.surface,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg,paddingTop:spacing.xs,paddingHorizontal:spacing.md,borderTopWidth:1,borderLeftWidth:1,borderRightWidth:1,borderColor:colors.borderStrong,...elevation.floating},
   handle:{width:38,height:4,borderRadius:99,backgroundColor:colors.borderStrong,alignSelf:'center',marginBottom:spacing.sm},
-  sheetHead:{minHeight:touch.comfortable,alignItems:'center',justifyContent:'space-between',gap:spacing.md},
+  sheetHead:{minHeight:touch.comfortable,alignItems:'center',justifyContent:'space-between',gap:spacing.md,borderBottomWidth:1,borderBottomColor:colors.border},
   close:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
   closePressed:{backgroundColor:colors.surfaceStrong},
   sheetScroll:{flexShrink:1},
-  sheetBody:{gap:spacing.md,paddingVertical:spacing.md},
-  sheetFooter:{paddingTop:spacing.sm,gap:spacing.sm},
+  sheetBody:{gap:spacing.sm,paddingVertical:spacing.sm},
+  sheetFooter:{paddingTop:spacing.sm,gap:spacing.xs,borderTopWidth:1,borderTopColor:colors.border},
   hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,backgroundColor:colors.primary,padding:spacing.lg,gap:spacing.lg,...elevation.floating},
   heroAccent:{position:'absolute',top:0,left:0,right:0,height:3,backgroundColor:colors.accent},
   heroTop:{alignItems:'flex-start',justifyContent:'space-between',gap:spacing.md},
