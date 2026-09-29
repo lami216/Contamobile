@@ -410,7 +410,7 @@ function PurchaseInvoiceStage({
   onEditQuantity:(line:PurchaseLine)=>void;
   onEditPrice:(line:PurchaseLine)=>void;
 }){
-  const {t}=useI18n();
+  const {t,number,isRTL}=useI18n();
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('purchaseNewTitle')} subtitle={warehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content,styles.contentWithBar]}>
@@ -431,9 +431,14 @@ function PurchaseInvoiceStage({
         />:null}
       </GroupedList>
 
+      <Pressable accessibilityRole="button" accessibilityLabel={t('purchaseAddProduct')} onPress={onAddProduct} style={({pressed})=>[styles.productSearchTrigger,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}>
+        <SearchGlyph/>
+        <AppText variant="body" muted style={styles.productSearchText}>{t('purchaseSearchPlaceholder')}</AppText>
+        <View style={styles.productSearchAdd}><AppText variant="heading" style={styles.productSearchPlus}>+</AppText></View>
+      </Pressable>
+
       <FramedSection
-        title={t('purchaseInvoiceLines')}
-        action={<Button compact title={t('purchaseAddProduct')} onPress={onAddProduct}/>}
+        title={`${t('purchaseInvoiceLines')} (${number(lines.length)})`}
         padded={false}
       >
         {lines.length?lines.map((line,index)=><PurchaseInvoiceLine
@@ -631,6 +636,10 @@ function SuccessDetailRow({label,value}:{label:string;value:string}){
   </View>;
 }
 
+function SearchGlyph(){
+  return <View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View>;
+}
+
 function SupplierTile({warning=false}:{warning?:boolean}){
   return <View style={[styles.partyTile,warning&&styles.partyTileWarning]}><SupplierGlyph warning={warning}/></View>;
 }
@@ -673,6 +682,13 @@ const styles=StyleSheet.create({
   contentWithBar:{paddingBottom:112},
   flex:{flex:1,minWidth:0},
   summaryBlock:{gap:spacing.xs},
+  productSearchTrigger:{minHeight:48,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  productSearchText:{flex:1,minWidth:0},
+  productSearchAdd:{width:34,height:34,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  productSearchPlus:{color:colors.primary,lineHeight:24},
+  searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
+  searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
+  searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
   pickerControls:{gap:spacing.sm},
   pickerSearchRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
   chips:{gap:spacing.xs,paddingVertical:2},
