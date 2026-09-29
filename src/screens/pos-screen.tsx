@@ -320,7 +320,6 @@ export function PosScreen(){
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS==='ios'?'padding':undefined}>
       {stage==='invoice'?<InvoiceStage
         onBack={back}
-        warehouseId={warehouseId}
         selectedWarehouse={selectedWarehouse}
         selectedParty={selectedParty}
         lines={lines}
