@@ -84,7 +84,7 @@ export function PosScreen(){
     try{
       const [w,a,p,cats]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'customer','',300),listProductCategories(db)]);
       const active=a.filter(account=>account.isActive&&!account.isArchived);
-      const selected=w.find(warehouse=>warehouse.isSalesDefault)?.id??w[0]?.id??'';
+      const selected=w.find(warehouse=>warehouse.isSalesDefault)?.id??'';
       setWarehouses(w);
       setAccounts(active);
       setParties(p);
