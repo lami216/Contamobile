@@ -430,15 +430,18 @@ function InvoiceStage({
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <GroupedList>
-        <SelectRow
-          label={t('customer')}
-          value={selectedParty?.name??t('posCashCustomer')}
-          hint={selectedParty?.phone??t('posCustomerOptional')}
-          leading={<CustomerTile/>}
-          onPress={onChooseParty}
-        />
-      </GroupedList>
+      <View style={[styles.invoiceContextRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <Pressable accessibilityRole="button" onPress={onChooseParty} style={({pressed})=>[styles.contextCard,pressed&&styles.controlPressed]}>
+          <AppText variant="caption" muted>{t('customer')}</AppText>
+          <AppText variant="subheading" numberOfLines={1}>{selectedParty?.name??t('posCashCustomer')}</AppText>
+          <AppText variant="caption" muted numberOfLines={1}>{selectedParty?.phone??t('posCustomerOptional')}</AppText>
+        </Pressable>
+        <View style={[styles.contextCard,styles.contextCardMuted]}>
+          <AppText variant="caption" muted>{t('warehouse')}</AppText>
+          <AppText variant="subheading" numberOfLines={1}>{selectedWarehouse?.name??'—'}</AppText>
+          <Badge label={t('defaultWarehouse')} tone="primary"/>
+        </View>
+      </View>
 
 
       <FramedSection
@@ -657,6 +660,9 @@ const styles=StyleSheet.create({
   stageScrollWithBar:{paddingBottom:112},
   flex:{flex:1,minWidth:0},
   chipStrip:{gap:spacing.xs,paddingVertical:2},
+  invoiceContextRow:{gap:spacing.sm},
+  contextCard:{flex:1,minWidth:0,minHeight:78,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,borderRadius:radius.md,borderWidth:1,borderColor:colors.borderStrong,backgroundColor:colors.surface,justifyContent:'center',gap:2},
+  contextCardMuted:{backgroundColor:colors.surfaceMuted},
   controlPressed:{opacity:.7,transform:[{scale:.99}]},
   disabled:{opacity:.42},
   summaryBlock:{gap:spacing.xs},
