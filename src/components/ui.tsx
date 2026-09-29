@@ -139,7 +139,12 @@ export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:st
   return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 Field.displayName='Field';
-export const FormField=Field;
+
+export const FormField=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>;leading?:ReactNode;trailing?:ReactNode}>(({label,error,style,containerStyle,leading,trailing,...props},ref)=>{
+  const {isRTL}=useI18n();
+  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><View style={[styles.formInputShell,{flexDirection:isRTL?'row-reverse':'row'}]}>{leading?<View style={styles.formAdornment}>{leading}</View>:null}<TextInput ref={ref} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.formInput,{textAlign:isRTL?'right':'left'},style]} {...props}/>{trailing?<View style={styles.formAdornment}>{trailing}</View>:null}</View>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
+});
+FormField.displayName='FormField';
 
 export function SearchField({style,placeholder,...props}:TextInputProps){
   const {t,isRTL}=useI18n();
@@ -201,8 +206,8 @@ export function SegmentedControl<T extends string>({value,options,onChange}:{val
   return <View style={[styles.segmented,{flexDirection:isRTL?'row-reverse':'row'}]}>{options.map(option=><Pressable key={option.value} accessibilityRole="button" accessibilityState={{selected:value===option.value}} onPress={()=>onChange(option.value)} style={({pressed})=>[styles.segment,value===option.value&&styles.segmentActive,pressed&&styles.segmentPressed]}><Text style={[styles.segmentText,value===option.value&&styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
-export function PaymentMethodCard({label,subtitle,icon,selected,onPress,disabled=false}:{label:string;subtitle?:string;icon?:ReactNode;selected:boolean;onPress:()=>void;disabled?:boolean}){
-  return <Pressable accessibilityRole="button" accessibilityState={{selected,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.paymentMethodCard,selected&&styles.paymentMethodCardSelected,pressed&&styles.paymentMethodCardPressed,disabled&&styles.disabled]}>{icon?<View style={[styles.paymentMethodIcon,selected&&styles.paymentMethodIconSelected]}>{icon}</View>:null}<AppText variant="subheading" numberOfLines={2} style={selected?styles.paymentMethodTextSelected:undefined}>{label}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</Pressable>;
+export function PaymentMethodCard({label,subtitle,icon,selected,onPress,disabled=false,style}:{label:string;subtitle?:string;icon?:ReactNode;selected:boolean;onPress:()=>void;disabled?:boolean;style?:StyleProp<ViewStyle>}){
+  return <Pressable accessibilityRole="button" accessibilityState={{selected,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.paymentMethodCard,selected&&styles.paymentMethodCardSelected,pressed&&styles.paymentMethodCardPressed,disabled&&styles.disabled,style]}>{icon?<View style={[styles.paymentMethodIcon,selected&&styles.paymentMethodIconSelected]}>{icon}</View>:null}<AppText variant="subheading" numberOfLines={2} style={selected?styles.paymentMethodTextSelected:undefined}>{label}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</Pressable>;
 }
 
 export function AlertCard({title,description,tone='warning',action}:{title:string;description?:string;tone?:'warning'|'primary'|'negative';action?:ReactNode}){
@@ -298,6 +303,9 @@ const styles=StyleSheet.create({
   field:{gap:spacing.xs},
   fieldLabel:{color:colors.textMuted,fontWeight:'700'},
   input:{minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
+  formInputShell:{minHeight:control.height,alignItems:'center',gap:spacing.xs,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface},
+  formInput:{flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  formAdornment:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'center'},
   search:{minHeight:control.height,alignItems:'center',gap:spacing.sm,borderRadius:radius.md,paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
   searchInput:{flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
   searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
