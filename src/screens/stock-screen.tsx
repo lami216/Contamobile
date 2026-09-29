@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -135,7 +135,7 @@ export function StockScreen(){
   </Screen>;
 }
 
-function SummaryMetric({label,value}:{label:string;value:React.ReactNode}){
+function SummaryMetric({label,value}:{label:string;value:ReactNode}){
   return <View style={styles.summaryMetric}><AppText variant="caption" muted numberOfLines={1}>{label}</AppText>{value}</View>;
 }
 
