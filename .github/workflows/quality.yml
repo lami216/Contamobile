@@ -47,8 +47,6 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: Export Android JavaScript bundle
-        run: npx expo export --platform android --output-dir dist-check
 
   web-preview:
     if: ${{ github.ref == 'refs/heads/ui-redesign-v2' && github.event_name != 'pull_request' }}
@@ -129,53 +127,3 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-  android-preview:
-    if: ${{ github.ref == 'refs/heads/ui-redesign-v2' && github.event_name != 'pull_request' }}
-    needs: quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      CI: true
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
-      - name: Restore Node dependencies
-        id: node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package.json') }}
-
-      - name: Install dependencies
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: npm install --no-audit --no-fund --prefer-offline
-
-      - name: Prebuild Android
-        run: npx expo prebuild --platform android --no-install
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Build standalone preview APK
-        shell: bash
-        run: |
-          set -euxo pipefail
-          chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache --parallel
-          cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
-          test -s alkarna-ux-preview.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: alkarna-ux-preview-apk-${{ github.sha }}
-          path: alkarna-ux-preview.apk
-          if-no-files-found: error
-          retention-days: 14
