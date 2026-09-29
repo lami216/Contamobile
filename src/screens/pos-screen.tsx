@@ -632,7 +632,7 @@ function SaleInvoiceLine({line,last,onDecrease,onIncrease,onEditQuantity,onEditP
     unitPriceLabel={t('salePrice')}
     unitPrice={<Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.invoicePrice,pressed&&styles.controlPressed]}><AppText variant="subheading">{money(line.unitPrice)}</AppText></Pressable>}
     lineTotalLabel={t('total')}
-    lineTotal={<Money value={Math.round(line.quantity*line.unitPrice)}/>}
+    lineTotal={<AppText variant="subheading" numberOfLines={1} style={styles.lineMoney}>{money(Math.round(line.quantity*line.unitPrice))}</AppText>}
     actions={<Pressable accessibilityRole="button" accessibilityLabel={t('delete')} hitSlop={4} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>}
     last={last}
   />;
@@ -678,6 +678,7 @@ const styles=StyleSheet.create({
   addCheck:{color:colors.positive,fontSize:20},
   disabledRow:{backgroundColor:colors.surfaceMuted},
   lastRow:{borderBottomWidth:0},
+  lineMoney:{fontWeight:'800',fontVariant:['tabular-nums'],fontSize:16},
   invoicePrice:{minHeight:34,alignItems:'center',justifyContent:'center',paddingHorizontal:2,borderRadius:radius.sm},
   deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
   deletePressed:{backgroundColor:colors.negativeSoft},
