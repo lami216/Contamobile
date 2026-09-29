@@ -152,6 +152,7 @@ export function RecordsScreen(){
   if(!auth.has('records.view'))return <Screen><EmptyState title={t('recordsNoPermission')}/></Screen>;
 
   const periodLabel=period==='today'?t('recordsToday'):period==='week'?t('recordsWeek'):period==='month'?t('recordsMonth'):period==='all'?t('recordsAllTime'):`${from} → ${to}`;
+  const draftPeriodLabel=draftPeriod==='today'?t('recordsToday'):draftPeriod==='week'?t('recordsWeek'):draftPeriod==='month'?t('recordsMonth'):draftPeriod==='all'?t('recordsAllTime'):`${draftFrom} → ${draftTo}`;
   const advancedKind=!primaryKinds.includes(kind);
   const advancedActive=advancedKind||period==='custom'||status!=='posted';
 
@@ -287,7 +288,7 @@ export function RecordsScreen(){
             <FormField label={t('to')} value={draftTo} onChangeText={setDraftTo} placeholder="YYYY-MM-DD" containerStyle={styles.flex}/>
           </View>
           <AppText variant="caption" muted>{t('recordsDateFormatHint')}</AppText>
-        </>:<AppText variant="caption" muted>{periodLabel}</AppText>}
+        </>:<AppText variant="caption" muted>{draftPeriodLabel}</AppText>}
       </View>
     </FilterSheet>
 
