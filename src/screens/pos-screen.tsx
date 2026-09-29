@@ -441,7 +441,7 @@ function InvoiceStage({
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/>
+    <View style={styles.headerPad}><PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
       <SegmentedControl value={pricingMode} options={[{value:'retail',label:t('retail')},{value:'wholesale',label:t('wholesale')}]} onChange={changeMode}/>
 
@@ -484,13 +484,14 @@ function InvoiceStage({
         />):<EmptyState title={t('posNoLinesTitle')} description={t('posNoLinesDescription')} action={<Button compact title={t('posAddProduct')} variant="secondary" onPress={onAddProduct}/>}/>}
       </FramedSection>
 
-      {lines.length?<FramedSection title={t('posInvoiceSummary')} padded={false}>
+      {lines.length?<View style={styles.summaryBlock}>
+        <AppText variant="subheading">{t('posInvoiceSummary')}</AppText>
         <FinancialSummary items={[
           {label:t('posItemsCount'),value:lines.length,format:'number'},
           {label:t('posTotalQuantity'),value:totalQuantity,format:'number'},
           {label:t('posInvoiceTotal'),value:total,emphasize:true},
         ]}/>
-      </FramedSection>:null}
+      </View>:null}
     </ScrollView>
   </View>;
 }
@@ -517,7 +518,7 @@ function PaymentStage({
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PageHeader title={t('posCheckoutTitle')} onBack={onBack}/>
+    <View style={styles.headerPad}><PageHeader title={t('posCheckoutTitle')} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
       <FramedSection title={t('customer')} padded={false}>
         <SelectRow
@@ -562,7 +563,8 @@ function PaymentStage({
         />
       </FramedSection>:null}
 
-      <FramedSection title={t('posPaymentSummary')} padded={false}>
+      <View style={styles.summaryBlock}>
+        <AppText variant="subheading">{t('posPaymentSummary')}</AppText>
         <FinancialSummary items={settlement==='credit'?[
           {label:t('total'),value:total},
           {label:t('due'),value:dueValue,tone:'negative',emphasize:true},
@@ -571,7 +573,7 @@ function PaymentStage({
           {label:t('posReceivedAmount'),value:normalizedTender},
           {label:t('posChange'),value:changeValue,tone:changeValue>0?'positive':'normal',emphasize:true},
         ]}/>
-      </FramedSection>
+      </View>
 
       {underpaid?<AlertCard title={t('posPartialPaymentError')} tone="warning"/>:null}
       {needsParty&&!selectedParty?<AlertCard title={t('posCreditCustomerRequired')} tone="warning"/>:null}
@@ -582,6 +584,12 @@ function PaymentStage({
 function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onNewSale:()=>void;onViewInvoice?:()=>void}){
   const {t,date,isRTL}=useI18n();
   const number=success.document?.number;
+  const summaryItems=[
+    {label:t('total'),value:success.total},
+    {label:t('paid'),value:success.paid,tone:success.paid>0?'positive' as const:'normal' as const,emphasize:success.due===0&&success.change===0},
+    ...(success.due>0?[{label:t('due'),value:success.due,tone:'negative' as const,emphasize:true}]:[]),
+    ...(success.change>0?[{label:t('posChange'),value:success.change,tone:'positive' as const,emphasize:true}]:[]),
+  ];
   return <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.successScreen}>
     <View style={styles.successHero}>
       <View style={styles.successMark}><CheckGlyph/></View>
@@ -599,12 +607,7 @@ function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onN
       </View>
     </FramedSection>
 
-    <FinancialSummary items={[
-      {label:t('total'),value:success.total},
-      {label:t('paid'),value:success.paid,tone:success.paid>0?'positive':'normal'},
-      ...(success.due>0?[{label:t('due'),value:success.due,tone:'negative' as const}]:[]),
-      ...(success.change>0?[{label:t('posChange'),value:success.change,tone:'positive' as const,emphasize:true}]:[{label:success.due>0?t('due'):t('total'),value:success.due>0?success.due:success.total,tone:success.due>0?'negative' as const:'normal' as const,emphasize:true}]),
-    ]}/>
+    <FinancialSummary items={summaryItems}/>
 
     {success.warnings.length?<AlertCard
       title={t('posLowStockAfterSale')}
@@ -692,12 +695,14 @@ function CheckGlyph(){
 const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
+  headerPad:{paddingHorizontal:spacing.md},
   stageScroll:{paddingHorizontal:spacing.md,paddingTop:spacing.xs,gap:spacing.sm,paddingBottom:spacing.lg},
   stageScrollWithBar:{paddingBottom:112},
   flex:{flex:1,minWidth:0},
   chipStrip:{gap:spacing.xs,paddingVertical:2},
   controlPressed:{opacity:.7,transform:[{scale:.99}]},
   disabled:{opacity:.42},
+  summaryBlock:{gap:spacing.xs},
   pickerControls:{gap:spacing.sm},
   pickerSearchRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
   productRow:{minHeight:64,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
