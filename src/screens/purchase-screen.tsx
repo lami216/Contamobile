@@ -62,7 +62,7 @@ function format(template:string,values:Record<string,string|number>){
 }
 
 export function PurchaseScreen(){
-  const db=useSQLiteContext(),{t,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,errorMessage,isRTL}=useI18n(),auth=useAuth();
   const allowed=auth.has('purchases.create');
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
@@ -321,8 +321,7 @@ export function PurchaseScreen(){
       {stage==='invoice'?<BottomActionBar
         label={t('posContinuePayment')}
         total={total}
-        count={lines.length}
-        secondary={t('posProductsCount').replace('{count}','').trim()}
+        secondary={format(t('posProductsCount'),{count:lines.length})}
         onPress={startPayment}
         disabled={!lines.length}
       />:null}
@@ -381,7 +380,7 @@ export function PurchaseScreen(){
       {priceLine?<View style={styles.priceEditor}>
         <AppText variant="subheading">{priceLine.product.name}</AppText>
         <Surface tone="muted" style={styles.currentCost}>
-          <View style={styles.costRow}>
+          <View style={[styles.costRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
             <AppText variant="caption" muted>{t('purchaseLastCost')}</AppText>
             <Money value={Number(priceLine.product.lastPurchaseCost??priceLine.product.pieceCost??0)}/>
           </View>
@@ -693,7 +692,7 @@ const styles=StyleSheet.create({
   paymentMethodCard:{width:'31.4%',flexGrow:0,flexBasis:'31.4%',minWidth:96},
   priceEditor:{gap:spacing.sm},
   currentCost:{gap:spacing.xs},
-  costRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:spacing.md},
+  costRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
   partyTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
   partyTileWarning:{backgroundColor:colors.warningSoft},
   warehouseTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceStrong},
