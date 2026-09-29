@@ -23,7 +23,7 @@ import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing, touch } from '@/theme';
 
-type PartyState='active'|'archived';
+type PartyState='all'|'active'|'archived';
 const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 
 export function PartiesScreen({type}:{type:PartyType}){
@@ -35,13 +35,14 @@ export function PartiesScreen({type}:{type:PartyType}){
   const createCapability=type==='customer'?'customers.create':'suppliers.create';
   const archiveCapability=type==='customer'?'customers.delete':'suppliers.delete';
   const allowed=auth.has(viewCapability),canCreate=auth.has(createCapability),canArchive=auth.has(archiveCapability);
+  const includeArchived=canArchive&&state!=='active';
   const showArchived=canArchive&&state==='archived';
 
   const load=useCallback(async()=>{
     if(!allowed)return;
-    const rows=await listParties(db,type,search,200,showArchived);
-    setItems(showArchived?rows.filter(item=>item.isArchived):rows.filter(item=>!item.isArchived));
-  },[allowed,db,search,showArchived,type]);
+    const rows=await listParties(db,type,search,200,includeArchived);
+    setItems(state==='archived'?rows.filter(item=>item.isArchived):state==='active'?rows.filter(item=>!item.isArchived):rows);
+  },[allowed,db,includeArchived,search,state,type]);
 
   useFocusEffect(useCallback(()=>{void load()},[load]));
 
@@ -90,6 +91,7 @@ export function PartiesScreen({type}:{type:PartyType}){
         {canArchive?<SegmentedControl
           value={state}
           options={[
+            {value:'all',label:t('partyAll')},
             {value:'active',label:t('partyActive')},
             {value:'archived',label:t('partyArchived')},
           ]}
@@ -105,7 +107,7 @@ export function PartiesScreen({type}:{type:PartyType}){
         item={item}
         first={index===0}
         last={index===items.length-1}
-        canRestore={showArchived&&canArchive}
+        canRestore={item.isArchived&&canArchive}
         restoring={busy}
         onRestore={()=>void restoreArchived(item.id)}
       />}
