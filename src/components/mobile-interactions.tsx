@@ -21,9 +21,9 @@ export function StickyActionBar({label,onPress,disabled=false,loading=false,summ
   return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}>{summary?<View style={styles.bottomSummary}><AppText variant="caption" muted>{summary}</AppText></View>:secondaryAction?<View style={styles.secondarySlot}>{secondaryAction}</View>:<View style={styles.bottomSummary}/>}<Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color={colors.onPrimary}/>:<AppText variant="subheading" style={styles.checkoutText}>{label}</AppText>}</Pressable></View></View>;
 }
 
-export function Sheet({visible,title,onClose,children,footer}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode}){
+export function Sheet({visible,title,onClose,children,footer,fixedHeight=false}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode;fixedHeight?:boolean}){
   const insets=useSafeAreaInsets(),{isRTL}=useI18n();
-  return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS==='ios'?'padding':undefined}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View><ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></KeyboardAvoidingView></Modal>;
+  return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS==='ios'?'padding':undefined}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,fixedHeight&&styles.sheetFixed,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View><ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></KeyboardAvoidingView></Modal>;
 }
 
 export function FilterSheet({visible,title,onClose,children,applyLabel,onApply,resetLabel,onReset,applyDisabled=false}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;applyLabel:string;onApply:()=>void;resetLabel?:string;onReset?:()=>void;applyDisabled?:boolean}){
@@ -62,11 +62,12 @@ const styles=StyleSheet.create({
   checkoutText:{color:colors.onPrimary},
   overlay:{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay},
   sheet:{maxHeight:'90%',backgroundColor:colors.surface,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg,paddingTop:spacing.xs,paddingHorizontal:spacing.md,borderTopWidth:1,borderLeftWidth:1,borderRightWidth:1,borderColor:colors.borderStrong,...elevation.floating},
+  sheetFixed:{height:'78%',minHeight:520},
   handle:{width:38,height:4,borderRadius:99,backgroundColor:colors.borderStrong,alignSelf:'center',marginBottom:spacing.sm},
   sheetHead:{minHeight:touch.comfortable,alignItems:'center',justifyContent:'space-between',gap:spacing.md,borderBottomWidth:1,borderBottomColor:colors.border},
   close:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
   closePressed:{backgroundColor:colors.surfaceStrong},
-  sheetScroll:{flexShrink:1},
+  sheetScroll:{flexShrink:1,flexGrow:1},
   sheetBody:{gap:spacing.sm,paddingVertical:spacing.sm},
   sheetFooter:{paddingTop:spacing.sm,gap:spacing.xs,borderTopWidth:1,borderTopColor:colors.border},
   hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,backgroundColor:colors.primary,padding:spacing.lg,gap:spacing.lg,...elevation.floating},
