@@ -7,8 +7,8 @@ import { listParties, listPaymentAccounts } from '@/db/queries';
 import { listAccountTransfers, listFinancialMovements, type AccountTransfer, type FinancialMovement } from '@/db/finance-queries';
 import { adjustAccount, correctOpeningBalance, createPaymentAccount, transferAccount } from '@/services/accounting-service';
 import { archivePaymentAccount, restorePaymentAccount, updatePaymentAccount } from '@/services/management-service';
-import { AppText, Badge, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SectionTitle, Surface } from '@/components/ui';
-import { Sheet } from '@/components/mobile-interactions';
+import { AppText, Badge, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
+import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
 import { useAuth } from '@/auth/provider';
@@ -117,11 +117,13 @@ export function AccountsScreen(){
   return <Screen padded={false}>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <PageHeader title={t('accounts')}/>
-      <View style={[styles.toolbar,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tabs,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          {tabs.filter(item=>item.allowed).map(item=><Chip key={item.value} label={t(item.label)} active={tab===item.value} onPress={()=>{setTab(item.value);setShowArchived(false)}}/>)}
-        </ScrollView>
-        {tab==='accounts'&&canCreate?<Button compact title={t('add')} onPress={()=>open('create')}/>:null}
+      <View style={styles.toolbar}>
+        <SegmentedControl
+          value={tab}
+          options={tabs.filter(item=>item.allowed).map(item=>({value:item.value,label:t(item.label)}))}
+          onChange={value=>{setTab(value);setShowArchived(false);setFiltersOpen(false)}}
+        />
+        {tab==='accounts'&&canCreate?<Button title={t('add')} onPress={()=>open('create')}/>:null}
       </View>
 
       {tab==='accounts'?<>
@@ -169,7 +171,7 @@ export function AccountsScreen(){
       </>:null}
     </ScrollView>
 
-    <Sheet visible={filtersOpen&&tab!=='accounts'} title={t('reportsFilters')} onClose={()=>setFiltersOpen(false)} footer={<Button title={t('confirm')} onPress={()=>setFiltersOpen(false)}/>}>
+    <FilterSheet visible={filtersOpen&&tab!=='accounts'} title={t('reportsFilters')} onClose={()=>setFiltersOpen(false)} applyLabel={t('confirm')} onApply={()=>setFiltersOpen(false)}>
       {tab==='movements'?<>
         <FilterLabel label={t('accountsFilterAccount')}/>
         <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementAccount} onPress={()=>setMovementAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={movementAccount===account.id} onPress={()=>setMovementAccount(account.id)}/>)}</View>
@@ -188,7 +190,7 @@ export function AccountsScreen(){
         <FilterLabel label={t('accountsFilterType')}/>
         <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsDepositWithdrawal')} active={!adjustType} onPress={()=>setAdjustType('')}/><Chip label={t('accountsDeposit')} active={adjustType==='manual-deposit'} onPress={()=>setAdjustType('manual-deposit')}/><Chip label={t('accountsWithdrawal')} active={adjustType==='manual-withdrawal'} onPress={()=>setAdjustType('manual-withdrawal')}/></View>
       </>:null}
-    </Sheet>
+    </FilterSheet>
 
     {mode&&modeAllowed(mode)?<AccountSheet mode={mode} selected={selected} accounts={activeAccounts} busy={busy} onClose={()=>{if(!busy)setMode(null)}} onRun={payload=>void runPayload(payload)} onArchive={mode==='edit'?archive:undefined} onCorrect={mode==='edit'&&selected&&canCorrect?()=>setMode('correct'):undefined}/>:null}
   </Screen>;
@@ -250,8 +252,7 @@ function WalletGlyph(){return <View style={styles.walletGlyph}><View style={styl
 
 const styles=StyleSheet.create({
   content:{paddingHorizontal:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
-  toolbar:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
-  tabs:{gap:spacing.xs},
+  toolbar:{gap:spacing.sm},
   chips:{flexWrap:'wrap',gap:spacing.xs},
   balanceSurface:{gap:spacing.sm},
   balanceHead:{alignItems:'center',gap:spacing.sm},
