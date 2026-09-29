@@ -7,7 +7,7 @@ import { validateRequiredDateRange, type DateRangeIssue } from '@/domain/date-ra
 import { listParties, listPaymentAccounts, listProductCategories, listProducts } from '@/db/queries';
 import { runReport, salesTrend, type ReportData, type ReportFilters, type ReportType, type SalesTrendPoint } from '@/db/report-queries';
 import { PartyPicker, ProductPicker } from '@/components/pickers';
-import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SelectRow, Surface } from '@/components/ui';
+import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SegmentedControl, SelectRow, Surface } from '@/components/ui';
 import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
@@ -292,7 +292,7 @@ export function ReportsScreen(){
       {accountFilter?<FilterBlock label={t('reportsPaymentAccount')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!accountId} onPress={()=>setAccountId('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={accountId===account.id} onPress={()=>setAccountId(account.id)}/>)}</View></FilterBlock>:null}
       {type==='stock'?<FilterBlock label={t('reportsStockMovement')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!movementType} onPress={()=>setMovementType('')}/>{stockMovementTypes.map(option=><Chip key={option.id} label={t(option.label)} active={movementType===option.id} onPress={()=>setMovementType(option.id)}/>)}</View></FilterBlock>:null}
       {type==='financial'?<>
-        <FilterBlock label={t('reportsDirection')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!direction} onPress={()=>setDirection('')}/><Chip label={t('reportsIncoming')} active={direction==='in'} onPress={()=>setDirection('in')}/><Chip label={t('reportsOutgoing')} active={direction==='out'} onPress={()=>setDirection('out')}/></View></FilterBlock>
+        <FilterBlock label={t('reportsDirection')}><SegmentedControl value={direction||'all'} options={[{value:'all',label:t('reportsAll')},{value:'in',label:t('reportsIncoming')},{value:'out',label:t('reportsOutgoing')}]} onChange={value=>setDirection(value==='all'?'':value as 'in'|'out')}/></FilterBlock>
         <FilterBlock label={t('reportsMovementType')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!movementType} onPress={()=>setMovementType('')}/>{Object.entries(financialMovementLabels).map(([id,label])=><Chip key={id} label={t(label)} active={movementType===id} onPress={()=>setMovementType(id)}/>)}</View></FilterBlock>
       </>:null}
       {type==='debts'?<>
@@ -300,7 +300,7 @@ export function ReportsScreen(){
         <FilterBlock label={t('reportsDebtSide')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!debtSide} onPress={()=>setDebtSide('')}/><Chip label={t('reportMetricReceivable')} active={debtSide==='receivable'} onPress={()=>setDebtSide('receivable')}/><Chip label={t('reportMetricPayable')} active={debtSide==='payable'} onPress={()=>setDebtSide('payable')}/><Chip label={t('reportsSettled')} active={debtSide==='clear'} onPress={()=>setDebtSide('clear')}/></View></FilterBlock>
       </>:null}
       {type==='party-ledger'?<>
-        <FilterBlock label={t('reportsPartyType')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsCustomer')} active={partyType==='customer'} onPress={()=>{setPartyType('customer');setPartyId('')}}/><Chip label={t('reportsSupplier')} active={partyType==='supplier'} onPress={()=>{setPartyType('supplier');setPartyId('')}}/></View></FilterBlock>
+        <FilterBlock label={t('reportsPartyType')}><SegmentedControl value={partyType} options={[{value:'customer',label:t('reportsCustomer')},{value:'supplier',label:t('reportsSupplier')}]} onChange={value=>{setPartyType(value);setPartyId('')}}/></FilterBlock>
         <FilterBlock label={t('reportsSelectParty')}><Button title={selectedParty?.name??t('reportsSelectParty')} variant="secondary" onPress={()=>{setFiltersOpen(false);setPartyPicker(true)}}/>{partyId?<Button compact title={t('reportsClearSelection')} variant="ghost" onPress={()=>setPartyId('')}/>:null}</FilterBlock>
       </>:null}
     </FilterSheet>
