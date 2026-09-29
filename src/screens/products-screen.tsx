@@ -276,7 +276,7 @@ function ProductRow({item,first,last,canRestore,onRestore,onPress}:{item:Product
     <View style={styles.trailing}>
       {item.isArchived&&canRestore?<Pressable accessibilityRole="button" onPress={event=>{event.stopPropagation();onRestore()}} style={({pressed})=>[styles.restoreButton,pressed&&styles.restorePressed]}><AppText variant="caption" style={styles.restoreText}>{t('restore')}</AppText></Pressable>:<>
         <View style={styles.priceValue}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={item.piecePrice??0}/></View>
-        <View style={styles.priceValue}><AppText variant="caption" muted>{t('purchasePrice')}</AppText><Money value={purchaseCost}/></View>
+        <View style={styles.priceValue}><AppText variant="caption" muted>{t('purchaseLastCost')}</AppText><Money value={purchaseCost}/></View>
         <AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>
       </>}
     </View>
@@ -319,7 +319,7 @@ function ProductDetail({product,warehouses,canEdit,onClose,onEdit}:{product:Prod
         </FramedSection>
 
         <FinancialSummary items={[
-          {label:t('purchasePrice'),value:purchaseCost},
+          {label:t('purchaseLastCost'),value:purchaseCost},
           {label:t('salePrice'),value:product.piecePrice??0,emphasize:true},
           {label:t('wholesalePrice'),value:product.wholesalePrice??0},
         ]}/>
