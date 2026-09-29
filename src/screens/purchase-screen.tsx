@@ -588,7 +588,7 @@ function PurchaseInvoiceLine({line,warehouseId,last,onDecrease,onIncrease,onEdit
     unitPriceLabel={t('purchasePrice')}
     unitPrice={<Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.invoicePrice,line.unitPrice<=0&&styles.priceMissing,pressed&&styles.pressed]}><AppText variant="subheading">{money(line.unitPrice)}</AppText></Pressable>}
     lineTotalLabel={t('total')}
-    lineTotal={<Money value={Math.round(line.quantity*line.unitPrice)}/>}
+    lineTotal={<AppText variant="subheading" numberOfLines={1} style={styles.lineMoney}>{money(Math.round(line.quantity*line.unitPrice))}</AppText>}
     actions={<Pressable accessibilityRole="button" accessibilityLabel={t('delete')} hitSlop={4} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>}
     last={last}
   />;
@@ -684,6 +684,7 @@ const styles=StyleSheet.create({
   plusText:{color:colors.primary,lineHeight:24},
   lastRow:{borderBottomWidth:0},
   pressed:{opacity:.72,transform:[{scale:.99}]},
+  lineMoney:{fontWeight:'800',fontVariant:['tabular-nums'],fontSize:16},
   invoicePrice:{minHeight:34,alignItems:'center',justifyContent:'center',paddingHorizontal:2,borderRadius:radius.sm},
   priceMissing:{backgroundColor:colors.warningSoft,borderWidth:1,borderColor:colors.warning,paddingHorizontal:spacing.xs},
   deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
