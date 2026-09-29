@@ -273,7 +273,7 @@ function ProductRow({item,first,last,canRestore,onRestore,onPress}:{item:Product
     </View>
 
     <View style={styles.trailing}>
-      {item.isArchived&&canRestore?<Button compact title={t('restore')} variant="secondary" onPress={onRestore}/>:<>
+      {item.isArchived&&canRestore?<Pressable accessibilityRole="button" onPress={event=>{event.stopPropagation();onRestore()}} style={({pressed})=>[styles.restoreButton,pressed&&styles.restorePressed]}><AppText variant="caption" style={styles.restoreText}>{t('restore')}</AppText></Pressable>:<>
         <View style={styles.priceValue}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={item.piecePrice??0}/></View>
         <View style={styles.priceValue}><AppText variant="caption" muted>{t('purchasePrice')}</AppText><Money value={purchaseCost}/></View>
         <AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>
@@ -448,6 +448,9 @@ const styles=StyleSheet.create({
   priceValue:{alignItems:'flex-end',gap:1},
   arrow:{color:colors.textSoft,lineHeight:18},
   pressed:{backgroundColor:colors.surfaceMuted},
+  restoreButton:{minHeight:36,paddingHorizontal:spacing.sm,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.primary,backgroundColor:colors.surface},
+  restorePressed:{backgroundColor:colors.primaryFaint},
+  restoreText:{color:colors.primary,fontWeight:'700'},
   headerAdd:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primary},
   headerAddPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.98}]},
   headerPlus:{color:colors.onPrimary,fontSize:24,lineHeight:25},
