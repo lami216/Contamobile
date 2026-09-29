@@ -8,7 +8,7 @@ import { listParties, listPaymentAccounts, listProductCategories, listProducts }
 import { runReport, salesTrend, type ReportData, type ReportFilters, type ReportType, type SalesTrendPoint } from '@/db/report-queries';
 import { PartyPicker, ProductPicker } from '@/components/pickers';
 import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SelectRow, Surface } from '@/components/ui';
-import { Sheet } from '@/components/mobile-interactions';
+import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
 import { useAuth } from '@/auth/provider';
@@ -278,7 +278,15 @@ export function ReportsScreen(){
       ><AppText variant="subheading" style={styles.flex}>{t(report.label)}</AppText>{type===report.id?<View style={styles.selectedDot}/>:null}</Pressable>)}</GroupedList>
     </Sheet>
 
-    <Sheet visible={filtersOpen} title={t('reportsFiltersTitle')} onClose={()=>setFiltersOpen(false)} footer={<><Button title={t('confirm')} onPress={()=>setFiltersOpen(false)}/>{activeFilterCount?<Button title={t('reportsResetFilters')} variant="ghost" onPress={resetFilters}/>:null}</>}>
+    <FilterSheet
+      visible={filtersOpen}
+      title={t('reportsFiltersTitle')}
+      onClose={()=>setFiltersOpen(false)}
+      applyLabel={t('confirm')}
+      onApply={()=>setFiltersOpen(false)}
+      resetLabel={activeFilterCount?t('reportsResetFilters'):undefined}
+      onReset={activeFilterCount?resetFilters:undefined}
+    >
       {productFilter&&categories.length?<FilterBlock label={t('reportsCategory')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAllCategories')} active={!categoryId} onPress={()=>{setCategoryId('');setProductId('')}}/>{categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>{setCategoryId(category.id);setProductId('')}}/>)}</View></FilterBlock>:null}
       {productFilter?<FilterBlock label={t('reportsProduct')}><Button title={selectedProduct?.name??t('reportsAllProducts')} variant="secondary" onPress={()=>{setFiltersOpen(false);setProductPicker(true)}}/>{productId?<Button compact title={t('reportsClearSelection')} variant="ghost" onPress={()=>setProductId('')}/>:null}</FilterBlock>:null}
       {accountFilter?<FilterBlock label={t('reportsPaymentAccount')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsAll')} active={!accountId} onPress={()=>setAccountId('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={accountId===account.id} onPress={()=>setAccountId(account.id)}/>)}</View></FilterBlock>:null}
@@ -295,7 +303,7 @@ export function ReportsScreen(){
         <FilterBlock label={t('reportsPartyType')}><View style={[styles.wrap,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('reportsCustomer')} active={partyType==='customer'} onPress={()=>{setPartyType('customer');setPartyId('')}}/><Chip label={t('reportsSupplier')} active={partyType==='supplier'} onPress={()=>{setPartyType('supplier');setPartyId('')}}/></View></FilterBlock>
         <FilterBlock label={t('reportsSelectParty')}><Button title={selectedParty?.name??t('reportsSelectParty')} variant="secondary" onPress={()=>{setFiltersOpen(false);setPartyPicker(true)}}/>{partyId?<Button compact title={t('reportsClearSelection')} variant="ghost" onPress={()=>setPartyId('')}/>:null}</FilterBlock>
       </>:null}
-    </Sheet>
+    </FilterSheet>
 
     <ProductPicker visible={productPicker} products={filteredProducts} onClose={()=>setProductPicker(false)} onSelect={product=>setProductId(product.id)}/>
     <PartyPicker visible={partyPicker} parties={parties.filter(party=>party.partyType===partyType)} directLabel={t('reportsClearSelection')} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??'')}/>
