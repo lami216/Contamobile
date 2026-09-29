@@ -27,7 +27,7 @@ import { FilterSheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
 import { useAuth } from '@/auth/provider';
-import { colors, radius, spacing, touch } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 const kindLabels:Record<DocumentRecord['kind'],MessageKey>={
   sale:'recordKindSale',
