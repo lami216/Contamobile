@@ -27,6 +27,7 @@ import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing, touch } from '@/theme';
 
 const num=(value:string)=>value.trim()===''?null:Number(value);
+const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 const stockOf=(item:Product)=>Object.values(item.stocks??{}).reduce((a,b)=>a+b,0);
 type ProductState='active'|'archived';
 
@@ -148,7 +149,7 @@ export function ProductsScreen(){
 
         <View style={[styles.toolsLine,{flexDirection:isRTL?'row-reverse':'row'}]}>
           {canManageCategories?<Button compact title={t('productsManageCategories')} variant="ghost" onPress={()=>setCategoryManager(true)}/>:<View/>}
-          <Badge label={number(items.length)} tone="neutral"/>
+          <Badge label={format(t('productsCount'),{count:number(items.length)})} tone="neutral"/>
         </View>
       </View>}
       ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')}/>}
