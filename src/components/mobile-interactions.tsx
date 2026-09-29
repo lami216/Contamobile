@@ -5,10 +5,10 @@ import { AppText, Button, Money } from '@/components/ui';
 import { colors, elevation, radius, spacing, touch } from '@/theme';
 import { useI18n } from '@/i18n/provider';
 
-export function QuantityStepper({value,onDecrease,onIncrease,onEdit}:{value:number;onDecrease:()=>void;onIncrease:()=>void;onEdit?:()=>void}){
-  const {isRTL,number}=useI18n();
-  const controls=<><Pressable accessibilityRole="button" accessibilityLabel="decrease" onPress={onDecrease} style={({pressed})=>[styles.stepButton,pressed&&styles.stepPressed]}><AppText variant="heading" style={styles.stepSymbol}>−</AppText></Pressable><Pressable accessibilityRole={onEdit?'button':undefined} onPress={onEdit} disabled={!onEdit} style={({pressed})=>[styles.stepValue,pressed&&onEdit&&styles.stepPressed]}><AppText variant="subheading" style={styles.stepNumber}>{number(value)}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel="increase" onPress={onIncrease} style={({pressed})=>[styles.stepButton,styles.stepButtonPrimary,pressed&&styles.stepPressed]}><AppText variant="heading" style={styles.stepPlus}>+</AppText></Pressable></>;
-  return <View style={[styles.stepper,{flexDirection:isRTL?'row-reverse':'row'}]}>{controls}</View>;
+export function QuantityStepper({value,onDecrease,onIncrease,onEdit,compact=false}:{value:number;onDecrease:()=>void;onIncrease:()=>void;onEdit?:()=>void;compact?:boolean}){
+  const {isRTL,number}=useI18n(),hitSlop=compact?5:0;
+  const controls=<><Pressable accessibilityRole="button" accessibilityLabel="decrease" hitSlop={hitSlop} onPress={onDecrease} style={({pressed})=>[styles.stepButton,compact&&styles.stepButtonCompact,pressed&&styles.stepPressed]}><AppText variant="heading" style={styles.stepSymbol}>−</AppText></Pressable><Pressable accessibilityRole={onEdit?'button':undefined} hitSlop={hitSlop} onPress={onEdit} disabled={!onEdit} style={({pressed})=>[styles.stepValue,compact&&styles.stepValueCompact,pressed&&onEdit&&styles.stepPressed]}><AppText variant="subheading" style={styles.stepNumber}>{number(value)}</AppText></Pressable><Pressable accessibilityRole="button" accessibilityLabel="increase" hitSlop={hitSlop} onPress={onIncrease} style={({pressed})=>[styles.stepButton,styles.stepButtonPrimary,compact&&styles.stepButtonCompact,pressed&&styles.stepPressed]}><AppText variant="heading" style={styles.stepPlus}>+</AppText></Pressable></>;
+  return <View style={[styles.stepper,compact&&styles.stepperCompact,{flexDirection:isRTL?'row-reverse':'row'}]}>{controls}</View>;
 }
 
 export function BottomActionBar({label,total,count,onPress,disabled=false,loading=false,secondary}:{label:string;total:number;count?:number;onPress:()=>void;disabled?:boolean;loading?:boolean;secondary?:string}){
@@ -43,9 +43,12 @@ export function CompactMetric({label,value,tone='normal'}:{label:string;value:nu
 const styles=StyleSheet.create({
   disabled:{opacity:.45},
   stepper:{alignItems:'center',borderRadius:radius.md,backgroundColor:colors.surfaceStrong,padding:2,gap:2,borderWidth:1,borderColor:colors.borderStrong},
+  stepperCompact:{padding:1,gap:1},
   stepButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
+  stepButtonCompact:{width:34,height:34},
   stepButtonPrimary:{backgroundColor:colors.primarySoft},
   stepValue:{minWidth:46,height:touch.min,alignItems:'center',justifyContent:'center'},
+  stepValueCompact:{minWidth:34,height:34},
   stepNumber:{fontVariant:['tabular-nums']},
   stepSymbol:{lineHeight:25,color:colors.text},
   stepPlus:{lineHeight:25,color:colors.primary},
