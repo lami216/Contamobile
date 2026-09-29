@@ -27,8 +27,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Restore Node dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package.json') }}
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Typecheck
         run: npm run typecheck
@@ -56,8 +64,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Restore Node dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package.json') }}
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Export Expo web app
         run: npx expo export --platform web --output-dir dist
@@ -127,8 +143,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Restore Node dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package.json') }}
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Prebuild Android
         run: npx expo prebuild --platform android --no-install
@@ -144,7 +168,7 @@ jobs:
         run: |
           set -euxo pipefail
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache --parallel
           cp android/app/build/outputs/apk/release/app-release.apk alkarna-ux-preview.apk
           test -s alkarna-ux-preview.apk
 
