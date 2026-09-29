@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/provider';
 import { exportAndShareBackup, chooseAndRestoreBackup } from '@/services/backup-service';
 import { chooseDesktopBackup, importDesktopBackup } from '@/services/desktop-import-service';
 import { getPrintSettings, printProfileLabel, printProfiles, savePrintSettings, type PrintProfile } from '@/services/print-settings-service';
-import { AppText, Badge, Button, Chip, EmptyState, GroupedList, IconTile, PageHeader, Screen, SectionTitle, Surface } from '@/components/ui';
+import { AppText, Badge, Button, EmptyState, GroupedList, IconTile, PageHeader, Screen, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
 import { useI18n } from '@/i18n/provider';
 import { colors, radius, spacing } from '@/theme';
 
@@ -105,10 +105,11 @@ export function SettingsScreen(){
     <View style={styles.section}>
       <SectionTitle title={t('language')} subtitle={t('settingsLanguageHint')}/>
       <Surface style={styles.languageSurface}>
-        <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          <Chip label={t('arabic')} active={locale==='ar'} onPress={()=>void setLocale('ar')}/>
-          <Chip label={t('french')} active={locale==='fr'} onPress={()=>void setLocale('fr')}/>
-        </View>
+        <SegmentedControl
+          value={locale}
+          options={[{value:'ar',label:t('arabic')},{value:'fr',label:t('french')}]}
+          onChange={value=>void setLocale(value)}
+        />
       </Surface>
     </View>
 
@@ -185,7 +186,6 @@ const styles=StyleSheet.create({
   header:{gap:spacing.sm},
   status:{gap:spacing.xs,flexWrap:'wrap'},
   section:{gap:spacing.sm},
-  chips:{flexWrap:'wrap',gap:spacing.xs},
   languageSurface:{padding:spacing.sm},
   printPanel:{gap:spacing.xs},
   printCard:{minHeight:96,alignItems:'center',gap:spacing.md,padding:spacing.sm,borderRadius:radius.md,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface},
