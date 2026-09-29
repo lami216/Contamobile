@@ -80,6 +80,19 @@ export function AccountsScreen(){
     {value:'adjustments',label:'accountsAdjustments',allowed:canAdjust},
   ];
 
+  const advancedFilterCount=tab==='movements'
+    ?[movementAccount,movementType].filter(Boolean).length
+    :tab==='transfers'
+      ?[transferFromAccount,transferToAccount].filter(Boolean).length
+      :tab==='adjustments'
+        ?[adjustAccountFilter,adjustType].filter(Boolean).length
+        :0;
+  const resetAdvancedFilters=()=>{
+    if(tab==='movements'){setMovementAccount('');setMovementType('')}
+    else if(tab==='transfers'){setTransferFromAccount('');setTransferToAccount('')}
+    else if(tab==='adjustments'){setAdjustAccountFilter('');setAdjustType('')}
+  };
+
   if(!canView)return <Screen><EmptyState title={t('accountsNoPermission')}/></Screen>;
 
   const runPayload=async(payload:Payload)=>{
@@ -171,7 +184,15 @@ export function AccountsScreen(){
       </>:null}
     </ScrollView>
 
-    <FilterSheet visible={filtersOpen&&tab!=='accounts'} title={t('reportsFilters')} onClose={()=>setFiltersOpen(false)} applyLabel={t('confirm')} onApply={()=>setFiltersOpen(false)}>
+    <FilterSheet
+      visible={filtersOpen&&tab!=='accounts'}
+      title={t('reportsFilters')}
+      onClose={()=>setFiltersOpen(false)}
+      applyLabel={t('confirm')}
+      onApply={()=>setFiltersOpen(false)}
+      resetLabel={advancedFilterCount?t('reportsResetFilters'):undefined}
+      onReset={advancedFilterCount?resetAdvancedFilters:undefined}
+    >
       {tab==='movements'?<>
         <FilterLabel label={t('accountsFilterAccount')}/>
         <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={t('accountsAll')} active={!movementAccount} onPress={()=>setMovementAccount('')}/>{accounts.map(account=><Chip key={account.id} label={account.name} active={movementAccount===account.id} onPress={()=>setMovementAccount(account.id)}/>)}</View>
