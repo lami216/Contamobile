@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,32 +7,56 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { DocumentRecord, Party, PaymentAccount, PricingMode, Product, ProductCategory, Warehouse } from '@/domain/types';
 import { sellingPrice, validateSaleDraft } from '@/domain/accounting';
 import { getDocumentById } from '@/db/document-queries';
 import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postSale } from '@/services/accounting-service';
 import { PartyPicker } from '@/components/pickers';
-import { AppText, Button, EmptyState, Field, Money, PageHeader, Screen } from '@/components/ui';
-import { QuantityStepper, Sheet } from '@/components/mobile-interactions';
+import {
+  AlertCard,
+  AppText,
+  Badge,
+  Button,
+  Chip,
+  EmptyState,
+  FinancialSummary,
+  FormField,
+  FramedSection,
+  GroupedList,
+  InvoiceLine as InvoiceLineView,
+  Money,
+  PageHeader,
+  PaymentMethodCard,
+  Screen,
+  SearchField,
+  SegmentedControl,
+  SelectRow,
+  Surface,
+} from '@/components/ui';
+import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-import { colors, elevation, radius, spacing, touch } from '@/theme';
+import { colors, radius, spacing, touch } from '@/theme';
 
-type InvoiceLine={product:Product;quantity:number;unitPrice:number;stock:number;priceOverridden:boolean};
+type SaleLine={product:Product;quantity:number;unitPrice:number;stock:number;priceOverridden:boolean};
 type PosStage='invoice'|'payment'|'success';
+type SettlementType='payNow'|'credit';
 type SuccessState={
   documentId:string;
   document:DocumentRecord|null;
   total:number;
+  paid:number;
+  due:number;
   change:number;
   occurredAt:string;
+  partyName:string|null;
+  paymentName:string|null;
+  settlement:SettlementType;
   warnings:Array<{name:string;remaining:number}>;
 };
 
@@ -46,9 +70,9 @@ export function PosScreen(){
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[parties,setParties]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
   const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[pricingMode,setPricingMode]=useState<PricingMode>('retail');
-  const [lines,setLines]=useState<InvoiceLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
+  const [lines,setLines]=useState<SaleLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
   const [stage,setStage]=useState<PosStage>('invoice'),[productPicker,setProductPicker]=useState(false);
-  const [paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
+  const [settlement,setSettlement]=useState<SettlementType>('payNow'),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[partyPicker,setPartyPicker]=useState(false),[busy,setBusy]=useState(false);
   const [quantityLineId,setQuantityLineId]=useState<string|null>(null),[quantityDraft,setQuantityDraft]=useState('1');
   const [priceLineId,setPriceLineId]=useState<string|null>(null),[priceDraft,setPriceDraft]=useState('');
   const [success,setSuccess]=useState<SuccessState|null>(null);
@@ -58,12 +82,21 @@ export function PosScreen(){
     setLoading(true);
     try{
       const [w,a,p,cats]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'customer','',300),listProductCategories(db)]);
-      const active=a.filter(x=>x.isActive&&!x.isArchived);
-      const selected=w.find(x=>x.isSalesDefault)?.id??w[0]?.id??'';
-      setWarehouses(w);setAccounts(active);setParties(p);setCategories(cats);setWarehouseId(current=>current||selected);
+      const active=a.filter(account=>account.isActive&&!account.isArchived);
+      const selected=w.find(warehouse=>warehouse.isSalesDefault)?.id??w[0]?.id??'';
+      setWarehouses(w);
+      setAccounts(active);
+      setParties(p);
+      setCategories(cats);
+      setWarehouseId(current=>current||selected);
       setCategoryId(current=>current&&cats.some(category=>category.id===current)?current:'');
-      setPaymentMethod(current=>current==='note'||active.some(x=>x.id===current||x.code===current)?current:active.find(x=>x.code==='cash')?.id||active[0]?.id||'note');
-    }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setLoading(false)}
+      setPaymentMethod(current=>{
+        const match=active.find(account=>account.id===current||account.code===current);
+        return match?.id??active.find(account=>account.code==='cash')?.id??active[0]?.id??'';
+      });
+      setSettlement(current=>active.length?current:'credit');
+    }catch(error){Alert.alert(t('error'),errorMessage(error))}
+    finally{setLoading(false)}
   },[allowed,db,errorMessage,t]);
 
   useFocusEffect(useCallback(()=>{void loadBase()},[loadBase]));
@@ -82,16 +115,19 @@ export function PosScreen(){
   },[allowed,categoryId,db,errorMessage,search,t,warehouseId]);
 
   const total=useMemo(()=>lines.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice),0),[lines]);
-  const selectedParty=parties.find(p=>p.id===partyId)??null;
-  const selectedWarehouse=warehouses.find(w=>w.id===warehouseId)??null;
+  const totalQuantity=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
+  const selectedParty=parties.find(party=>party.id===partyId)??null;
+  const selectedWarehouse=warehouses.find(warehouse=>warehouse.id===warehouseId)??null;
+  const selectedAccount=accounts.find(account=>account.id===paymentMethod)??null;
   const priceLine=lines.find(line=>line.product.id===priceLineId)??null;
-  const tenderValue=paymentMethod==='note'?0:Number(tender.trim()===''?total:tender);
+
+  const tenderValue=settlement==='credit'?0:Number(tender.trim()===''?total:tender);
   const normalizedTender=Number.isFinite(tenderValue)&&tenderValue>=0?tenderValue:0;
-  const underpaid=paymentMethod!=='note'&&normalizedTender<total;
-  const paidValue=paymentMethod==='note'?0:total;
-  const dueValue=paymentMethod==='note'?total:0;
-  const changeValue=paymentMethod==='note'?0:Math.max(normalizedTender-total,0);
-  const needsParty=paymentMethod==='note';
+  const underpaid=settlement==='payNow'&&normalizedTender<total;
+  const paidValue=settlement==='credit'?0:total;
+  const dueValue=settlement==='credit'?total:0;
+  const changeValue=settlement==='credit'?0:Math.max(normalizedTender-total,0);
+  const needsParty=settlement==='credit';
 
   const addProduct=(product:Product)=>{
     const stock=Number(product.stocks?.[warehouseId]??0);
@@ -104,13 +140,13 @@ export function PosScreen(){
   };
 
   const changeQuantity=(productId:string,next:number)=>setLines(current=>{
-    const line=current.find(x=>x.product.id===productId);
+    const line=current.find(item=>item.product.id===productId);
     if(!line)return current;
-    if(next<=0)return current.filter(x=>x.product.id!==productId);
-    return current.map(x=>x.product.id===productId?{...x,quantity:Math.min(next,x.stock)}:x);
+    if(next<=0)return current.filter(item=>item.product.id!==productId);
+    return current.map(item=>item.product.id===productId?{...item,quantity:Math.min(next,item.stock)}:item);
   });
 
-  const openQuantity=(line:InvoiceLine)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
+  const openQuantity=(line:SaleLine)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
   const saveQuantity=()=>{
     if(!quantityLineId)return;
     const value=Number(quantityDraft);
@@ -118,12 +154,15 @@ export function PosScreen(){
     setQuantityLineId(null);
   };
 
-  const openPrice=(line:InvoiceLine)=>{setPriceLineId(line.product.id);setPriceDraft(String(line.unitPrice))};
+  const openPrice=(line:SaleLine)=>{setPriceLineId(line.product.id);setPriceDraft(String(line.unitPrice))};
   const closePrice=()=>{setPriceLineId(null);setPriceDraft('')};
   const savePrice=()=>{
     if(!priceLineId||!priceLine)return;
     const value=Number(priceDraft);
-    if(!Number.isSafeInteger(value)||value<=0){Alert.alert(t('error'),format(t('posInvalidSalePrice'),{product:priceLine.product.name}));return}
+    if(!Number.isSafeInteger(value)||value<=0){
+      Alert.alert(t('error'),format(t('posInvalidSalePrice'),{product:priceLine.product.name}));
+      return;
+    }
     setLines(current=>current.map(line=>line.product.id===priceLineId?{...line,unitPrice:value,priceOverridden:true}:line));
     closePrice();
   };
@@ -131,6 +170,16 @@ export function PosScreen(){
   const changeMode=(mode:PricingMode)=>{
     setPricingMode(mode);
     setLines(current=>current.map(line=>line.priceOverridden?line:{...line,unitPrice:sellingPrice(line.product,mode)}));
+  };
+
+  const changeSettlement=(next:SettlementType)=>{
+    setSettlement(next);
+    if(next==='credit'){
+      setTender('0');
+      return;
+    }
+    setTender(String(total));
+    if(!paymentMethod&&accounts[0])setPaymentMethod(accounts[0].id);
   };
 
   const validationMessage=(code:string,productName='')=>{
@@ -153,7 +202,10 @@ export function PosScreen(){
       else Alert.alert(t('error'),error&&'productName'in error?validationMessage(error.code,error.productName):validationMessage(error?.code??'missingProduct'));
       return;
     }
-    const proceed=()=>{setTender(String(total));setStage('payment')};
+    const proceed=()=>{
+      if(settlement==='payNow')setTender(String(total));
+      setStage('payment');
+    };
     if(check.warnings.length){
       Alert.alert(
         t('posPriceWarningTitle'),
@@ -167,24 +219,90 @@ export function PosScreen(){
 
   const completeSale=async()=>{
     if(!lines.length||!warehouseId||busy)return;
-    if(paymentMethod!=='note'&&(!Number.isFinite(tenderValue)||tenderValue<0)){Alert.alert(t('error'),t('posInvalidTender'));return}
-    if(underpaid){Alert.alert(t('error'),t('posPartialPaymentError'));return}
-    if(needsParty&&!partyId){Alert.alert(t('customer'),t('posCreditCustomerRequired'));return}
+    if(settlement==='payNow'&&!paymentMethod){
+      Alert.alert(t('paymentMethod'),t('posPaymentMethodRequired'));
+      return;
+    }
+    if(settlement==='payNow'&&(!Number.isFinite(tenderValue)||tenderValue<0)){
+      Alert.alert(t('error'),t('posInvalidTender'));
+      return;
+    }
+    if(underpaid){
+      Alert.alert(t('error'),t('posPartialPaymentError'));
+      return;
+    }
+    if(needsParty&&!partyId){
+      Alert.alert(t('customer'),t('posCreditCustomerRequired'));
+      return;
+    }
+
     setBusy(true);
-    const completedTotal=total,completedChange=changeValue,completedLines=lines,completedAt=new Date().toISOString();
+    const completedTotal=total;
+    const completedPaid=paidValue;
+    const completedDue=dueValue;
+    const completedChange=changeValue;
+    const completedLines=lines;
+    const completedAt=new Date().toISOString();
+    const completedPartyName=selectedParty?.name??null;
+    const completedPaymentName=selectedAccount?.name??null;
+    const completedSettlement=settlement;
+    const method=settlement==='credit'?'note':paymentMethod;
+
     try{
-      const documentId=await postSale(db,{warehouseId,partyId,paymentMethod,cashAmount:paidValue,pricingMode,lines:completedLines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice}))});
+      const documentId=await postSale(db,{
+        warehouseId,
+        partyId,
+        paymentMethod:method,
+        cashAmount:completedPaid,
+        pricingMode,
+        lines:completedLines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice})),
+      });
       let document:DocumentRecord|null=null;
       try{document=await getDocumentById(db,documentId)}catch{}
-      const lowStock=completedLines.map(line=>({name:line.product.name,remaining:Math.max(0,line.stock-line.quantity)})).filter(item=>item.remaining<=3);
-      setLines([]);setPartyId(null);setTender('');setSearch('');setProductPicker(false);closePrice();setQuantityLineId(null);
-      setSuccess({documentId,document,total:completedTotal,change:completedChange,occurredAt:document?.occurredAt??completedAt,warnings:lowStock});
+      const lowStock=completedLines
+        .map(line=>({name:line.product.name,remaining:Math.max(0,line.stock-line.quantity)}))
+        .filter(item=>item.remaining<=3);
+
+      setLines([]);
+      setPartyId(null);
+      setTender('');
+      setSearch('');
+      setProductPicker(false);
+      closePrice();
+      setQuantityLineId(null);
+      setSuccess({
+        documentId,
+        document,
+        total:document?.total??completedTotal,
+        paid:document?.paidTotal??completedPaid,
+        due:document?.dueTotal??completedDue,
+        change:completedChange,
+        occurredAt:document?.occurredAt??completedAt,
+        partyName:completedPartyName,
+        paymentName:completedSettlement==='payNow'?completedPaymentName:null,
+        settlement:completedSettlement,
+        warnings:lowStock,
+      });
       setStage('success');
-      const fresh=await listProducts(db,'',warehouseId,false,18,0,categoryId);setResults(fresh);
-    }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
+      const fresh=await listProducts(db,'',warehouseId,false,18,0,categoryId);
+      setResults(fresh);
+    }catch(error){Alert.alert(t('error'),errorMessage(error))}
+    finally{setBusy(false)}
   };
 
-  const startNewSale=()=>{setSuccess(null);setPartyId(null);setTender('');setSearch('');setProductPicker(false);closePrice();setQuantityLineId(null);setStage('invoice')};
+  const startNewSale=()=>{
+    setSuccess(null);
+    setPartyId(null);
+    setTender('');
+    setSearch('');
+    setProductPicker(false);
+    closePrice();
+    setQuantityLineId(null);
+    setSettlement(accounts.length?'payNow':'credit');
+    if(!paymentMethod&&accounts[0])setPaymentMethod(accounts[0].id);
+    setStage('invoice');
+  };
+
   const back=()=>{
     if(stage==='invoice'){router.back();return}
     if(stage==='payment'){setStage('invoice');return}
@@ -211,8 +329,12 @@ export function PosScreen(){
         warehouses={warehouses}
         warehouseId={warehouseId}
         selectedWarehouse={selectedWarehouse}
+        selectedParty={selectedParty}
         lines={lines}
+        total={total}
+        totalQuantity={totalQuantity}
         setWarehouseId={setWarehouseId}
+        onChooseParty={()=>setPartyPicker(true)}
         onAddProduct={()=>setProductPicker(true)}
         onChangeQuantity={changeQuantity}
         onEditQuantity={openQuantity}
@@ -222,8 +344,10 @@ export function PosScreen(){
       {stage==='payment'?<PaymentStage
         total={total}
         accounts={accounts}
+        settlement={settlement}
+        setSettlement={changeSettlement}
         paymentMethod={paymentMethod}
-        setPaymentMethod={method=>{setPaymentMethod(method);setTender(method==='note'?'0':String(total))}}
+        setPaymentMethod={setPaymentMethod}
         tender={tender}
         setTender={setTender}
         normalizedTender={normalizedTender}
@@ -236,362 +360,385 @@ export function PosScreen(){
         onBack={back}
       />:null}
 
-      {stage==='invoice'?<InvoiceBottomBar label={t('posContinuePayment')} total={total} count={lines.length} disabled={!lines.length} onPress={openPayment}/>:null}
-      {stage==='payment'?<PaymentBottomBar label={t('completeSale')} disabled={underpaid||(needsParty&&!selectedParty)||!lines.length} loading={busy} onPress={()=>void completeSale()}/>:null}
+      {stage==='invoice'?<BottomActionBar
+        label={t('posContinuePayment')}
+        total={total}
+        secondary={format(t('posProductsCount'),{count:lines.length})}
+        disabled={!lines.length}
+        onPress={openPayment}
+      />:null}
+      {stage==='payment'?<BottomActionBar
+        label={t('completeSale')}
+        total={total}
+        secondary={settlement==='credit'?t('posPaymentStatusCredit'):t('posPaymentStatusPaid')}
+        disabled={underpaid||(needsParty&&!selectedParty)||(settlement==='payNow'&&!paymentMethod)||!lines.length}
+        loading={busy}
+        onPress={()=>void completeSale()}
+      />:null}
     </KeyboardAvoidingView>
 
-    <Sheet visible={productPicker} title={t('posProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/> }>
+    <Sheet visible={productPicker} title={t('posProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
       <View style={styles.pickerControls}>
-        <SearchBar value={search} onChangeText={setSearch} loading={searching} placeholder={t('posSearchPlaceholder')}/>
+        <View style={styles.pickerSearchRow}>
+          <View style={styles.flex}><SearchField value={search} onChangeText={setSearch} returnKeyType="search" autoCapitalize="none" placeholder={t('posSearchPlaceholder')}/></View>
+          {searching?<ActivityIndicator size="small" color={colors.primary}/>:null}
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          <FilterChip label={t('posAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
-          {categories.map(category=><FilterChip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
+          <Chip label={t('posAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
+          {categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
         </ScrollView>
       </View>
-      <View style={styles.productPanel}>
-        {results.length?results.map((product,index)=><ProductSaleRow key={product.id} product={product} warehouseId={warehouseId} pricingMode={pricingMode} onAdd={()=>addProduct(product)} last={index===results.length-1}/>):<EmptyState title={searching?t('loading'):t('noResults')}/>} 
-      </View>
+      <GroupedList>
+        {results.length?results.map((product,index)=><ProductSaleRow
+          key={product.id}
+          product={product}
+          warehouseId={warehouseId}
+          pricingMode={pricingMode}
+          onAdd={()=>addProduct(product)}
+          last={index===results.length-1}
+        />):<EmptyState title={searching?t('loading'):t('noResults')}/>}
+      </GroupedList>
     </Sheet>
 
     <PartyPicker visible={partyPicker} parties={parties} directLabel={t('posCashCustomer')} onClose={()=>setPartyPicker(false)} onSelect={party=>setPartyId(party?.id??null)}/>
 
     <Sheet visible={Boolean(quantityLineId)} title={t('posEditQuantity')} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}>
-      <Field label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
+      <FormField label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
     </Sheet>
 
     <Sheet visible={Boolean(priceLineId)} title={t('posEditSalePrice')} onClose={closePrice} footer={<View style={[styles.sheetActions,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.sheetAction}><Button title={t('cancel')} variant="secondary" onPress={closePrice}/></View><View style={styles.sheetAction}><Button title={t('save')} onPress={savePrice}/></View></View>}>
       {priceLine?<View style={styles.priceEditor}>
         <AppText variant="subheading">{priceLine.product.name}</AppText>
-        <View style={[styles.currentPrice,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{t('posCurrentPrice')}</AppText><Money value={priceLine.unitPrice}/></View>
-        <Field label={t('salePrice')} value={priceDraft} onChangeText={setPriceDraft} keyboardType="number-pad" autoFocus selectTextOnFocus/>
+        <Surface tone="muted" style={[styles.currentPrice,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <AppText variant="caption" muted>{t('posCurrentPrice')}</AppText>
+          <Money value={priceLine.unitPrice}/>
+        </Surface>
+        <FormField label={t('salePrice')} value={priceDraft} onChangeText={setPriceDraft} keyboardType="number-pad" autoFocus selectTextOnFocus trailing={<AppText variant="caption" muted>MRU</AppText>}/>
       </View>:null}
     </Sheet>
   </Screen>;
 }
 
 function InvoiceStage({
-  onBack,pricingMode,changeMode,warehouses,warehouseId,selectedWarehouse,lines,setWarehouseId,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
+  onBack,pricingMode,changeMode,warehouses,warehouseId,selectedWarehouse,selectedParty,lines,total,totalQuantity,setWarehouseId,onChooseParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
 }:{
-  onBack:()=>void;pricingMode:PricingMode;changeMode:(mode:PricingMode)=>void;warehouses:Warehouse[];warehouseId:string;selectedWarehouse:Warehouse|null;lines:InvoiceLine[];setWarehouseId:(id:string)=>void;
-  onAddProduct:()=>void;onChangeQuantity:(id:string,value:number)=>void;onEditQuantity:(line:InvoiceLine)=>void;onEditPrice:(line:InvoiceLine)=>void;
+  onBack:()=>void;
+  pricingMode:PricingMode;
+  changeMode:(mode:PricingMode)=>void;
+  warehouses:Warehouse[];
+  warehouseId:string;
+  selectedWarehouse:Warehouse|null;
+  selectedParty:Party|null;
+  lines:SaleLine[];
+  total:number;
+  totalQuantity:number;
+  setWarehouseId:(id:string)=>void;
+  onChooseParty:()=>void;
+  onAddProduct:()=>void;
+  onChangeQuantity:(id:string,value:number)=>void;
+  onEditQuantity:(line:SaleLine)=>void;
+  onEditPrice:(line:SaleLine)=>void;
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
-    <PageHeader title={t('posNewSaleTitle')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined} onBack={onBack}/>
+    <PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <View style={[styles.compactControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <PricingSwitch value={pricingMode} onChange={changeMode}/>
-        {warehouses.length>1?<View style={styles.warehouseLabel}><AppText variant="caption" muted numberOfLines={1}>{selectedWarehouse?.name??t('warehouse')}</AppText></View>:null}
-      </View>
+      <SegmentedControl value={pricingMode} options={[{value:'retail',label:t('retail')},{value:'wholesale',label:t('wholesale')}]} onChange={changeMode}/>
 
-      {warehouses.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        {warehouses.map(warehouse=><FilterChip key={warehouse.id} label={warehouse.name} active={warehouse.id===warehouseId} disabled={lines.length>0&&warehouse.id!==warehouseId} onPress={()=>setWarehouseId(warehouse.id)}/>)}
-      </ScrollView>:null}
+      <GroupedList>
+        <SelectRow
+          label={t('customer')}
+          value={selectedParty?.name??t('posCashCustomer')}
+          hint={selectedParty?.phone??t('posCustomerOptional')}
+          leading={<CustomerTile/>}
+          onPress={onChooseParty}
+        />
+      </GroupedList>
 
-      <View style={[styles.sectionHeader,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <AppText variant="heading">{t('posInvoiceLines')}</AppText>
-        <Pressable accessibilityRole="button" onPress={onAddProduct} style={({pressed})=>[styles.addProductButton,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.controlPressed]}>
-          <AppText variant="heading" style={styles.addProductPlus}>+</AppText><AppText variant="caption" style={styles.addProductText}>{t('posAddProduct')}</AppText>
-        </Pressable>
-      </View>
+      {warehouses.length>1?<FramedSection title={t('warehouse')}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipStrip,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          {warehouses.map(warehouse=><Chip
+            key={warehouse.id}
+            label={warehouse.name}
+            active={warehouse.id===warehouseId}
+            disabled={lines.length>0&&warehouse.id!==warehouseId}
+            onPress={()=>setWarehouseId(warehouse.id)}
+          />)}
+        </ScrollView>
+      </FramedSection>:null}
 
-      {lines.length?<View style={styles.invoicePanel}>
-        {lines.map((line,index)=><InvoiceLineRow key={line.product.id} line={line} last={index===lines.length-1} onDecrease={()=>onChangeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>onChangeQuantity(line.product.id,line.quantity+1)} onEditQuantity={()=>onEditQuantity(line)} onEditPrice={()=>onEditPrice(line)} onRemove={()=>onChangeQuantity(line.product.id,0)}/>)}
-      </View>:<View style={styles.emptyInvoice}>
-        <AppText variant="subheading">{t('posNoLinesTitle')}</AppText>
-        <AppText variant="caption" muted>{t('posNoLinesDescription')}</AppText>
-        <Button title={'+ '+t('posAddProduct')} variant="secondary" compact onPress={onAddProduct}/>
-      </View>}
+      <FramedSection
+        title={t('posInvoiceLines')}
+        action={<Button compact title={t('posAddProduct')} onPress={onAddProduct}/>}
+        padded={false}
+      >
+        {lines.length?lines.map((line,index)=><SaleInvoiceLine
+          key={line.product.id}
+          line={line}
+          last={index===lines.length-1}
+          onDecrease={()=>onChangeQuantity(line.product.id,line.quantity-1)}
+          onIncrease={()=>onChangeQuantity(line.product.id,line.quantity+1)}
+          onEditQuantity={()=>onEditQuantity(line)}
+          onEditPrice={()=>onEditPrice(line)}
+          onRemove={()=>onChangeQuantity(line.product.id,0)}
+        />):<EmptyState title={t('posNoLinesTitle')} description={t('posNoLinesDescription')} action={<Button compact title={t('posAddProduct')} variant="secondary" onPress={onAddProduct}/>}/>}
+      </FramedSection>
+
+      {lines.length?<FramedSection title={t('posInvoiceSummary')} padded={false}>
+        <FinancialSummary items={[
+          {label:t('posItemsCount'),value:lines.length,format:'number'},
+          {label:t('posTotalQuantity'),value:totalQuantity,format:'number'},
+          {label:t('posInvoiceTotal'),value:total,emphasize:true},
+        ]}/>
+      </FramedSection>:null}
     </ScrollView>
   </View>;
 }
 
 function PaymentStage({
-  total,accounts,paymentMethod,setPaymentMethod,tender,setTender,normalizedTender,changeValue,dueValue,needsParty,selectedParty,underpaid,onChooseParty,onBack,
+  total,accounts,settlement,setSettlement,paymentMethod,setPaymentMethod,tender,setTender,normalizedTender,changeValue,dueValue,needsParty,selectedParty,underpaid,onChooseParty,onBack,
 }:{
-  total:number;accounts:PaymentAccount[];paymentMethod:string;setPaymentMethod:(method:string)=>void;tender:string;setTender:(value:string)=>void;normalizedTender:number;changeValue:number;dueValue:number;
-  needsParty:boolean;selectedParty:Party|null;underpaid:boolean;onChooseParty:()=>void;onBack:()=>void;
+  total:number;
+  accounts:PaymentAccount[];
+  settlement:SettlementType;
+  setSettlement:(value:SettlementType)=>void;
+  paymentMethod:string;
+  setPaymentMethod:(method:string)=>void;
+  tender:string;
+  setTender:(value:string)=>void;
+  normalizedTender:number;
+  changeValue:number;
+  dueValue:number;
+  needsParty:boolean;
+  selectedParty:Party|null;
+  underpaid:boolean;
+  onChooseParty:()=>void;
+  onBack:()=>void;
 }){
   const {t,isRTL}=useI18n();
   return <View style={styles.stage}>
     <PageHeader title={t('posCheckoutTitle')} onBack={onBack}/>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <View style={styles.paymentSection}>
-        <AppText variant="heading">{t('customer')}</AppText>
-        <Pressable accessibilityRole="button" onPress={onChooseParty} style={({pressed})=>[styles.customerCard,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,needsParty&&!selectedParty&&styles.customerCardRequired]}>
-          <View style={styles.customerIcon}><CustomerGlyph/></View>
-          <View style={styles.flex}>
-            <AppText variant="subheading" numberOfLines={1}>{selectedParty?.name??(needsParty?t('posChooseCustomer'):t('posCashCustomer'))}</AppText>
-            <AppText variant="caption" muted numberOfLines={1}>{selectedParty?.phone||(needsParty?t('posCustomerRequiredHint'):t('posCashCustomerHint'))}</AppText>
-          </View>
-          <AppText variant="heading" style={styles.chevron}>{isRTL?'‹':'›'}</AppText>
-        </Pressable>
-      </View>
+      <FramedSection title={t('customer')} padded={false}>
+        <SelectRow
+          label={t('customer')}
+          value={selectedParty?.name??(needsParty?t('posChooseCustomer'):t('posCashCustomer'))}
+          hint={selectedParty?.phone??(needsParty?t('posCustomerRequiredHint'):t('posCashCustomerHint'))}
+          leading={<CustomerTile warning={needsParty&&!selectedParty}/>}
+          onPress={onChooseParty}
+        />
+      </FramedSection>
 
-      <View style={styles.paymentSection}>
-        <AppText variant="heading">{t('paymentMethod')}</AppText>
-        <View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          {accounts.map(account=><PaymentMethodCard key={account.id} label={account.name} selected={paymentMethod===account.id||paymentMethod===account.code} onPress={()=>setPaymentMethod(account.id)} icon={<PaymentGlyph/>}/>)}
-          <PaymentMethodCard label={t('onCredit')} selected={paymentMethod==='note'} onPress={()=>setPaymentMethod('note')} icon={<CreditGlyph/>}/>
-        </View>
-      </View>
+      <FramedSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('posCreditHint'):t('posPayNowHint')}>
+        <SegmentedControl
+          value={settlement}
+          options={[{value:'payNow',label:t('posPayNow')},{value:'credit',label:t('onCredit')}]}
+          onChange={setSettlement}
+        />
+      </FramedSection>
 
-      {paymentMethod!=='note'?<View style={styles.paymentSection}>
-        <AppText variant="heading">{t('posReceivedAmount')}</AppText>
-        <View style={[styles.tenderField,{flexDirection:isRTL?'row-reverse':'row'}]}>
-          <TextInput accessibilityLabel={t('posReceivedAmount')} value={tender} onChangeText={setTender} keyboardType="number-pad" selectTextOnFocus placeholder="0" placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.tenderInput,{textAlign:isRTL?'right':'left'}]}/>
-          <AppText variant="subheading" muted>MRU</AppText>
-        </View>
-      </View>:null}
+      {settlement==='payNow'?<FramedSection title={t('posPaymentAccounts')}>
+        {accounts.length?<View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          {accounts.map(account=><PaymentMethodCard
+            key={account.id}
+            label={account.name}
+            selected={paymentMethod===account.id}
+            onPress={()=>setPaymentMethod(account.id)}
+            icon={<PaymentGlyph selected={paymentMethod===account.id}/>}
+            style={styles.paymentMethodCard}
+          />)}
+        </View>:<Surface tone="warning"><AppText variant="caption">{t('posNoPaymentAccounts')}</AppText></Surface>}
+      </FramedSection>:null}
 
-      <View style={styles.paymentSummary}>
-        <SummaryRow label={t('total')} value={total}/>
-        {paymentMethod==='note'?<SummaryRow label={t('due')} value={dueValue} tone="negative"/>:<>
-          <SummaryRow label={t('posReceivedAmount')} value={normalizedTender}/>
-          <SummaryRow label={t('posChange')} value={changeValue} tone={changeValue>0?'positive':'normal'}/>
-        </>}
-      </View>
+      {settlement==='payNow'?<FramedSection title={t('posReceivedAmount')}>
+        <FormField
+          label={t('posReceivedAmount')}
+          value={tender}
+          onChangeText={setTender}
+          keyboardType="number-pad"
+          selectTextOnFocus
+          placeholder="0"
+          trailing={<AppText variant="subheading" muted>MRU</AppText>}
+        />
+      </FramedSection>:null}
 
-      {underpaid?<View style={styles.warningCard}><AppText variant="caption" style={styles.warningText}>{t('posPartialPaymentError')}</AppText></View>:null}
-      {needsParty&&!selectedParty?<View style={styles.warningCard}><AppText variant="caption" style={styles.warningText}>{t('posCreditCustomerRequired')}</AppText></View>:null}
+      <FramedSection title={t('posPaymentSummary')} padded={false}>
+        <FinancialSummary items={settlement==='credit'?[
+          {label:t('total'),value:total},
+          {label:t('due'),value:dueValue,tone:'negative',emphasize:true},
+        ]:[
+          {label:t('total'),value:total},
+          {label:t('posReceivedAmount'),value:normalizedTender},
+          {label:t('posChange'),value:changeValue,tone:changeValue>0?'positive':'normal',emphasize:true},
+        ]}/>
+      </FramedSection>
+
+      {underpaid?<AlertCard title={t('posPartialPaymentError')} tone="warning"/>:null}
+      {needsParty&&!selectedParty?<AlertCard title={t('posCreditCustomerRequired')} tone="warning"/>:null}
     </ScrollView>
   </View>;
 }
 
 function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onNewSale:()=>void;onViewInvoice?:()=>void}){
   const {t,date,isRTL}=useI18n();
+  const number=success.document?.number;
   return <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.successScreen}>
     <View style={styles.successHero}>
       <View style={styles.successMark}><CheckGlyph/></View>
       <AppText variant="title" style={styles.successTitle}>{t('posSaleSuccessTitle')}</AppText>
       <AppText variant="body" muted style={styles.successDescription}>{t('posSaleSuccessDescription')}</AppText>
+      <Badge label={success.settlement==='credit'?t('posPaymentStatusCredit'):t('posPaymentStatusPaid')} tone={success.settlement==='credit'?'warning':'positive'}/>
     </View>
 
-    <View style={styles.successCard}>
-      {success.document?.number?<View style={[styles.successInvoice,{flexDirection:isRTL?'row-reverse':'row'}]}><View><AppText variant="caption" muted>{t('posInvoiceNumber')}</AppText><AppText variant="heading">{success.document.number}</AppText></View><View style={styles.documentGlyph}><ReceiptGlyph/></View></View>:null}
-      <View style={styles.successDivider}/>
-      <SummaryRow label={t('total')} value={success.total} large/>
-      {success.change>0?<SummaryRow label={t('posChange')} value={success.change} tone="positive"/>:null}
-      <View style={[styles.successDate,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{t('posSaleDate')}</AppText><AppText variant="caption" muted>{date(success.occurredAt)}</AppText></View>
-    </View>
+    <FramedSection title={number?t('posInvoiceNumber'):undefined}>
+      {number?<View style={[styles.documentNumberRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{number}</AppText><View style={styles.documentGlyph}><ReceiptGlyph/></View></View>:null}
+      <View style={styles.successDetails}>
+        <SuccessDetailRow label={t('posSaleDate')} value={date(success.occurredAt)}/>
+        {success.partyName?<SuccessDetailRow label={t('customer')} value={success.partyName}/>:null}
+        {success.paymentName?<SuccessDetailRow label={t('paymentMethod')} value={success.paymentName}/>:null}
+      </View>
+    </FramedSection>
 
-    {success.warnings.length?<View style={styles.lowStockCard}>
-      <View style={[styles.lowStockHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.warningDot}/><AppText variant="subheading" style={styles.lowStockTitle}>{t('posLowStockAfterSale')}</AppText></View>
-      {success.warnings.map(item=><AppText key={item.name} variant="caption" muted>{format(t('posRemaining'),{product:item.name,count:item.remaining})}</AppText>)}
-    </View>:null}
+    <FinancialSummary items={[
+      {label:t('total'),value:success.total},
+      {label:t('paid'),value:success.paid,tone:success.paid>0?'positive':'normal'},
+      ...(success.due>0?[{label:t('due'),value:success.due,tone:'negative' as const}]:[]),
+      ...(success.change>0?[{label:t('posChange'),value:success.change,tone:'positive' as const,emphasize:true}]:[{label:success.due>0?t('due'):t('total'),value:success.due>0?success.due:success.total,tone:success.due>0?'negative' as const:'normal' as const,emphasize:true}]),
+    ]}/>
+
+    {success.warnings.length?<AlertCard
+      title={t('posLowStockAfterSale')}
+      description={success.warnings.map(item=>format(t('posRemaining'),{product:item.name,count:item.remaining})).join('\n')}
+      tone="warning"
+    />:null}
 
     <View style={[styles.successActions,{flexDirection:isRTL?'row-reverse':'row'}]}>
-      {onViewInvoice?<SuccessAction label={t('posViewInvoice')} primary={false} onPress={onViewInvoice}/>:null}
-      <SuccessAction label={t('posNewSaleAction')} primary onPress={onNewSale}/>
+      {onViewInvoice?<View style={styles.actionFlex}><Button title={t('posViewInvoice')} variant="secondary" onPress={onViewInvoice}/></View>:null}
+      <View style={styles.actionFlex}><Button title={t('posNewSaleAction')} onPress={onNewSale}/></View>
     </View>
   </ScrollView>;
 }
 
-function PricingSwitch({value,onChange}:{value:PricingMode;onChange:(value:PricingMode)=>void}){
-  const {t}=useI18n();
-  return <View style={styles.pricingSwitch}>
-    {(['retail','wholesale'] as PricingMode[]).map(mode=><Pressable key={mode} accessibilityRole="button" accessibilityState={{selected:value===mode}} onPress={()=>onChange(mode)} style={({pressed})=>[styles.pricingOption,value===mode&&styles.pricingOptionActive,pressed&&styles.controlPressed]}><AppText variant="caption" style={[styles.pricingText,value===mode&&styles.pricingTextActive]}>{t(mode)}</AppText></Pressable>)}
-  </View>;
-}
-
-function FilterChip({label,active,onPress,disabled=false}:{label:string;active:boolean;onPress:()=>void;disabled?:boolean}){
-  return <Pressable accessibilityRole="button" accessibilityState={{selected:active,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.filterChip,active&&styles.filterChipActive,pressed&&styles.controlPressed,disabled&&styles.disabled]}><AppText variant="caption" numberOfLines={1} style={[styles.filterChipText,active&&styles.filterChipTextActive]}>{label}</AppText></Pressable>;
-}
-
-function SearchBar({value,onChangeText,placeholder,loading}:{value:string;onChangeText:(value:string)=>void;placeholder:string;loading:boolean}){
-  const {isRTL,t}=useI18n();
-  return <View style={[styles.searchBar,{flexDirection:isRTL?'row-reverse':'row'}]}>
-    <SearchGlyph/>
-    <TextInput accessibilityLabel={t('search')} value={value} onChangeText={onChangeText} returnKeyType="search" autoCapitalize="none" placeholder={placeholder} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left'}]}/>
-    {loading?<ActivityIndicator size="small" color={colors.primary}/>:null}
-  </View>;
-}
-
 function ProductSaleRow({product,warehouseId,pricingMode,onAdd,last}:{product:Product;warehouseId:string;pricingMode:PricingMode;onAdd:()=>void;last:boolean}){
   const {t,isRTL,money,number}=useI18n();
-  const stock=Number(product.stocks?.[warehouseId]??0),price=sellingPrice(product,pricingMode),disabled=stock<=0;
+  const stock=Number(product.stocks?.[warehouseId]??0);
+  const price=sellingPrice(product,pricingMode);
+  const disabled=stock<=0;
   const meta=[product.categoryName,product.sku?'#'+product.sku:null].filter(Boolean).join(' • ');
-  const body=<View style={styles.productBody}><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText>{meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}<AppText variant="caption" muted numberOfLines={1}>{disabled?t('posOutOfStock'):format(t('posAvailable'),{count:number(stock)})}</AppText></View>;
-  const side=<View style={styles.productSide}><AppText variant="subheading" style={styles.productMoney}>{money(price)}</AppText><Pressable accessibilityRole="button" accessibilityLabel={t('add')} disabled={disabled} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.addPressed,disabled&&styles.disabled]}><AppText variant="heading" style={styles.addPlus}>+</AppText></Pressable></View>;
-  return <View style={[styles.productRow,last&&styles.lastRow,disabled&&styles.disabledRow,{flexDirection:isRTL?'row-reverse':'row'}]}>{body}{side}</View>;
-}
-
-function InvoiceLineRow({line,last,onDecrease,onIncrease,onEditQuantity,onEditPrice,onRemove}:{line:InvoiceLine;last:boolean;onDecrease:()=>void;onIncrease:()=>void;onEditQuantity:()=>void;onEditPrice:()=>void;onRemove:()=>void}){
-  const {t,isRTL,money,number}=useI18n();
-  const meta=[format(t('posAvailable'),{count:number(line.stock)}),line.product.categoryName,line.product.sku?'#'+line.product.sku:null].filter(Boolean).join(' • ');
-  return <View style={[styles.invoiceLine,last&&styles.lastRow]}>
-    <View style={[styles.invoiceLineTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
-      <View style={styles.invoiceLineBody}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><AppText variant="caption" muted numberOfLines={1}>{meta}</AppText></View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('delete')} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>
+  return <View style={[styles.productRow,last&&styles.lastRow,disabled&&styles.disabledRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+    <View style={styles.productBody}>
+      <AppText variant="subheading" numberOfLines={2}>{product.name}</AppText>
+      {meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}
+      <AppText variant="caption" muted numberOfLines={1}>{disabled?t('posOutOfStock'):format(t('posAvailable'),{count:number(stock)})}</AppText>
     </View>
-    <View style={[styles.invoiceLineControls,{flexDirection:isRTL?'row-reverse':'row'}]}>
-      <QuantityStepper value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEditQuantity}/>
-      <Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.priceCell,pressed&&styles.rowPressed]}>
-        <AppText variant="caption" muted>{t('salePrice')}</AppText>
-        <AppText variant="subheading" style={styles.priceValue}>{money(line.unitPrice)}</AppText>
-        {line.priceOverridden?<AppText variant="caption" style={styles.customPrice}>{t('posCustomPrice')}</AppText>:null}
+    <View style={styles.productSide}>
+      <AppText variant="subheading" style={styles.productMoney}>{money(price)}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('add')} hitSlop={4} disabled={disabled} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.addPressed,disabled&&styles.disabled]}>
+        <AppText variant="heading" style={styles.addPlus}>+</AppText>
       </Pressable>
-      <View style={styles.lineTotal}><AppText variant="caption" muted>{t('total')}</AppText><AppText variant="subheading">{money(Math.round(line.quantity*line.unitPrice))}</AppText></View>
     </View>
   </View>;
 }
 
-function PaymentMethodCard({label,selected,onPress,icon}:{label:string;selected:boolean;onPress:()=>void;icon:ReactNode}){
-  return <Pressable accessibilityRole="button" accessibilityState={{selected}} onPress={onPress} style={({pressed})=>[styles.paymentMethodCard,selected&&styles.paymentMethodSelected,pressed&&styles.controlPressed]}><View style={[styles.paymentMethodIcon,selected&&styles.paymentMethodIconSelected]}>{icon}</View><AppText variant="caption" numberOfLines={2} style={[styles.paymentMethodLabel,selected&&styles.paymentMethodLabelSelected]}>{label}</AppText></Pressable>;
+function SaleInvoiceLine({line,last,onDecrease,onIncrease,onEditQuantity,onEditPrice,onRemove}:{line:SaleLine;last:boolean;onDecrease:()=>void;onIncrease:()=>void;onEditQuantity:()=>void;onEditPrice:()=>void;onRemove:()=>void}){
+  const {t,money,number}=useI18n();
+  const meta=[format(t('posAvailable'),{count:number(line.stock)}),line.product.categoryName,line.product.sku?'#'+line.product.sku:null].filter(Boolean).join(' • ');
+  return <InvoiceLineView
+    productName={line.product.name}
+    context={meta}
+    status={line.priceOverridden?<Badge label={t('posCustomPrice')} tone="primary"/>:undefined}
+    quantityLabel={t('quantity')}
+    quantityControl={<QuantityStepper compact value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEditQuantity}/>}
+    unitPriceLabel={t('salePrice')}
+    unitPrice={<Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.invoicePrice,pressed&&styles.controlPressed]}><AppText variant="subheading">{money(line.unitPrice)}</AppText></Pressable>}
+    lineTotalLabel={t('total')}
+    lineTotal={<Money value={Math.round(line.quantity*line.unitPrice)}/>}
+    actions={<Pressable accessibilityRole="button" accessibilityLabel={t('delete')} hitSlop={4} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>}
+    last={last}
+  />;
 }
 
-function SummaryRow({label,value,tone='normal',large=false}:{label:string;value:number;tone?:'normal'|'positive'|'negative';large?:boolean}){
+function SuccessDetailRow({label,value}:{label:string;value:string}){
   const {isRTL}=useI18n();
-  return <View style={[styles.summaryRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant={large?'subheading':'caption'} muted={!large}>{label}</AppText><Money value={value} tone={tone} large={large}/></View>;
+  return <View style={[styles.successDetailRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{label}</AppText><AppText variant="subheading" numberOfLines={1} style={styles.successDetailValue}>{value}</AppText></View>;
 }
 
-function InvoiceBottomBar({label,total,count,onPress,disabled=false}:{label:string;total:number;count:number;onPress:()=>void;disabled?:boolean}){
-  const insets=useSafeAreaInsets(),{t,isRTL,money}=useI18n();
-  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}>
-    <View style={[styles.invoiceBottomRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-      <View style={styles.invoiceBottomSummary}><AppText variant="caption" muted>{format(t('posProductsCount'),{count})}</AppText><AppText variant="subheading" style={styles.invoiceBottomTotal}>{money(total)}</AppText></View>
-      <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.invoiceNext,pressed&&styles.bottomPrimaryPressed,disabled&&styles.disabled]}><AppText variant="subheading" style={styles.bottomText}>{label}</AppText><AppText variant="heading" style={styles.bottomArrow}>{isRTL?'←':'→'}</AppText></Pressable>
-    </View>
-  </View>;
+function CustomerTile({warning=false}:{warning?:boolean}){
+  return <View style={[styles.customerTile,warning&&styles.customerTileWarning]}><CustomerGlyph warning={warning}/></View>;
 }
 
-function PaymentBottomBar({label,onPress,disabled=false,loading=false}:{label:string;onPress:()=>void;disabled?:boolean;loading?:boolean}){
-  const insets=useSafeAreaInsets(),{isRTL}=useI18n();
-  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}>
-    <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.bottomPrimary,pressed&&styles.bottomPrimaryPressed,(disabled||loading)&&styles.disabled]}>
-      {loading?<ActivityIndicator color={colors.onPrimary}/>:<View style={[styles.bottomNextContent,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" style={styles.bottomText}>{label}</AppText><AppText variant="heading" style={styles.bottomArrow}>{isRTL?'←':'→'}</AppText></View>}
-    </Pressable>
-  </View>;
+function CustomerGlyph({warning=false}:{warning?:boolean}){
+  const color=warning?colors.warning:colors.primary;
+  return <View style={styles.customerGlyph}><View style={[styles.customerHead,{borderColor:color}]}/><View style={[styles.customerBody,{borderColor:color}]}/></View>;
 }
 
-function SuccessAction({label,primary,onPress}:{label:string;primary:boolean;onPress:()=>void}){
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.successAction,primary?styles.successActionPrimary:styles.successActionSecondary,pressed&&styles.controlPressed]}><AppText variant="subheading" style={primary?styles.successActionPrimaryText:styles.successActionSecondaryText}>{label}</AppText></Pressable>;
+function PaymentGlyph({selected}:{selected:boolean}){
+  const color=selected?colors.primary:colors.textMuted;
+  return <View style={styles.paymentGlyph}><View style={[styles.paymentCard,{borderColor:color}]}/><View style={[styles.paymentLine,{backgroundColor:color}]}/><View style={[styles.paymentDot,{backgroundColor:color}]}/></View>;
 }
 
-function SearchGlyph(){return <View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View>}
-function CustomerGlyph(){return <View style={styles.customerGlyph}><View style={styles.customerHead}/><View style={styles.customerBody}/></View>}
-function PaymentGlyph(){return <View style={styles.paymentGlyph}><View style={styles.paymentCard}/><View style={styles.paymentLine}/><View style={styles.paymentDot}/></View>}
-function CreditGlyph(){return <View style={styles.creditGlyph}><View style={styles.creditPage}/><View style={styles.creditLine}/><View style={styles.creditLineShort}/></View>}
-function ReceiptGlyph(){return <View style={styles.receiptGlyph}><View style={styles.receiptPage}/><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/></View>}
-function TrashGlyph(){return <View style={styles.trashGlyph}><View style={styles.trashLid}/><View style={styles.trashCan}/><View style={styles.trashLineOne}/><View style={styles.trashLineTwo}/></View>}
-function CheckGlyph(){return <View style={styles.checkGlyph}><View style={styles.checkShort}/><View style={styles.checkLong}/></View>}
+function ReceiptGlyph(){
+  return <View style={styles.receiptGlyph}><View style={styles.receiptPage}/><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/></View>;
+}
+
+function TrashGlyph(){
+  return <View style={styles.trashGlyph}><View style={styles.trashLid}/><View style={styles.trashCan}/><View style={styles.trashLineOne}/><View style={styles.trashLineTwo}/></View>;
+}
+
+function CheckGlyph(){
+  return <View style={styles.checkGlyph}><View style={styles.checkShort}/><View style={styles.checkLong}/></View>;
+}
 
 const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
-  stageScroll:{padding:spacing.md,gap:spacing.sm,paddingBottom:spacing.lg},
-  stageScrollWithBar:{paddingBottom:116},
-  compactControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
-  pricingSwitch:{flexDirection:'row',padding:3,borderRadius:radius.md,backgroundColor:colors.surfaceStrong,borderWidth:1,borderColor:colors.border},
-  pricingOption:{minHeight:38,minWidth:68,paddingHorizontal:spacing.sm,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
-  pricingOptionActive:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.primarySoft},
-  pricingText:{color:colors.textMuted,fontWeight:'700'},
-  pricingTextActive:{color:colors.primary,fontWeight:'800'},
-  warehouseLabel:{flex:1,alignItems:'flex-end'},
+  stageScroll:{paddingHorizontal:spacing.md,paddingTop:spacing.xs,gap:spacing.sm,paddingBottom:spacing.lg},
+  stageScrollWithBar:{paddingBottom:112},
+  flex:{flex:1,minWidth:0},
   chipStrip:{gap:spacing.xs,paddingVertical:2},
-  filterChip:{minHeight:40,paddingHorizontal:spacing.md,borderRadius:radius.full,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
-  filterChipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
-  filterChipText:{color:colors.textMuted,fontWeight:'700'},
-  filterChipTextActive:{color:colors.onPrimary},
   controlPressed:{opacity:.7,transform:[{scale:.99}]},
   disabled:{opacity:.42},
-  sectionHeader:{minHeight:touch.min,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,marginTop:spacing.xs},
-  addProductButton:{minHeight:40,alignItems:'center',gap:6,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.primarySoft,borderWidth:1,borderColor:colors.primarySoft},
-  addProductPlus:{color:colors.primary,fontSize:22,lineHeight:24},
-  addProductText:{color:colors.primary,fontWeight:'800'},
-  invoicePanel:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,...elevation.subtle},
-  invoiceLine:{padding:spacing.sm,gap:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  invoiceLineTop:{alignItems:'center',gap:spacing.sm},
-  invoiceLineBody:{flex:1,minWidth:0,gap:4},
-  invoiceLineControls:{alignItems:'center',justifyContent:'space-between',gap:spacing.xs},
-  priceCell:{minWidth:80,alignItems:'center',justifyContent:'center',gap:1,paddingHorizontal:spacing.xs,paddingVertical:4,borderRadius:radius.sm,backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft},
-  priceValue:{fontSize:14},
-  customPrice:{color:colors.primary,fontWeight:'700',fontSize:10},
-  lineTotal:{minWidth:76,alignItems:'flex-end',gap:2},
-  deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
-  deletePressed:{backgroundColor:colors.negativeSoft},
-  emptyInvoice:{alignItems:'center',gap:spacing.xs,paddingVertical:spacing.lg,paddingHorizontal:spacing.md,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
   pickerControls:{gap:spacing.sm},
-  searchBar:{minHeight:52,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  searchInput:{flex:1,minWidth:0,fontSize:15,color:colors.text,fontWeight:'500',paddingVertical:0},
-  searchGlyph:{width:21,height:21,position:'relative'},
-  searchCircle:{position:'absolute',left:2,top:2,width:13,height:13,borderRadius:7,borderWidth:2,borderColor:colors.textSoft},
-  searchHandle:{position:'absolute',right:2,bottom:3,width:8,height:2,borderRadius:2,backgroundColor:colors.textSoft,transform:[{rotate:'45deg'}]},
-  productPanel:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,...elevation.subtle},
-  productRow:{minHeight:70,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  pickerSearchRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
+  productRow:{minHeight:64,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
   productBody:{flex:1,minWidth:0,gap:2},
-  productSide:{minWidth:92,alignItems:'flex-end',justifyContent:'center',gap:4},
-  productMoney:{fontWeight:'800',color:colors.text,fontSize:14},
-  addButton:{width:36,height:32,borderRadius:10,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0},
+  productSide:{minWidth:92,alignItems:'flex-end',justifyContent:'center',gap:3},
+  productMoney:{fontWeight:'800',color:colors.text},
+  addButton:{width:38,height:38,borderRadius:radius.md,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:1,borderColor:colors.primarySoft},
   addPressed:{backgroundColor:'#D9E9FF',transform:[{scale:.97}]},
   addPlus:{color:colors.primary,fontSize:22,lineHeight:24},
   disabledRow:{backgroundColor:colors.surfaceMuted},
   lastRow:{borderBottomWidth:0},
-  rowPressed:{backgroundColor:colors.surfaceMuted,borderRadius:radius.sm},
-  flex:{flex:1,minWidth:0},
-  paymentSection:{gap:spacing.sm},
-  customerCard:{minHeight:74,alignItems:'center',gap:spacing.sm,padding:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  customerCardRequired:{borderColor:colors.warning,backgroundColor:colors.warningSoft},
-  customerIcon:{width:42,height:42,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
-  chevron:{color:colors.primary,fontSize:24,lineHeight:25},
+  invoicePrice:{minHeight:34,alignItems:'center',justifyContent:'center',paddingHorizontal:2,borderRadius:radius.sm},
+  deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
+  deletePressed:{backgroundColor:colors.negativeSoft},
   paymentMethods:{flexWrap:'wrap',gap:spacing.xs},
-  paymentMethodCard:{width:'31.5%',minHeight:78,alignItems:'center',justifyContent:'center',gap:6,padding:spacing.xs,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
-  paymentMethodSelected:{borderColor:colors.primary,backgroundColor:colors.primaryFaint},
-  paymentMethodIcon:{width:34,height:30,alignItems:'center',justifyContent:'center'},
-  paymentMethodIconSelected:{},
-  paymentMethodLabel:{textAlign:'center',color:colors.textMuted,fontWeight:'700'},
-  paymentMethodLabelSelected:{color:colors.primary},
-  tenderField:{minHeight:54,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  tenderInput:{flex:1,minWidth:0,fontSize:17,color:colors.text,fontWeight:'800',fontVariant:['tabular-nums'],paddingVertical:0},
-  paymentSummary:{padding:spacing.md,borderRadius:radius.lg,backgroundColor:colors.primaryFaint,borderWidth:1,borderColor:colors.primarySoft,gap:spacing.sm},
-  summaryRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
-  warningCard:{padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.warningSoft,borderWidth:1,borderColor:'#F0D39B'},
-  warningText:{color:'#9A620F',fontWeight:'700',lineHeight:18},
-  bottomBar:{position:'absolute',left:0,right:0,bottom:0,paddingTop:spacing.sm,paddingHorizontal:spacing.md,backgroundColor:colors.surface,borderTopWidth:1,borderTopColor:colors.border,...elevation.floating},
-  invoiceBottomRow:{alignItems:'center',gap:spacing.md},
-  invoiceBottomSummary:{flex:1,gap:2},
-  invoiceBottomTotal:{fontVariant:['tabular-nums']},
-  invoiceNext:{minHeight:54,minWidth:158,borderRadius:radius.md,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:spacing.sm,backgroundColor:colors.primary,paddingHorizontal:spacing.md},
-  bottomPrimary:{minHeight:56,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primary,paddingHorizontal:spacing.md},
-  bottomPrimaryPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.995}]},
-  bottomNextContent:{alignItems:'center',justifyContent:'center',gap:spacing.md},
-  bottomText:{color:colors.onPrimary},
-  bottomArrow:{color:colors.onPrimary,fontSize:23,lineHeight:24},
+  paymentMethodCard:{width:'31.4%',flexGrow:0,flexBasis:'31.4%',minWidth:96},
   sheetActions:{gap:spacing.sm},
   sheetAction:{flex:1},
-  priceEditor:{gap:spacing.md},
-  currentPrice:{alignItems:'center',justifyContent:'space-between',gap:spacing.md,padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surfaceMuted},
-  successScreen:{flexGrow:1,padding:spacing.md,paddingTop:spacing.xl,paddingBottom:spacing.xl,gap:spacing.lg,backgroundColor:colors.background},
-  successHero:{alignItems:'center',gap:spacing.sm,paddingTop:spacing.md},
+  priceEditor:{gap:spacing.sm},
+  currentPrice:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
+  customerTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  customerTileWarning:{backgroundColor:colors.warningSoft},
+  successScreen:{flexGrow:1,padding:spacing.md,paddingTop:spacing.lg,paddingBottom:spacing.xl,gap:spacing.md,backgroundColor:colors.background},
+  successHero:{alignItems:'center',gap:spacing.sm,paddingVertical:spacing.md},
   successMark:{width:72,height:72,borderRadius:36,alignItems:'center',justifyContent:'center',backgroundColor:colors.positive},
   successTitle:{textAlign:'center'},
-  successDescription:{textAlign:'center',maxWidth:320,lineHeight:20},
-  successCard:{padding:spacing.md,gap:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,...elevation.subtle},
-  successInvoice:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
-  documentGlyph:{width:42,height:42,borderRadius:13,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
-  successDivider:{height:StyleSheet.hairlineWidth,backgroundColor:colors.border},
-  successDate:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingTop:spacing.xs},
-  lowStockCard:{padding:spacing.md,gap:spacing.xs,borderRadius:radius.lg,backgroundColor:colors.warningSoft,borderWidth:1,borderColor:'#F0D39B'},
-  lowStockHead:{alignItems:'center',gap:spacing.xs},
-  warningDot:{width:8,height:8,borderRadius:4,backgroundColor:colors.warning},
-  lowStockTitle:{color:'#9A620F'},
+  successDescription:{textAlign:'center',maxWidth:330,lineHeight:20},
+  documentNumberRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
+  documentGlyph:{width:40,height:40,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  successDetails:{gap:0,borderTopWidth:1,borderTopColor:colors.border,marginTop:spacing.xs},
+  successDetailRow:{minHeight:42,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,borderBottomWidth:1,borderBottomColor:colors.border},
+  successDetailValue:{flex:1,minWidth:0},
   successActions:{marginTop:'auto',gap:spacing.sm},
-  successAction:{flex:1,minHeight:54,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.sm,borderWidth:1},
-  successActionPrimary:{backgroundColor:colors.primary,borderColor:colors.primary},
-  successActionSecondary:{backgroundColor:colors.surface,borderColor:colors.primary},
-  successActionPrimaryText:{color:colors.onPrimary},
-  successActionSecondaryText:{color:colors.primary},
+  actionFlex:{flex:1,minWidth:0},
   customerGlyph:{width:25,height:24,alignItems:'center',justifyContent:'flex-end'},
-  customerHead:{position:'absolute',top:1,width:9,height:9,borderRadius:5,borderWidth:2,borderColor:colors.primary},
-  customerBody:{width:20,height:11,borderWidth:2,borderBottomWidth:0,borderColor:colors.primary,borderTopLeftRadius:10,borderTopRightRadius:10},
+  customerHead:{position:'absolute',top:1,width:9,height:9,borderRadius:5,borderWidth:2},
+  customerBody:{width:20,height:11,borderWidth:2,borderBottomWidth:0,borderTopLeftRadius:10,borderTopRightRadius:10},
   paymentGlyph:{width:27,height:22,position:'relative'},
-  paymentCard:{position:'absolute',left:1,top:2,width:25,height:18,borderWidth:2,borderColor:colors.primary,borderRadius:4},
-  paymentLine:{position:'absolute',left:3,right:3,top:7,height:2,backgroundColor:colors.primary},
-  paymentDot:{position:'absolute',right:5,bottom:5,width:4,height:4,borderRadius:2,backgroundColor:colors.primary},
-  creditGlyph:{width:24,height:26,alignItems:'center',justifyContent:'center'},
-  creditPage:{width:19,height:23,borderWidth:2,borderColor:colors.textMuted,borderRadius:3},
-  creditLine:{position:'absolute',top:8,width:11,height:2,backgroundColor:colors.textMuted},
-  creditLineShort:{position:'absolute',top:13,width:7,height:2,backgroundColor:colors.textMuted},
+  paymentCard:{position:'absolute',left:1,top:2,width:25,height:18,borderWidth:2,borderRadius:4},
+  paymentLine:{position:'absolute',left:3,right:3,top:7,height:2},
+  paymentDot:{position:'absolute',right:5,bottom:5,width:4,height:4,borderRadius:2},
   receiptGlyph:{width:24,height:26,alignItems:'center',justifyContent:'center'},
   receiptPage:{width:19,height:23,borderWidth:2,borderColor:colors.primary,borderRadius:3},
   receiptLine:{position:'absolute',top:8,width:11,height:2,backgroundColor:colors.primary},
