@@ -13,7 +13,7 @@ import {
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radius, spacing, touch, type as typography } from '@/theme';
+import { colors, control, layout, radius, spacing, touch, type as typography } from '@/theme';
 import { useI18n } from '@/i18n/provider';
 
 export function Screen({children,scroll=false,padded=true}:{children:ReactNode;scroll?:boolean;padded?:boolean}){
@@ -31,6 +31,14 @@ export function Card({children,style,tone='default'}:{children:ReactNode;style?:
 }
 export function Surface({children,style,tone='default',padded=true}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning';padded?:boolean}){
   return <View style={[styles.surface,padded&&styles.surfacePadded,tone==='muted'&&styles.surfaceMuted,tone==='primary'&&styles.surfacePrimary,tone==='warning'&&styles.surfaceWarning,style]}>{children}</View>;
+}
+
+export function FramedSection({title,subtitle,action,children,style,tone='default',padded=true}:{title?:string;subtitle?:string;action?:ReactNode;children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning';padded?:boolean}){
+  const {isRTL}=useI18n();
+  return <Surface style={style} tone={tone} padded={false}>
+    {title||subtitle||action?<View style={[styles.framedHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.framedHeadCopy}>{title?<AppText variant="subheading">{title}</AppText>:null}{subtitle?<AppText variant="caption" muted>{subtitle}</AppText>:null}</View>{action}</View>:null}
+    <View style={[styles.framedBody,padded&&styles.framedBodyPadded]}>{children}</View>
+  </Surface>;
 }
 
 export function GroupedList({children,style}:{children:ReactNode;style?:StyleProp<ViewStyle>}){
@@ -70,6 +78,30 @@ export function SelectRow({label,value,hint,onPress,leading,disabled=false}:{lab
   </Pressable>;
 }
 
+export function AccountingRow({title,subtitle,meta,leading,value,trailing,onPress,last=false,disabled=false}:{title:string;subtitle?:string;meta?:string;leading?:ReactNode;value?:ReactNode;trailing?:ReactNode;onPress?:()=>void;last?:boolean;disabled?:boolean}){
+  const {isRTL}=useI18n();
+  const end=trailing??(onPress?<AppText variant="heading" style={styles.accountingArrow}>{isRTL?'‹':'›'}</AppText>:null);
+  const body=<>{leading}<View style={styles.accountingCopy}><AppText variant="subheading" numberOfLines={2}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}{meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}</View>{value?<View style={styles.accountingValue}>{value}</View>:null}{end}</>;
+  return onPress?<Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.accountingRow,{flexDirection:isRTL?'row-reverse':'row'},last&&styles.accountingRowLast,pressed&&styles.rowPressed,disabled&&styles.disabled]}>{body}</Pressable>:<View style={[styles.accountingRow,{flexDirection:isRTL?'row-reverse':'row'},last&&styles.accountingRowLast,disabled&&styles.disabled]}>{body}</View>;
+}
+
+export function InvoiceLine({productName,context,status,quantityLabel,quantityControl,unitPriceLabel,unitPrice,lineTotalLabel,lineTotal,actions,last=false}:{productName:string;context?:string;status?:ReactNode;quantityLabel:string;quantityControl:ReactNode;unitPriceLabel:string;unitPrice:ReactNode;lineTotalLabel:string;lineTotal:ReactNode;actions?:ReactNode;last?:boolean}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.invoiceLine,last&&styles.invoiceLineLast]}>
+    <View style={[styles.invoiceLineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.invoiceLineCopy}><View style={[styles.invoiceLineTitleRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.invoiceLineName}>{productName}</AppText>{status}</View>{context?<AppText variant="caption" muted numberOfLines={1}>{context}</AppText>:null}</View>{actions}</View>
+    <View style={[styles.invoiceFinancialRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      <View style={[styles.invoiceValueCell,styles.invoiceQuantityCell]}><AppText variant="caption" muted>{quantityLabel}</AppText>{quantityControl}</View>
+      <View style={styles.invoiceValueCell}><AppText variant="caption" muted>{unitPriceLabel}</AppText>{unitPrice}</View>
+      <View style={[styles.invoiceValueCell,isRTL?styles.invoiceValueCellLeading:styles.invoiceValueCellTrailing]}><AppText variant="caption" muted>{lineTotalLabel}</AppText>{lineTotal}</View>
+    </View>
+  </View>;
+}
+
+export function FinancialSummary({items,style}:{items:Array<{label:string;value:number;format?:'money'|'number';tone?:'normal'|'positive'|'negative';emphasize?:boolean}>;style?:StyleProp<ViewStyle>}){
+  const {number,isRTL}=useI18n();
+  return <View style={[styles.financialSummary,style]}>{items.map((item,index)=><View key={item.label} style={[styles.financialSummaryRow,{flexDirection:isRTL?'row-reverse':'row'},index===items.length-1&&styles.financialSummaryRowLast,item.emphasize&&styles.financialSummaryEmphasis]}><AppText variant={item.emphasize?'subheading':'caption'} muted={!item.emphasize}>{item.label}</AppText>{item.format==='number'?<AppText variant={item.emphasize?'amount':'subheading'} style={[styles.tabular,item.tone==='positive'&&styles.positive,item.tone==='negative'&&styles.negative]}>{number(item.value)}</AppText>:<Money value={item.value} tone={item.tone} large={item.emphasize}/>}</View>)}</View>;
+}
+
 export function LoadingState({label}:{label?:string}){
   const {t}=useI18n();
   return <View style={styles.stateBlock}><ActivityIndicator color={colors.primary}/><AppText variant="caption" muted>{label??t('loading')}</AppText></View>;
@@ -85,18 +117,21 @@ export function SectionTitle({title,action,subtitle}:{title:string;action?:React
   return <View style={styles.sectionWrap}><View style={[styles.sectionHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText>{action}</View>{subtitle?<AppText variant="caption" muted>{subtitle}</AppText>:null}</View>;
 }
 
-export function Button({title,onPress,variant='primary',disabled=false,loading=false,compact=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'ghost';disabled?:boolean;loading?:boolean;compact?:boolean}){
+export function Button({title,onPress,variant='primary',disabled=false,loading=false,compact=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'success'|'ghost';disabled?:boolean;loading?:boolean;compact?:boolean}){
+  const spinner=variant==='primary'||variant==='success'?colors.onPrimary:variant==='danger'?colors.negative:colors.primary;
   return <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[
     styles.button,
     compact&&styles.buttonCompact,
     variant==='primary'&&styles.buttonPrimary,
     variant==='secondary'&&styles.buttonSecondary,
     variant==='danger'&&styles.buttonDanger,
+    variant==='success'&&styles.buttonSuccess,
     variant==='ghost'&&styles.buttonGhost,
     pressed&&variant==='primary'&&styles.buttonPrimaryPressed,
-    pressed&&variant!=='primary'&&styles.buttonPressed,
+    pressed&&variant==='success'&&styles.buttonSuccessPressed,
+    pressed&&variant!=='primary'&&variant!=='success'&&styles.buttonPressed,
     (disabled||loading)&&styles.disabled,
-  ]}>{loading?<ActivityIndicator color={variant==='primary'||variant==='danger'?colors.onPrimary:colors.primary}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
+  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextDanger,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
 }
 
 export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>}>(({label,error,style,containerStyle,...props},ref)=>{
@@ -104,10 +139,11 @@ export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:st
   return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 Field.displayName='Field';
+export const FormField=Field;
 
-export function SearchField(props:Omit<TextInputProps,'style'>){
+export function SearchField({style,placeholder,...props}:TextInputProps){
   const {t,isRTL}=useI18n();
-  return <TextInput accessibilityLabel={t('search')} placeholder={t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.search,{textAlign:isRTL?'right':'left'}]} {...props}/>;
+  return <View style={[styles.search,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View><TextInput accessibilityLabel={t('search')} placeholder={placeholder??t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left'},style]} {...props}/></View>;
 }
 
 export function EmptyState({title,description,action}:{title:string;description?:string;action?:ReactNode}){
@@ -137,6 +173,8 @@ export function Badge({label,tone='neutral'}:{label:string;tone?:'neutral'|'prim
   return <View style={[styles.badge,tone==='primary'&&styles.badgePrimary,tone==='positive'&&styles.badgePositive,tone==='negative'&&styles.badgeNegative,tone==='warning'&&styles.badgeWarning]}><AppText variant="caption" style={[styles.badgeText,tone==='primary'&&styles.badgeTextPrimary,tone==='positive'&&styles.badgeTextPositive,tone==='negative'&&styles.badgeTextNegative,tone==='warning'&&styles.badgeTextWarning]}>{label}</AppText></View>;
 }
 
+export const StatusBadge=Badge;
+
 
 export function AppHeader({title,subtitle,eyebrow,trailing}:{title:string;subtitle?:string;eyebrow?:string;trailing?:ReactNode}){
   const {isRTL}=useI18n();
@@ -163,6 +201,10 @@ export function SegmentedControl<T extends string>({value,options,onChange}:{val
   return <View style={[styles.segmented,{flexDirection:isRTL?'row-reverse':'row'}]}>{options.map(option=><Pressable key={option.value} accessibilityRole="button" accessibilityState={{selected:value===option.value}} onPress={()=>onChange(option.value)} style={({pressed})=>[styles.segment,value===option.value&&styles.segmentActive,pressed&&styles.segmentPressed]}><Text style={[styles.segmentText,value===option.value&&styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
+export function PaymentMethodCard({label,subtitle,icon,selected,onPress,disabled=false}:{label:string;subtitle?:string;icon?:ReactNode;selected:boolean;onPress:()=>void;disabled?:boolean}){
+  return <Pressable accessibilityRole="button" accessibilityState={{selected,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.paymentMethodCard,selected&&styles.paymentMethodCardSelected,pressed&&styles.paymentMethodCardPressed,disabled&&styles.disabled]}>{icon?<View style={[styles.paymentMethodIcon,selected&&styles.paymentMethodIconSelected]}>{icon}</View>:null}<AppText variant="subheading" numberOfLines={2} style={selected?styles.paymentMethodTextSelected:undefined}>{label}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</Pressable>;
+}
+
 export function AlertCard({title,description,tone='warning',action}:{title:string;description?:string;tone?:'warning'|'primary'|'negative';action?:ReactNode}){
   const {isRTL}=useI18n();
   return <View style={[styles.alertCard,tone==='primary'&&styles.alertCardPrimary,tone==='negative'&&styles.alertCardNegative]}><View style={[styles.alertRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={[styles.alertMark,tone==='primary'&&styles.alertMarkPrimary,tone==='negative'&&styles.alertMarkNegative]}/><View style={styles.alertCopy}><AppText variant="subheading">{title}</AppText>{description?<AppText variant="caption" muted>{description}</AppText>:null}</View>{action}</View></View>;
@@ -170,8 +212,8 @@ export function AlertCard({title,description,tone='warning',action}:{title:strin
 
 const styles=StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
-  screenContent:{flex:1,gap:spacing.md},
-  padded:{paddingHorizontal:spacing.md},
+  screenContent:{flex:1,gap:control.sectionGap},
+  padded:{paddingHorizontal:layout.pageGutter},
   scroll:{flexGrow:1,paddingBottom:spacing.xl},
   text:{color:colors.text,fontWeight:'400'},
   display:{fontWeight:'800',letterSpacing:-.65},
@@ -181,23 +223,27 @@ const styles=StyleSheet.create({
   amountWeight:{fontWeight:'800'},
   amountLargeWeight:{fontWeight:'800',letterSpacing:-.55},
   muted:{color:colors.textMuted},
-  card:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border,padding:spacing.md,gap:spacing.sm},
+  card:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.borderStrong,padding:layout.panelPadding,gap:spacing.sm},
   cardMuted:{backgroundColor:colors.surfaceMuted,borderColor:colors.surfaceMuted},
   cardPrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
   cardWarning:{backgroundColor:colors.warningSoft,borderColor:colors.warningSoft},
-  surface:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border},
-  surfacePadded:{padding:spacing.md},
+  surface:{backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.borderStrong},
+  surfacePadded:{padding:layout.panelPadding},
   surfaceMuted:{backgroundColor:colors.surfaceMuted},
   surfacePrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
   surfaceWarning:{backgroundColor:colors.warningSoft,borderColor:'#F4D9A8'},
-  groupedList:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.border},
+  framedHead:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:layout.panelPadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
+  framedHeadCopy:{flex:1,minWidth:0,gap:2},
+  framedBody:{gap:spacing.sm},
+  framedBodyPadded:{padding:layout.panelPadding},
+  groupedList:{overflow:'hidden',backgroundColor:colors.surface,borderRadius:radius.lg,borderCurve:'continuous',borderWidth:1,borderColor:colors.borderStrong},
   iconTile:{width:44,height:44,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft,flexShrink:0},
   iconTileSmall:{width:36,height:36,borderRadius:radius.sm},
   iconTilePositive:{backgroundColor:colors.positiveSoft},
   iconTileNegative:{backgroundColor:colors.negativeSoft},
   iconTileWarning:{backgroundColor:colors.warningSoft},
   iconTileNeutral:{backgroundColor:colors.surfaceStrong},
-  pageHeader:{minHeight:60,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs},
+  pageHeader:{minHeight:56,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xxs},
   pageHeaderButton:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
   pageHeaderButtonPressed:{backgroundColor:colors.surfaceMuted},
   pageHeaderArrow:{fontSize:27,lineHeight:28,color:colors.text},
@@ -205,30 +251,58 @@ const styles=StyleSheet.create({
   pageHeaderSlot:{width:touch.min,minHeight:touch.min,alignItems:'center',justifyContent:'center'},
   formSection:{gap:spacing.sm},
   formSectionHead:{gap:spacing.xxs},
-  selectRow:{minHeight:68,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  selectRow:{minHeight:control.rowMinHeight,alignItems:'center',gap:spacing.sm,paddingHorizontal:layout.densePadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
   selectRowCopy:{flex:1,minWidth:0,gap:2},
   selectRowArrow:{color:colors.textSoft,fontSize:22,lineHeight:24},
+  accountingRow:{minHeight:control.rowMinHeight,alignItems:'center',gap:spacing.sm,paddingHorizontal:layout.densePadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
+  accountingRowLast:{borderBottomWidth:0},
+  accountingCopy:{flex:1,minWidth:0,gap:2},
+  accountingValue:{alignItems:'flex-end',justifyContent:'center',minWidth:72},
+  accountingArrow:{color:colors.textSoft,fontSize:21,lineHeight:22},
+  invoiceLine:{gap:spacing.sm,padding:layout.densePadding,borderBottomWidth:1,borderBottomColor:colors.border},
+  invoiceLineLast:{borderBottomWidth:0},
+  invoiceLineHead:{alignItems:'flex-start',gap:spacing.sm},
+  invoiceLineCopy:{flex:1,minWidth:0,gap:2},
+  invoiceLineTitleRow:{alignItems:'center',gap:spacing.xs},
+  invoiceLineName:{flex:1,minWidth:0},
+  invoiceFinancialRow:{alignItems:'stretch',gap:spacing.xs},
+  invoiceValueCell:{flex:1,minWidth:0,gap:4,padding:spacing.xs,borderRadius:radius.sm,backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
+  invoiceQuantityCell:{flex:1.2},
+  invoiceValueCellLeading:{alignItems:'flex-start'},
+  invoiceValueCellTrailing:{alignItems:'flex-end'},
+  financialSummary:{overflow:'hidden',borderRadius:radius.md,borderWidth:1,borderColor:colors.borderStrong,backgroundColor:colors.surface},
+  financialSummaryRow:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'space-between',gap:spacing.md,paddingHorizontal:layout.densePadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
+  financialSummaryRowLast:{borderBottomWidth:0},
+  financialSummaryEmphasis:{minHeight:touch.comfortable,backgroundColor:colors.primaryFaint,borderTopWidth:1,borderTopColor:colors.primarySoft},
+  tabular:{fontVariant:['tabular-nums']},
   stateBlock:{minHeight:132,alignItems:'center',justifyContent:'center',gap:spacing.sm,padding:spacing.lg},
   errorState:{backgroundColor:colors.negativeSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F3C9CD'},
   errorStateMark:{width:9,height:9,borderRadius:5,backgroundColor:colors.negative},
   sectionWrap:{gap:spacing.xxs},
   sectionHead:{minHeight:touch.min,justifyContent:'space-between',alignItems:'center',gap:spacing.sm},
-  button:{minHeight:touch.comfortable,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
-  buttonCompact:{minHeight:touch.min,paddingHorizontal:spacing.sm},
+  button:{minHeight:control.height,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
+  buttonCompact:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm},
   buttonPrimary:{backgroundColor:colors.primary,borderColor:colors.primary},
   buttonPrimaryPressed:{backgroundColor:colors.primaryPressed,borderColor:colors.primaryPressed,transform:[{scale:.99}]},
-  buttonSecondary:{backgroundColor:colors.surface,borderColor:colors.borderStrong},
-  buttonDanger:{backgroundColor:colors.negative,borderColor:colors.negative},
+  buttonSecondary:{backgroundColor:colors.surface,borderColor:colors.primary},
+  buttonDanger:{backgroundColor:colors.surface,borderColor:colors.negative},
+  buttonSuccess:{backgroundColor:colors.positive,borderColor:colors.positive},
+  buttonSuccessPressed:{backgroundColor:'#138A3C',borderColor:'#138A3C',transform:[{scale:.99}]},
   buttonGhost:{backgroundColor:'transparent',borderColor:'transparent'},
   buttonPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
   disabled:{opacity:.45},
   buttonText:{fontSize:typography.body,fontWeight:'700',color:colors.primary,textAlign:'center'},
   buttonTextPrimary:{color:colors.onPrimary},
+  buttonTextDanger:{color:colors.negative},
   buttonTextGhost:{fontWeight:'600'},
   field:{gap:spacing.xs},
   fieldLabel:{color:colors.textMuted,fontWeight:'700'},
-  input:{minHeight:touch.comfortable,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
-  search:{minHeight:54,borderRadius:radius.md,paddingHorizontal:spacing.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong,color:colors.text,fontSize:typography.body,fontWeight:'500'},
+  input:{minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
+  search:{minHeight:control.height,alignItems:'center',gap:spacing.sm,borderRadius:radius.md,paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  searchInput:{flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
+  searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
+  searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
   error:{color:colors.negative,fontSize:typography.caption,fontWeight:'600'},
   empty:{minHeight:176,alignItems:'center',justifyContent:'center',gap:spacing.sm,padding:spacing.lg},
   emptyMark:{width:42,height:42,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
@@ -238,16 +312,16 @@ const styles=StyleSheet.create({
   moneyLarge:{fontSize:typography.amountLarge,letterSpacing:-.55},
   positive:{color:colors.positive},
   negative:{color:colors.negative},
-  chip:{minHeight:touch.min,paddingHorizontal:spacing.md,borderRadius:radius.full,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.border},
+  chip:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.borderStrong},
   chipActive:{backgroundColor:colors.primarySoft,borderColor:colors.primary},
   chipPressed:{backgroundColor:colors.surfaceMuted},
   chipText:{color:colors.textMuted,fontWeight:'700',fontSize:typography.caption},
   chipTextActive:{color:colors.primary},
-  row:{minHeight:66,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.sm,paddingHorizontal:2,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  row:{minHeight:control.rowMinHeight,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs,paddingHorizontal:2,borderBottomWidth:1,borderBottomColor:colors.border},
   rowBody:{flex:1,gap:spacing.xxs},
   rowPressed:{backgroundColor:colors.surfaceMuted,borderRadius:radius.sm},
   stat:{flex:1,minWidth:150},
-  badge:{alignSelf:'flex-start',borderRadius:radius.sm,paddingHorizontal:spacing.xs,paddingVertical:4,backgroundColor:colors.surfaceMuted},
+  badge:{alignSelf:'flex-start',borderRadius:radius.sm,paddingHorizontal:spacing.xs,paddingVertical:4,backgroundColor:colors.surfaceStrong,borderWidth:1,borderColor:colors.border},
   badgePrimary:{backgroundColor:colors.primarySoft},
   badgePositive:{backgroundColor:colors.positiveSoft},
   badgeNegative:{backgroundColor:colors.negativeSoft},
@@ -286,12 +360,18 @@ const styles=StyleSheet.create({
   quickActionMarkNeutral:{backgroundColor:colors.textSoft},
   quickActionMarkWarning:{backgroundColor:colors.warning},
   quickActionArrow:{color:colors.primary,lineHeight:20},
-  segmented:{backgroundColor:colors.surfaceMuted,borderRadius:radius.md,padding:4,gap:4,borderWidth:1,borderColor:colors.border},
-  segment:{flex:1,minHeight:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.sm},
-  segmentActive:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  segmented:{backgroundColor:colors.surfaceStrong,borderRadius:radius.md,padding:3,gap:3,borderWidth:1,borderColor:colors.borderStrong},
+  segment:{flex:1,minHeight:control.compactHeight,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.sm},
+  segmentActive:{backgroundColor:colors.primary,borderWidth:1,borderColor:colors.primary},
   segmentPressed:{opacity:.72},
   segmentText:{color:colors.textMuted,fontSize:typography.caption,fontWeight:'700',textAlign:'center'},
-  segmentTextActive:{color:colors.primary,fontWeight:'800'},
+  segmentTextActive:{color:colors.onPrimary,fontWeight:'800'},
+  paymentMethodCard:{flexGrow:1,flexBasis:104,minWidth:96,minHeight:84,alignItems:'center',justifyContent:'center',gap:4,padding:spacing.xs,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  paymentMethodCardSelected:{backgroundColor:colors.primaryFaint,borderColor:colors.primary,borderWidth:2},
+  paymentMethodCardPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
+  paymentMethodIcon:{width:34,height:30,alignItems:'center',justifyContent:'center'},
+  paymentMethodIconSelected:{},
+  paymentMethodTextSelected:{color:colors.primary},
   alertCard:{backgroundColor:colors.warningSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F4D9A8',padding:spacing.md},
   alertCardPrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
   alertCardNegative:{backgroundColor:colors.negativeSoft,borderColor:'#F3C9CD'},
