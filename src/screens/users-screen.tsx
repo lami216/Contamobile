@@ -32,7 +32,7 @@ const permissionGroups:{id:string;ar:string;fr:string;matches:(cap:Capability)=>
 ];
 
 export function UsersScreen(){
-  const db=useSQLiteContext(),auth=useAuth(),{locale,t,isRTL,errorMessage}=useI18n(),ar=locale==='ar';
+  const db=useSQLiteContext(),auth=useAuth(),{locale,t,isRTL,errorMessage}=useI18n();
   const [items,setItems]=useState<AppUser[]>([]),[editing,setEditing]=useState<AppUser|null|undefined>(undefined),[busy,setBusy]=useState(false);
   const load=useCallback(async()=>setItems(await listUsers(db)),[db]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
