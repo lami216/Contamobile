@@ -12,8 +12,8 @@ import { useI18n } from '@/i18n/provider';
 import { colors, radius, spacing } from '@/theme';
 
 export function BrandingScreen(){
-  const db=useSQLiteContext(),auth=useAuth(),{t,locale,isRTL,errorMessage}=useI18n();
-  const allowed=auth.has('settings.branding.manage'),ar=locale==='ar';
+  const db=useSQLiteContext(),auth=useAuth(),{t,isRTL,errorMessage}=useI18n();
+  const allowed=auth.has('settings.branding.manage');
   const [form,setForm]=useState<InvoiceBranding|null>(null),[busy,setBusy]=useState(false);
   const load=useCallback(async()=>{if(allowed)setForm(await getInvoiceBranding(db))},[allowed,db]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
