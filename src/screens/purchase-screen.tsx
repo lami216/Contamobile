@@ -338,11 +338,11 @@ export function PurchaseScreen(){
 
     <Sheet visible={productPicker} title={t('purchaseProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
       <View style={styles.pickerControls}>
-        <View style={styles.pickerSearchRow}>
+        <View style={[styles.pickerSearchRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
           <View style={styles.flex}><SearchField value={search} onChangeText={setSearch} returnKeyType="search" autoCapitalize="none" placeholder={t('purchaseSearchPlaceholder')}/></View>
           {searching?<ActivityIndicator size="small" color={colors.primary}/>:null}
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>
           <Chip label={t('purchaseAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
           {categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
         </ScrollView>
@@ -690,7 +690,7 @@ const styles=StyleSheet.create({
   searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
   searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
   pickerControls:{gap:spacing.sm},
-  pickerSearchRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
+  pickerSearchRow:{alignItems:'center',gap:spacing.sm},
   chips:{gap:spacing.xs,paddingVertical:2},
   warehouseOptions:{gap:spacing.sm},
   productRow:{minHeight:64,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
