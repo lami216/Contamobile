@@ -40,6 +40,7 @@ import {
 } from '@/components/ui';
 import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
+import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing, touch } from '@/theme';
 
@@ -675,23 +676,6 @@ function CustomerGlyph({warning=false}:{warning?:boolean}){
   return <View style={styles.customerGlyph}><View style={[styles.customerHead,{borderColor:color}]}/><View style={[styles.customerBody,{borderColor:color}]}/></View>;
 }
 
-function PaymentGlyph({selected}:{selected:boolean}){
-  const color=selected?colors.primary:colors.textMuted;
-  return <View style={styles.paymentGlyph}><View style={[styles.paymentCard,{borderColor:color}]}/><View style={[styles.paymentLine,{backgroundColor:color}]}/><View style={[styles.paymentDot,{backgroundColor:color}]}/></View>;
-}
-
-function ReceiptGlyph(){
-  return <View style={styles.receiptGlyph}><View style={styles.receiptPage}/><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/></View>;
-}
-
-function TrashGlyph(){
-  return <View style={styles.trashGlyph}><View style={styles.trashLid}/><View style={styles.trashCan}/><View style={styles.trashLineOne}/><View style={styles.trashLineTwo}/></View>;
-}
-
-function CheckGlyph(){
-  return <View style={styles.checkGlyph}><View style={styles.checkShort}/><View style={styles.checkLong}/></View>;
-}
-
 const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
@@ -740,20 +724,4 @@ const styles=StyleSheet.create({
   customerGlyph:{width:25,height:24,alignItems:'center',justifyContent:'flex-end'},
   customerHead:{position:'absolute',top:1,width:9,height:9,borderRadius:5,borderWidth:2},
   customerBody:{width:20,height:11,borderWidth:2,borderBottomWidth:0,borderTopLeftRadius:10,borderTopRightRadius:10},
-  paymentGlyph:{width:27,height:22,position:'relative'},
-  paymentCard:{position:'absolute',left:1,top:2,width:25,height:18,borderWidth:2,borderRadius:4},
-  paymentLine:{position:'absolute',left:3,right:3,top:7,height:2},
-  paymentDot:{position:'absolute',right:5,bottom:5,width:4,height:4,borderRadius:2},
-  receiptGlyph:{width:24,height:26,alignItems:'center',justifyContent:'center'},
-  receiptPage:{width:19,height:23,borderWidth:2,borderColor:colors.primary,borderRadius:3},
-  receiptLine:{position:'absolute',top:8,width:11,height:2,backgroundColor:colors.primary},
-  receiptLineShort:{position:'absolute',top:13,width:7,height:2,backgroundColor:colors.primary},
-  trashGlyph:{width:22,height:24,position:'relative'},
-  trashLid:{position:'absolute',top:3,left:3,width:16,height:2,borderRadius:2,backgroundColor:colors.negative},
-  trashCan:{position:'absolute',top:7,left:5,width:12,height:14,borderWidth:2,borderColor:colors.negative,borderRadius:3},
-  trashLineOne:{position:'absolute',top:10,left:9,width:2,height:8,backgroundColor:colors.negative},
-  trashLineTwo:{position:'absolute',top:10,right:7,width:2,height:8,backgroundColor:colors.negative},
-  checkGlyph:{width:34,height:30,position:'relative',transform:[{rotate:'-8deg'}]},
-  checkShort:{position:'absolute',left:3,top:15,width:13,height:5,borderRadius:3,backgroundColor:colors.onPrimary,transform:[{rotate:'45deg'}]},
-  checkLong:{position:'absolute',left:11,top:11,width:22,height:5,borderRadius:3,backgroundColor:colors.onPrimary,transform:[{rotate:'-45deg'}]},
 });
