@@ -672,7 +672,7 @@ const styles=StyleSheet.create({
   productSide:{minWidth:92,alignItems:'flex-end',justifyContent:'center',gap:3},
   productMoney:{fontWeight:'800',color:colors.text},
   addButton:{width:38,height:38,borderRadius:radius.md,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',flexShrink:0,borderWidth:1,borderColor:colors.primarySoft},
-  addPressed:{backgroundColor:'#D9E9FF',transform:[{scale:.97}]},
+  addPressed:{backgroundColor:colors.primaryHover,transform:[{scale:.97}]},
   addPlus:{color:colors.primary,fontSize:22,lineHeight:24},
   addCheck:{color:colors.positive,fontSize:20},
   disabledRow:{backgroundColor:colors.surfaceMuted},
