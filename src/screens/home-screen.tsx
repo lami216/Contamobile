@@ -408,7 +408,7 @@ const styles=StyleSheet.create({
   quickIconPurple:{backgroundColor:dashboardColors.purpleTile},
   quickTitle:{fontSize:13,textAlign:'center'},
   quickCaption:{fontSize:10.5,textAlign:'center'},
-  lowStockBanner:{minHeight:64,alignItems:'center',gap:spacing.sm,padding:spacing.sm,borderRadius:radius.lg,backgroundColor:'#FFF5DF',borderWidth:1,borderColor:dashboardColors.warningBorder},
+  lowStockBanner:{minHeight:64,alignItems:'center',gap:spacing.sm,padding:spacing.sm,borderRadius:radius.lg,backgroundColor:colors.warningSoft,borderWidth:1,borderColor:dashboardColors.warningBorder},
   bannerPressed:{backgroundColor:dashboardColors.warningPressed},
   warningTile:{width:42,height:42,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:dashboardColors.warningTile},
   warningMark:{color:colors.warning,fontSize:23,lineHeight:25},
