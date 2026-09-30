@@ -13,7 +13,7 @@ import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing } from '@/theme';
 
 export function WarehousesScreen(){
-  const db=useSQLiteContext(),{t,isRTL,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,errorMessage}=useI18n(),auth=useAuth();
   const [items,setItems]=useState<Warehouse[]>([]),[editing,setEditing]=useState<Warehouse|null|undefined>(undefined),[busy,setBusy]=useState(false);
   const load=useCallback(async()=>{if(auth.has('warehouses.view'))setItems(await listWarehouses(db))},[auth,db]);
   useFocusEffect(useCallback(()=>{void load()},[load]));
