@@ -16,6 +16,8 @@ export const colors = {
   primaryFaint: '#F4F8FF',
   primaryStrong: '#104C9F',
   onPrimary: '#FFFFFF',
+  onPrimarySoft: '#DCE9FF',
+  onPrimaryMuted: '#E7F0FF',
   accent: '#2E7BEA',
   accentSoft: '#EAF2FF',
   positive: '#16A344',
