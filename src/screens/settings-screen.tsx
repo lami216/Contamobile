@@ -190,7 +190,7 @@ const styles=StyleSheet.create({
   printPanel:{gap:spacing.xs},
   printCard:{minHeight:96,alignItems:'center',gap:spacing.md,padding:spacing.sm,borderRadius:radius.md,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface},
   printCardActive:{borderColor:colors.primary,backgroundColor:colors.primaryFaint},
-  paper:{width:50,height:64,borderRadius:4,borderWidth:1,borderColor:colors.borderStrong,backgroundColor:'#FFFFFF',padding:5,gap:4,justifyContent:'flex-start'},
+  paper:{width:50,height:64,borderRadius:4,borderWidth:1,borderColor:colors.borderStrong,backgroundColor:colors.surface,padding:5,gap:4,justifyContent:'flex-start'},
   paperThermal:{width:36,height:68},
   paperNarrow:{width:28},
   paperBrand:{width:'58%',height:3,borderRadius:2,backgroundColor:colors.primary,alignSelf:'center'},
