@@ -12,6 +12,7 @@ export const colors = {
   primary: '#1769E0',
   primaryPressed: '#0F54B8',
   primarySoft: '#E8F1FF',
+  primaryHover: '#D9E9FF',
   primaryFaint: '#F4F8FF',
   primaryStrong: '#104C9F',
   onPrimary: '#FFFFFF',
