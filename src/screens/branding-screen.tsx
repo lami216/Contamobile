@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getInvoiceBranding, invoiceFonts, saveInvoiceBranding, type InvoiceBranding, type InvoiceFont } from '@/services/branding-service';
-import { AppText, Button, Chip, EmptyState, Field, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
+import { AppText, Button, Chip, EmptyState, Field, PageHeader, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
 import { StickyActionBar } from '@/components/mobile-interactions';
 import { useAuth } from '@/auth/provider';
 import { useI18n } from '@/i18n/provider';
@@ -39,7 +39,7 @@ export function BrandingScreen(){
     }catch(error){Alert.alert(t('error'),errorMessage(error))}
   };
   return <Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-    <SectionTitle title={t('brandingTitle')} subtitle={t('brandingHint')}/>
+    <PageHeader title={t('brandingTitle')} subtitle={t('brandingHint')} onBack={()=>router.back()}/>
     <View style={styles.preview}><View style={styles.previewRule}/><AppText variant="caption" muted>{t('brandingPreview')}</AppText><View style={[styles.previewBrand,{flexDirection:isRTL?'row-reverse':'row'}]}>{form.storeLogoDataUrl?<Image accessibilityLabel={t('brandingLogoAlt')} source={{uri:form.storeLogoDataUrl}} resizeMode="contain" style={styles.previewLogo}/>:null}<View style={styles.previewCopy}><AppText variant="title" style={styles.previewName}>{form.storeName.trim()||t('appName')}</AppText>{form.storePhone?<AppText variant="caption" muted>{form.storePhone}</AppText>:null}{form.storeAddress?<AppText variant="caption" muted>{form.storeAddress}</AppText>:null}</View></View></View>
     <View style={styles.formPanel}>
       <FormSection title={t('brandingBusinessInfo')}>
