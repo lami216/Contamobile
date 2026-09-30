@@ -29,6 +29,29 @@ export const colors = {
   shadow: '#17365E',
 } as const;
 
+export const dashboardColors = {
+  errorBorder: '#F4CDD0',
+  analyticsSurface: '#EAF3FF',
+  analyticsBorder: '#D5E5F8',
+  analyticsIcon: '#DCEAFF',
+  analyticsRule: '#D7E4F3',
+  analyticsDivider: '#D5E4F4',
+  chartBar: '#8ABCF8',
+  chartZero: '#C8D7E8',
+  selectedDivider: '#D4E2F2',
+  positiveTile: '#E4F8EF',
+  negativeTile: '#FDE9EB',
+  amberTile: '#FFF2DA',
+  purpleTile: '#F0E9FF',
+  warningBorder: '#F3D59B',
+  warningPressed: '#FFEDC6',
+  warningTile: '#FFE4AD',
+  warningText: '#A96308',
+  negativeStrong: '#B92E43',
+  amberStrong: '#EA920E',
+  purpleStrong: '#6C3DE1',
+} as const;
+
 export const spacing = {
   xxs: 4,
   xs: 8,
