@@ -12,7 +12,6 @@ import { PartyPicker, ProductPicker } from '@/components/pickers';
 import {
   AlertCard,
   AppText,
-  Badge,
   Button,
   EmptyState,
   FinancialSummary,
@@ -38,7 +37,7 @@ type SettlementType='payNow'|'credit';
 const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 
 export function InvoiceEditorScreen({kind,documentId}:{kind:'sale'|'purchase';documentId?:string}){
-  const db=useSQLiteContext(),{t,locale,isRTL,errorMessage,number,money}=useI18n(),auth=useAuth(),ar=locale==='ar';
+  const db=useSQLiteContext(),{t,isRTL,errorMessage,number,money}=useI18n(),auth=useAuth();
   const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[parties,setParties]=useState<Party[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]);
   const [warehouseId,setWarehouseId]=useState(''),[partyId,setPartyId]=useState<string|null>(null),[paymentMethod,setPaymentMethod]=useState('');
   const [lines,setLines]=useState<Line[]>([]),[original,setOriginal]=useState<DocumentRecord|null>(null);
