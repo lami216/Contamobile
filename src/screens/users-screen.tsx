@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { CAPABILITIES, expandPermissionDependencies, permissionPresets, removePermissionAndDependents, type Capability } from '@/auth/permissions';
 import { useAuth } from '@/auth/provider';
 import { createUser, deleteUser, listUsers, updateUser } from '@/auth/service';
 import type { AppUser } from '@/auth/types';
-import { AppText, Badge, Button, Chip, EmptyState, Field, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
+import { AccountingRow, AppText, Badge, Button, Chip, EmptyState, Field, GroupedList, PageHeader, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
 import { StickyActionBar } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { colors, radius, spacing } from '@/theme';
@@ -39,7 +39,28 @@ export function UsersScreen(){
   if(!auth.has('settings.users.manage'))return <Screen><EmptyState title={t('usersNoPermission')}/><Button title={t('cancel')} variant="ghost" onPress={()=>router.back()}/></Screen>;
   const save=async(input:{username:string;name:string;password:string;permissions:Capability[];isActive:boolean})=>{if(busy)return;setBusy(true);try{const first=!auth.hasUsers;if(editing)await updateUser(db,editing.id,input);else await createUser(db,input);if(first){const ok=await auth.login(input.username,input.password);if(!ok)throw new Error(t('usersFirstLoginFailed'))}else await auth.refresh();setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}};
   const remove=(user:AppUser)=>Alert.alert(t('usersDeleteTitle'),user.name,[{text:t('cancel'),style:'cancel'},{text:t('confirm'),style:'destructive',onPress:()=>void (async()=>{if(busy)return;setBusy(true);try{await deleteUser(db,user.id);await auth.refresh();setEditing(undefined);await load()}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}})()}]);
-  return <Screen padded={false}><FlatList data={items} keyExtractor={user=>user.id} contentContainerStyle={styles.list} ListHeaderComponent={<View style={styles.header}><SectionTitle title={t('usersTitle')} subtitle={t('usersHint')} action={<Button compact title={t('add')} onPress={()=>setEditing(null)}/>}/><View style={[styles.summary,{flexDirection:isRTL?'row-reverse':'row'}]}><MiniStat label={t('usersCount')} value={String(items.length)}/><MiniStat label={t('usersActiveCount')} value={String(items.filter(user=>user.isActive).length)}/><MiniStat label={t('usersOwnersCount')} value={String(items.filter(user=>user.owner).length)} last/></View></View>} ListEmptyComponent={<EmptyState title={t('usersEmpty')} description={t('usersEmptyHint')}/>} renderItem={({item})=><Pressable accessibilityRole="button" onPress={()=>setEditing(item)} style={({pressed})=>[styles.row,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}><View style={styles.body}><View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading">{item.name}</AppText>{item.owner?<Badge label={t('usersOwner')} tone="primary"/>:!item.isActive?<Badge label={t('usersDisabled')} tone="warning"/>:<Badge label={t('usersActive')} tone="positive"/>}</View><AppText variant="caption" muted>@{item.username}</AppText></View><View style={styles.trailing}><AppText variant="caption" muted>{item.owner?(t('usersAllRights')):t('usersRightsCount').replace('{count}',String(item.permissions.length))}</AppText><AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText></View></Pressable>}/>{editing!==undefined?<UserEditor user={editing} locale={locale} busy={busy} onClose={()=>{if(!busy)setEditing(undefined)}} onSave={save} onDelete={editing&&!editing.owner?()=>remove(editing):undefined}/>:null}</Screen>;
+  return <Screen padded={false}>
+    <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}>
+        <PageHeader title={t('usersTitle')} subtitle={t('usersHint')} onBack={()=>router.back()} trailing={<Button compact title={t('add')} onPress={()=>setEditing(null)}/>}/>
+        <View style={[styles.summary,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <MiniStat label={t('usersCount')} value={String(items.length)}/>
+          <MiniStat label={t('usersActiveCount')} value={String(items.filter(user=>user.isActive).length)}/>
+          <MiniStat label={t('usersOwnersCount')} value={String(items.filter(user=>user.owner).length)} last/>
+        </View>
+      </View>
+      {items.length?<GroupedList>{items.map((item,index)=><AccountingRow
+        key={item.id}
+        title={item.name}
+        subtitle={`@${item.username}`}
+        meta={item.owner?t('usersAllRights'):t('usersRightsCount').replace('{count}',String(item.permissions.length))}
+        trailing={<Badge label={item.owner?t('usersOwner'):!item.isActive?t('usersDisabled'):t('usersActive')} tone={item.owner?'primary':!item.isActive?'warning':'positive'}/>}
+        onPress={()=>setEditing(item)}
+        last={index===items.length-1}
+      />)}</GroupedList>:<EmptyState title={t('usersEmpty')} description={t('usersEmptyHint')}/>}
+    </ScrollView>
+    {editing!==undefined?<UserEditor user={editing} locale={locale} busy={busy} onClose={()=>{if(!busy)setEditing(undefined)}} onSave={save} onDelete={editing&&!editing.owner?()=>remove(editing):undefined}/>:null}
+  </Screen>;
 }
 
 function MiniStat({label,value,last=false}:{label:string;value:string;last?:boolean}){return <View style={[styles.miniStat,last&&styles.lastMini]}><View style={styles.miniRule}/><AppText variant="caption" muted>{label}</AppText><AppText variant="heading">{value}</AppText></View>}
