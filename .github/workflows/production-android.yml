@@ -1,4 +1,4 @@
-name: Android Production APK
+name: Android Release APK
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ on:
       - '.github/workflows/production-android.yml'
 
 concurrency:
-  group: android-production-${{ github.ref }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  production-apk:
+  release-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -28,6 +28,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
 
       - name: Restore Node dependencies
         id: node-modules
@@ -46,23 +52,26 @@ jobs:
       - name: Verify Android JavaScript export
         run: npx expo export --platform android --output-dir dist-check
 
-      - name: Require Expo production credentials
+      - name: Report signing path
         shell: bash
         run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::EXPO_TOKEN is not configured in GitHub Actions secrets."
-            echo "::error::A production-signed build will not fall back to the Android debug keystore."
-            exit 1
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "EAS credentials detected: building with EAS production signing."
+          else
+            echo "::notice::EXPO_TOKEN is not configured. Building the Android release variant locally instead."
+            echo "::notice::This is a non-debug release APK, but its signing certificate is not a Play/EAS production credential."
           fi
 
-      - name: Link Expo project for this build
+      - name: Link Expo project
+        if: ${{ env.EXPO_TOKEN != '' }}
         shell: bash
         run: |
           set -euo pipefail
           npx --yes eas-cli@latest whoami
           npx --yes eas-cli@latest init --non-interactive --force
 
-      - name: Build production-signed installable APK
+      - name: Build EAS production-signed APK
+        if: ${{ env.EXPO_TOKEN != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -73,7 +82,8 @@ jobs:
             --wait \
             --json > eas-build.json
 
-      - name: Download EAS production APK
+      - name: Download EAS APK
+        if: ${{ env.EXPO_TOKEN != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -83,12 +93,13 @@ jobs:
           const build = Array.isArray(parsed) ? parsed[0] : parsed;
           const url = build?.artifacts?.buildUrl ?? build?.artifacts?.applicationArchiveUrl;
           if (!url) {
-            console.error('No production APK URL was returned by EAS.');
+            console.error('No APK URL was returned by EAS.');
             console.error(JSON.stringify(build, null, 2));
             process.exit(1);
           }
           fs.writeFileSync('/tmp/eas-build-url.txt', url);
-          fs.writeFileSync('production-build-info.json', JSON.stringify({
+          fs.writeFileSync('release-build-info.json', JSON.stringify({
+            source: 'eas-production',
             id: build?.id ?? null,
             platform: build?.platform ?? 'ANDROID',
             profile: 'production-apk',
@@ -96,38 +107,74 @@ jobs:
             artifactUrl: url
           }, null, 2));
           NODE
-          curl --fail --location "$(cat /tmp/eas-build-url.txt)" --output alkarna-production.apk
-          test -s alkarna-production.apk
+          curl --fail --location "$(cat /tmp/eas-build-url.txt)" --output alkarna-release.apk
+          test -s alkarna-release.apk
 
-      - name: Verify standalone bundle and release signature
+      - name: Generate native Android project
+        if: ${{ env.EXPO_TOKEN == '' }}
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build local release APK
+        if: ${{ env.EXPO_TOKEN == '' }}
         shell: bash
         run: |
           set -euo pipefail
-          unzip -l alkarna-production.apk | tee /tmp/apk-files.txt >/dev/null
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache --parallel
+          cp android/app/build/outputs/apk/release/app-release.apk alkarna-release.apk
+          test -s alkarna-release.apk
+          node <<'NODE'
+          const fs = require('fs');
+          fs.writeFileSync('release-build-info.json', JSON.stringify({
+            source: 'local-gradle-release',
+            profile: 'release',
+            note: 'Non-debug Android release variant. Play/EAS production signing requires EXPO_TOKEN.'
+          }, null, 2));
+          NODE
+
+      - name: Verify standalone release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          unzip -l alkarna-release.apk | tee /tmp/apk-files.txt >/dev/null
           if ! grep -q "index.android.bundle" /tmp/apk-files.txt; then
-            echo "::error::Production APK does not contain the bundled JavaScript application."
+            echo "::error::Release APK does not contain the bundled JavaScript application."
             exit 1
           fi
 
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          if [ -z "$APKSIGNER" ]; then
-            echo "::error::apksigner was not found on the runner."
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ] || [ -z "$AAPT" ]; then
+            echo "::error::Android build-tools verification utilities were not found."
             exit 1
           fi
 
-          "$APKSIGNER" verify --verbose --print-certs alkarna-production.apk | tee production-signature.txt
-          if grep -qi "Android Debug" production-signature.txt; then
-            echo "::error::Refusing to publish an APK signed with the Android debug certificate."
+          "$APKSIGNER" verify --verbose --print-certs alkarna-release.apk | tee release-signature.txt
+          "$AAPT" dump badging alkarna-release.apk | tee release-badging.txt >/dev/null
+
+          if grep -q "application-debuggable" release-badging.txt; then
+            echo "::error::APK is debuggable; refusing to publish it as a release artifact."
             exit 1
           fi
 
-      - name: Upload production APK
+          if [ -n "$EXPO_TOKEN" ] && grep -qi "Android Debug" release-signature.txt; then
+            echo "::error::EAS production build unexpectedly uses the Android debug certificate."
+            exit 1
+          fi
+
+          if [ -z "$EXPO_TOKEN" ] && grep -qi "Android Debug" release-signature.txt; then
+            echo "::warning::Release variant is signed with the generated Android debug certificate because no production signing credential is configured."
+          fi
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-production-apk-${{ github.sha }}
+          name: alkarna-release-apk-${{ github.sha }}
           path: |
-            alkarna-production.apk
-            production-build-info.json
-            production-signature.txt
+            alkarna-release.apk
+            release-build-info.json
+            release-signature.txt
+            release-badging.txt
           if-no-files-found: error
           retention-days: 30
