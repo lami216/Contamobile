@@ -33,7 +33,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       - name: Restore Node dependencies
         id: node-modules
@@ -113,6 +112,17 @@ jobs:
       - name: Generate native Android project
         if: ${{ env.EXPO_TOKEN == '' }}
         run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Restore Gradle cache
+        if: ${{ env.EXPO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-release-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-release-${{ runner.os }}-
 
       - name: Build local release APK
         if: ${{ env.EXPO_TOKEN == '' }}
