@@ -1,39 +1,105 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
+import type { DocumentRecord, Party, PaymentAccount, Product, ProductCategory, Warehouse } from '@/domain/types';
+import { getDocumentById } from '@/db/document-queries';
 import { listParties, listPaymentAccounts, listProductCategories, listProducts, listWarehouses } from '@/db/queries';
 import { postPurchase } from '@/services/accounting-service';
 import { PartyPicker } from '@/components/pickers';
-import { AppText, Button, Card, Chip, EmptyState, Field, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
+import {
+  AlertCard,
+  AppText,
+  Badge,
+  Button,
+  Chip,
+  EmptyState,
+  FinancialSummary,
+  FormField,
+  FramedSection,
+  GroupedList,
+  InvoiceLine as InvoiceLineView,
+  Money,
+  PageHeader,
+  PaymentMethodCard,
+  Screen,
+  SearchField,
+  SegmentedControl,
+  SelectRow,
+  Surface,
+} from '@/components/ui';
 import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
+import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing, touch } from '@/theme';
 
-type Line={product:Product;quantity:number;unitPrice:number};
+type PurchaseLine={product:Product;quantity:number;unitPrice:number};
+type PurchaseStage='invoice'|'payment'|'success';
+type SettlementType='payNow'|'credit';
+type PurchaseSuccess={
+  documentId:string;
+  document:DocumentRecord|null;
+  total:number;
+  paid:number;
+  due:number;
+  occurredAt:string;
+  supplierName:string|null;
+  paymentName:string|null;
+  settlement:SettlementType;
+};
+
+function format(template:string,values:Record<string,string|number>){
+  return Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
+}
 
 export function PurchaseScreen(){
-  const db=useSQLiteContext(),{t,locale,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar';
+  const db=useSQLiteContext(),{t,errorMessage,isRTL}=useI18n(),auth=useAuth();
   const allowed=auth.has('purchases.create');
-  const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState(''),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
-  const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[lines,setLines]=useState<Line[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
-  const [supplierId,setSupplierId]=useState<string|null>(null),[supplierPicker,setSupplierPicker]=useState(false),[paymentOpen,setPaymentOpen]=useState(false),[paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[busy,setBusy]=useState(false),[successTotal,setSuccessTotal]=useState<number|null>(null);
+  const [warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState('');
+  const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[suppliers,setSuppliers]=useState<Party[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[categoryId,setCategoryId]=useState('');
+  const [results,setResults]=useState<Product[]>([]),[search,setSearch]=useState(''),[lines,setLines]=useState<PurchaseLine[]>([]),[loading,setLoading]=useState(true),[searching,setSearching]=useState(false);
+  const [stage,setStage]=useState<PurchaseStage>('invoice'),[settlement,setSettlement]=useState<SettlementType>('payNow');
+  const [supplierId,setSupplierId]=useState<string|null>(null),[supplierPicker,setSupplierPicker]=useState(false),[productPicker,setProductPicker]=useState(false),[warehousePicker,setWarehousePicker]=useState(false);
+  const [paymentMethod,setPaymentMethod]=useState(''),[tender,setTender]=useState(''),[busy,setBusy]=useState(false);
   const [quantityLineId,setQuantityLineId]=useState<string|null>(null),[quantityDraft,setQuantityDraft]=useState('1'),[priceLineId,setPriceLineId]=useState<string|null>(null),[priceDraft,setPriceDraft]=useState('0');
+  const [success,setSuccess]=useState<PurchaseSuccess|null>(null);
 
   const loadBase=useCallback(async()=>{
     if(!allowed)return;
     setLoading(true);
     try{
-      const [w,a,s,cats]=await Promise.all([listWarehouses(db),listPaymentAccounts(db),listParties(db,'supplier','',300),listProductCategories(db)]);
-      const active=a.filter(item=>item.isActive&&!item.isArchived);
-      setWarehouses(w);setAccounts(active);setSuppliers(s);setCategories(cats);
+      const [w,a,s,cats]=await Promise.all([
+        listWarehouses(db),
+        listPaymentAccounts(db),
+        listParties(db,'supplier','',300),
+        listProductCategories(db),
+      ]);
+      const active=a.filter(account=>account.isActive&&!account.isArchived);
+      setWarehouses(w);
+      setAccounts(active);
+      setSuppliers(s);
+      setCategories(cats);
       setCategoryId(current=>current&&cats.some(category=>category.id===current)?current:'');
       setWarehouseId(current=>current||w.find(item=>item.isSalesDefault)?.id||w[0]?.id||'');
-      setPaymentMethod(current=>current==='note'||active.some(item=>item.id===current||item.code===current)?current:active.find(item=>item.code==='cash')?.id||active[0]?.id||'note');
-    }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setLoading(false)}
+      setPaymentMethod(current=>{
+        const match=active.find(account=>account.id===current||account.code===current);
+        return match?.id??active.find(account=>account.code==='cash')?.id??active[0]?.id??'';
+      });
+      setSettlement(current=>active.length?current:'credit');
+    }catch(error){Alert.alert(t('error'),errorMessage(error))}
+    finally{setLoading(false)}
   },[allowed,db,errorMessage,t]);
+
   useFocusEffect(useCallback(()=>{void loadBase()},[loadBase]));
 
   useEffect(()=>{
@@ -41,16 +107,27 @@ export function PurchaseScreen(){
     let cancelled=false;
     const timer=setTimeout(()=>{
       setSearching(true);
-      void listProducts(db,search,undefined,false,search.trim()?40:18,0,categoryId).then(rows=>{if(!cancelled)setResults(rows)}).catch(error=>{if(!cancelled)Alert.alert(t('error'),errorMessage(error))}).finally(()=>{if(!cancelled)setSearching(false)});
+      void listProducts(db,search,undefined,false,search.trim()?40:24,0,categoryId)
+        .then(rows=>{if(!cancelled)setResults(rows)})
+        .catch(error=>{if(!cancelled)Alert.alert(t('error'),errorMessage(error))})
+        .finally(()=>{if(!cancelled)setSearching(false)});
     },search.trim()?140:0);
     return()=>{cancelled=true;clearTimeout(timer)};
   },[allowed,categoryId,db,errorMessage,search,t]);
 
   const total=useMemo(()=>lines.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice),0),[lines]);
-  const itemCount=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
+  const totalQuantity=useMemo(()=>lines.reduce((sum,line)=>sum+line.quantity,0),[lines]);
   const supplier=suppliers.find(item=>item.id===supplierId)??null;
   const warehouse=warehouses.find(item=>item.id===warehouseId)??null;
-  const tenderValue=paymentMethod==='note'?0:Number(tender.trim()===''?total:tender),normalized=Number.isFinite(tenderValue)&&tenderValue>=0?tenderValue:0,underpaid=paymentMethod!=='note'&&normalized<total,paid=paymentMethod==='note'?0:total,due=paymentMethod==='note'?total:0,needsSupplier=paymentMethod==='note';
+  const selectedAccount=accounts.find(account=>account.id===paymentMethod)??null;
+  const priceLine=lines.find(line=>line.product.id===priceLineId)??null;
+
+  const tenderValue=settlement==='credit'?0:Number(tender.trim()===''?total:tender);
+  const normalizedTender=Number.isFinite(tenderValue)&&tenderValue>=0?tenderValue:0;
+  const underpaid=settlement==='payNow'&&normalizedTender<total;
+  const paid=settlement==='credit'?0:total;
+  const due=settlement==='credit'?total:0;
+  const needsSupplier=settlement==='credit';
 
   const addProduct=(product:Product)=>setLines(current=>{
     const existing=current.find(line=>line.product.id===product.id);
@@ -58,84 +135,589 @@ export function PurchaseScreen(){
     const cost=Number(product.lastPurchaseCost??product.pieceCost??0);
     return [{product,quantity:1,unitPrice:cost},...current];
   });
-  const changeQuantity=(id:string,value:number)=>setLines(current=>value<=0?current.filter(line=>line.product.id!==id):current.map(line=>line.product.id===id?{...line,quantity:value}:line));
-  const openQuantity=(line:Line)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
-  const saveQuantity=()=>{if(quantityLineId){const value=Number(quantityDraft);if(Number.isFinite(value)&&value>0)changeQuantity(quantityLineId,value)}setQuantityLineId(null)};
-  const openPrice=(line:Line)=>{setPriceLineId(line.product.id);setPriceDraft(String(line.unitPrice))};
-  const savePrice=()=>{if(!priceLineId)return;const value=Number(priceDraft);if(!Number.isFinite(value)||value<=0){Alert.alert(t('purchasePrice'),ar?'سعر الشراء إلزامي ويجب أن يكون أكبر من صفر.':'Le prix d’achat est obligatoire et doit être supérieur à zéro.');return}setLines(current=>current.map(line=>line.product.id===priceLineId?{...line,unitPrice:value}:line));setPriceLineId(null)};
-  const invalidLine=()=>lines.find(line=>!Number.isFinite(line.quantity)||line.quantity<=0||!Number.isFinite(line.unitPrice)||line.unitPrice<=0);
-  const startPayment=()=>{if(!lines.length||!warehouseId)return;const invalid=invalidLine();if(invalid){Alert.alert(t('error'),ar?`${invalid.product.name}: أدخل كمية صحيحة وسعر شراء أكبر من صفر.`:`${invalid.product.name} : saisissez une quantité valide et un prix d’achat supérieur à zéro.`);return}setTender(String(total));setPaymentOpen(true)};
-  const complete=async()=>{
-    if(!lines.length||!warehouseId||busy)return;
-    const invalid=invalidLine();if(invalid){setPaymentOpen(false);Alert.alert(t('error'),ar?`${invalid.product.name}: سعر الشراء إلزامي ويجب أن يكون أكبر من صفر.`:`${invalid.product.name} : le prix d’achat est obligatoire et doit être supérieur à zéro.`);return}
-    if(paymentMethod!=='note'&&(!Number.isFinite(tenderValue)||tenderValue<0)){Alert.alert(t('error'),ar?'أدخل مبلغًا صحيحًا.':'Saisissez un montant valide.');return}
-    if(underpaid){Alert.alert(t('error'),ar?'الدفع الجزئي داخل الفاتورة غير مدعوم. اختر الآجل ثم سجّل الدفعة لاحقًا من حساب المورد.':'Le paiement partiel dans la facture n’est pas pris en charge. Choisissez le crédit puis enregistrez le paiement depuis le compte fournisseur.');return}
-    if(needsSupplier&&!supplierId){Alert.alert(t('supplier'),ar?'اختر المورد لأن هناك مبلغًا متبقيًا.':'Choisissez le fournisseur car un montant reste dû.');return}
-    setBusy(true);
-    try{
-      await postPurchase(db,{warehouseId,partyId:supplierId,paymentMethod,cashAmount:paid,lines:lines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice}))});
-      const done=total;setLines([]);setSupplierId(null);setTender('');setPaymentOpen(false);setSearch('');setSuccessTotal(done);
-      setResults(await listProducts(db,'',undefined,false,18,0,categoryId));
-    }catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}
+
+  const changeQuantity=(id:string,value:number)=>setLines(current=>value<=0
+    ?current.filter(line=>line.product.id!==id)
+    :current.map(line=>line.product.id===id?{...line,quantity:value}:line));
+
+  const openQuantity=(line:PurchaseLine)=>{setQuantityLineId(line.product.id);setQuantityDraft(String(line.quantity))};
+  const saveQuantity=()=>{
+    if(quantityLineId){
+      const value=Number(quantityDraft);
+      if(Number.isFinite(value)&&value>0)changeQuantity(quantityLineId,value);
+    }
+    setQuantityLineId(null);
   };
 
-  if(!allowed)return <Screen><EmptyState title={ar?'ليس لديك صلاحية تسجيل المشتريات':'Vous n’avez pas le droit d’enregistrer des achats.'}/></Screen>;
+  const openPrice=(line:PurchaseLine)=>{setPriceLineId(line.product.id);setPriceDraft(String(line.unitPrice))};
+  const closePrice=()=>{setPriceLineId(null);setPriceDraft('0')};
+  const savePrice=()=>{
+    if(!priceLineId||!priceLine)return;
+    const value=Number(priceDraft);
+    if(!Number.isSafeInteger(value)||value<=0){
+      Alert.alert(t('purchasePrice'),t('purchasePriceRequired'));
+      return;
+    }
+    setLines(current=>current.map(line=>line.product.id===priceLineId?{...line,unitPrice:value}:line));
+    closePrice();
+  };
+
+  const invalidLine=()=>lines.find(line=>!Number.isFinite(line.quantity)||line.quantity<=0||!Number.isSafeInteger(line.unitPrice)||line.unitPrice<=0);
+
+  const startPayment=()=>{
+    if(!lines.length||!warehouseId)return;
+    const invalid=invalidLine();
+    if(invalid){
+      Alert.alert(t('error'),format(t('purchaseInvalidLine'),{product:invalid.product.name}));
+      return;
+    }
+    if(settlement==='payNow')setTender(String(total));
+    setStage('payment');
+  };
+
+  const changeSettlement=(next:SettlementType)=>{
+    setSettlement(next);
+    if(next==='credit'){
+      setTender('0');
+      return;
+    }
+    setTender(String(total));
+    if(!paymentMethod&&accounts[0])setPaymentMethod(accounts[0].id);
+  };
+
+  const complete=async()=>{
+    if(!lines.length||!warehouseId||busy)return;
+    const invalid=invalidLine();
+    if(invalid){
+      setStage('invoice');
+      Alert.alert(t('error'),format(t('purchaseInvalidLine'),{product:invalid.product.name}));
+      return;
+    }
+    if(settlement==='payNow'&&!paymentMethod){
+      Alert.alert(t('paymentMethod'),t('purchasePaymentMethodRequired'));
+      return;
+    }
+    if(settlement==='payNow'&&(!Number.isFinite(tenderValue)||tenderValue<0)){
+      Alert.alert(t('error'),t('posInvalidTender'));
+      return;
+    }
+    if(underpaid){
+      Alert.alert(t('error'),t('purchasePartialPayment'));
+      return;
+    }
+    if(needsSupplier&&!supplierId){
+      Alert.alert(t('supplier'),t('purchaseSupplierRequired'));
+      return;
+    }
+
+    setBusy(true);
+    const completedTotal=total;
+    const completedPaid=paid;
+    const completedDue=due;
+    const completedAt=new Date().toISOString();
+    const completedSupplierName=supplier?.name??null;
+    const completedPaymentName=selectedAccount?.name??null;
+    const completedSettlement=settlement;
+    const method=settlement==='credit'?'note':paymentMethod;
+
+    try{
+      const documentId=await postPurchase(db,{
+        warehouseId,
+        partyId:supplierId,
+        paymentMethod:method,
+        cashAmount:completedPaid,
+        lines:lines.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice})),
+      });
+      let document:DocumentRecord|null=null;
+      try{document=await getDocumentById(db,documentId)}catch{}
+
+      setLines([]);
+      setSupplierId(null);
+      setTender('');
+      setSearch('');
+      setProductPicker(false);
+      closePrice();
+      setQuantityLineId(null);
+      setSuccess({
+        documentId,
+        document,
+        total:document?.total??completedTotal,
+        paid:document?.paidTotal??completedPaid,
+        due:document?.dueTotal??completedDue,
+        occurredAt:document?.occurredAt??completedAt,
+        supplierName:completedSupplierName,
+        paymentName:completedSettlement==='payNow'?completedPaymentName:null,
+        settlement:completedSettlement,
+      });
+      setStage('success');
+      setResults(await listProducts(db,'',undefined,false,24,0,categoryId));
+    }catch(error){Alert.alert(t('error'),errorMessage(error))}
+    finally{setBusy(false)}
+  };
+
+  const startNewPurchase=()=>{
+    setSuccess(null);
+    setSupplierId(null);
+    setTender('');
+    setSearch('');
+    setProductPicker(false);
+    closePrice();
+    setQuantityLineId(null);
+    setSettlement(accounts.length?'payNow':'credit');
+    if(!paymentMethod&&accounts[0])setPaymentMethod(accounts[0].id);
+    setStage('invoice');
+  };
+
+  const back=()=>{
+    if(stage==='invoice'){router.back();return}
+    if(stage==='payment'){setStage('invoice');return}
+    startNewPurchase();
+  };
+
+  if(!allowed)return <Screen><EmptyState title={t('error')}/></Screen>;
   if(loading)return <Screen><EmptyState title={t('loading')}/></Screen>;
+  if(stage==='success'&&success)return <Screen padded={false}><PurchaseSuccessView
+    success={success}
+    onNew={startNewPurchase}
+    onView={auth.has('records.view')?()=>router.push({pathname:'/sales/records',params:{documentId:success.documentId}}):undefined}
+  /></Screen>;
+
   return <Screen padded={false}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-      <View style={[styles.top,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="title">{t('purchases')}</AppText><AppText variant="caption" muted>{warehouse?.name??t('warehouse')}</AppText></View><Button compact title={supplier?.name??t('supplier')} variant={supplier?'secondary':'ghost'} onPress={()=>setSupplierPicker(true)}/></View>
-      {warehouses.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(item=><Chip key={item.id} label={item.name} active={warehouseId===item.id} disabled={lines.length>0&&warehouseId!==item.id} onPress={()=>setWarehouseId(item.id)}/>)}</ScrollView>:null}
-      {categories.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}><Chip label={ar?'كل الفئات':'Toutes'} active={!categoryId} onPress={()=>setCategoryId('')}/>{categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}</ScrollView>:null}
-      <SearchField value={search} onChangeText={setSearch} placeholder={ar?'ابحث عن المنتج بالاسم أو الباركود…':'Produit par nom ou code-barres…'}/>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS==='ios'?'padding':undefined}>
+      {stage==='invoice'?<PurchaseInvoiceStage
+        warehouse={warehouse}
+        warehouses={warehouses}
+        warehouseId={warehouseId}
+        supplier={supplier}
+        lines={lines}
+        total={total}
+        totalQuantity={totalQuantity}
+        onBack={back}
+        onChooseSupplier={()=>setSupplierPicker(true)}
+        onChooseWarehouse={()=>setWarehousePicker(true)}
+        onAddProduct={()=>setProductPicker(true)}
+        onChangeQuantity={changeQuantity}
+        onEditQuantity={openQuantity}
+        onEditPrice={openPrice}
+      />:null}
 
-      {search.trim()?<View style={styles.resultSection}><SectionTitle title={ar?'نتائج المنتجات':'Produits'} subtitle={searching?(ar?'جارٍ البحث…':'Recherche…'):undefined}/><View style={styles.panel}>{results.slice(0,12).map((product,index)=><Pressable key={product.id} accessibilityRole="button" onPress={()=>{addProduct(product);setSearch('')}} style={({pressed})=>[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.rowPressed,index===Math.min(results.length,12)-1&&styles.lastRow]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={1}>{product.name}</AppText><AppText variant="caption" muted>{product.sku}{product.categoryName?` • ${product.categoryName}`:''}{product.barcode?` • ${product.barcode}`:''}</AppText></View><View style={styles.productEnd}><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><View style={styles.addButton}><AppText variant="heading" style={styles.plusText}>+</AppText></View></View></Pressable>)}</View></View>:null}
+      {stage==='payment'?<PurchasePaymentStage
+        total={total}
+        accounts={accounts}
+        settlement={settlement}
+        setSettlement={changeSettlement}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        tender={tender}
+        setTender={setTender}
+        paid={paid}
+        due={due}
+        underpaid={underpaid}
+        needsSupplier={needsSupplier}
+        supplier={supplier}
+        onChooseSupplier={()=>setSupplierPicker(true)}
+        onBack={back}
+      />:null}
 
-      <SectionTitle title={ar?`الفاتورة · ${lines.length}`:`Facture · ${lines.length}`} subtitle={lines.length?(ar?'سعر الشراء إلزامي لكل سطر ويمكن تعديله مباشرة.':'Le prix d’achat est obligatoire pour chaque ligne et reste modifiable.'):undefined}/>
-      {lines.length===0?<Card tone="muted"><EmptyState title={ar?'أضف أول منتج':'Ajoutez un premier produit'} description={ar?'ابحث عن المنتج واضغط عليه لإضافته للفاتورة.':'Recherchez puis touchez le produit pour l’ajouter.'}/></Card>:<View style={styles.invoicePanel}>{lines.map((line,index)=><View key={line.product.id} style={[styles.invoiceLine,index===lines.length-1&&styles.lastRow]}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.flex}>{line.product.name}</AppText><Money value={Math.round(line.quantity*line.unitPrice)}/></View><View style={[styles.controls,{flexDirection:isRTL?'row-reverse':'row'}]}><QuantityStepper value={line.quantity} onDecrease={()=>changeQuantity(line.product.id,line.quantity-1)} onIncrease={()=>changeQuantity(line.product.id,line.quantity+1)} onEdit={()=>openQuantity(line)}/><Pressable accessibilityRole="button" onPress={()=>openPrice(line)} style={({pressed})=>[styles.priceButton,line.unitPrice<=0&&styles.priceMissing,pressed&&styles.pricePressed]}><AppText variant="caption" muted>{t('purchasePrice')}</AppText><Money value={line.unitPrice}/><AppText variant="caption" style={styles.editHint}>{line.unitPrice>0?t('edit'):(ar?'مطلوب':'Requis')}</AppText></Pressable></View></View>)}</View>}
+      {stage==='invoice'?<BottomActionBar
+        label={t('posContinuePayment')}
+        total={total}
+        secondary={format(t('posProductsCount'),{count:lines.length})}
+        onPress={startPayment}
+        disabled={!lines.length}
+      />:null}
 
-      {!search.trim()?<View style={styles.quick}><SectionTitle title={ar?'إضافة سريعة':'Ajout rapide'} subtitle={ar?'آخر المنتجات المتاحة للإضافة':'Produits disponibles à ajouter rapidement'}/><View style={styles.grid}>{results.slice(0,10).map(product=><Pressable key={product.id} onPress={()=>addProduct(product)} style={({pressed})=>[styles.quickProduct,pressed&&styles.quickPressed]}><View style={styles.quickRule}/><AppText variant="subheading" numberOfLines={2}>{product.name}</AppText><Money value={Number(product.lastPurchaseCost??product.pieceCost??0)}/><AppText variant="caption" muted>{product.categoryName??(ar?'اضغط للإضافة':'Touchez pour ajouter')}</AppText></Pressable>)}</View></View>:null}
-    </ScrollView>
-    <BottomActionBar label={ar?'متابعة الدفع':'Continuer'} total={total} count={itemCount} secondary={ar?'قطعة':'articles'} onPress={startPayment} disabled={!lines.length}/>
+      {stage==='payment'?<BottomActionBar
+        label={t('completePurchase')}
+        total={total}
+        secondary={settlement==='credit'?t('purchasePaymentStatusCredit'):t('purchasePaymentStatusPaid')}
+        onPress={()=>void complete()}
+        disabled={underpaid||(needsSupplier&&!supplier)||(settlement==='payNow'&&!paymentMethod)||!lines.length}
+        loading={busy}
+      />:null}
+    </KeyboardAvoidingView>
 
-    <Sheet visible={paymentOpen} title={ar?'دفع فاتورة الشراء':'Paiement de l’achat'} onClose={()=>{if(!busy)setPaymentOpen(false)}} footer={<><Button title={ar?`تأكيد الشراء · ${number(total)}`:`Confirmer · ${number(total)}`} loading={busy} disabled={underpaid||(needsSupplier&&!supplier)} onPress={()=>void complete()}/><Button title={t('cancel')} variant="ghost" disabled={busy} onPress={()=>setPaymentOpen(false)}/></>}><Card tone="primary"><View style={[styles.totalRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading">{t('total')}</AppText><Money value={total} large/></View></Card><View style={styles.paymentBlock}><AppText variant="caption" muted>{t('paymentMethod')}</AppText><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(account=><Chip key={account.id} label={account.name} active={paymentMethod===account.id||paymentMethod===account.code} onPress={()=>{setPaymentMethod(account.id);setTender(String(total))}}/>)}<Chip label={t('onCredit')} active={paymentMethod==='note'} onPress={()=>{setPaymentMethod('note');setTender('0')}}/></View></View>{paymentMethod!=='note'?<Field label={ar?'المبلغ المدفوع':'Montant payé'} value={tender} onChangeText={setTender} keyboardType="number-pad" selectTextOnFocus/>:null}<View style={[styles.summary,{flexDirection:isRTL?'row-reverse':'row'}]}><View><AppText variant="caption" muted>{t('paid')}</AppText><Money value={paid} tone="positive"/></View><View><AppText variant="caption" muted>{t('due')}</AppText><Money value={due} tone={due>0?'negative':'normal'}/></View></View><Button title={supplier?.name??(needsSupplier?(ar?'اختر المورد — مطلوب':'Choisir le fournisseur — requis'):(ar?'شراء مباشر':'Achat direct'))} variant={needsSupplier&&!supplier?'secondary':'ghost'} onPress={()=>setSupplierPicker(true)}/>{underpaid?<Card tone="warning"><AppText variant="caption" style={styles.warning}>{ar?'المبلغ أقل من الإجمالي. الفاتورة إمّا مدفوعة بالكامل أو آجلة بالكامل؛ للدفعة الجزئية اختر الآجل ثم سجّل الدفع من حساب المورد.':'Le montant est inférieur au total. La facture doit être entièrement payée ou à crédit ; pour un paiement partiel, choisissez le crédit puis enregistrez le paiement depuis le compte fournisseur.'}</AppText></Card>:needsSupplier&&!supplier?<Card tone="warning"><AppText variant="caption" style={styles.warning}>{ar?'اختر المورد لأن الفاتورة الآجلة تُسجل عليه بالكامل.':'Choisissez le fournisseur car la facture à crédit est portée intégralement sur son compte.'}</AppText></Card>:null}</Sheet>
-    <PartyPicker visible={supplierPicker} parties={suppliers} directLabel={ar?'شراء مباشر':'Achat direct'} onClose={()=>setSupplierPicker(false)} onSelect={party=>setSupplierId(party?.id??null)}/>
-    <Sheet visible={Boolean(quantityLineId)} title={ar?'تعديل الكمية':'Modifier la quantité'} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}><Field label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/></Sheet>
-    <Sheet visible={Boolean(priceLineId)} title={ar?'سعر الشراء':'Prix d’achat'} onClose={()=>setPriceLineId(null)} footer={<Button title={t('save')} onPress={savePrice}/>}><Field label={t('purchasePrice')} value={priceDraft} onChangeText={setPriceDraft} keyboardType="number-pad" autoFocus selectTextOnFocus/><AppText variant="caption" muted>{ar?'إلزامي ويجب أن يكون أكبر من صفر.':'Obligatoire et supérieur à zéro.'}</AppText></Sheet>
-    <Sheet visible={successTotal!==null} title={t('success')} onClose={()=>setSuccessTotal(null)} footer={<><Button title={ar?'شراء جديد':'Nouvel achat'} onPress={()=>setSuccessTotal(null)}/>{auth.has('records.view')?<Button title={t('records')} variant="secondary" onPress={()=>{setSuccessTotal(null);router.push('/sales/records')}}/>:null}</>}><View style={styles.success}><View style={styles.successMark}><AppText variant="title" style={styles.successCheck}>✓</AppText></View><AppText variant="subheading">{ar?'تم تحديث المخزون وتسجيل الفاتورة والدفع.':'Stock, facture et paiement sont enregistrés.'}</AppText>{successTotal!==null?<Money value={successTotal} large/>:null}</View></Sheet>
+    <Sheet fixedHeight visible={productPicker} title={t('purchaseProductPickerTitle')} onClose={()=>setProductPicker(false)} footer={<Button title={t('posDone')} onPress={()=>setProductPicker(false)}/>}>
+      <View style={styles.pickerControls}>
+        <View style={[styles.pickerSearchRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <View style={styles.flex}><SearchField value={search} onChangeText={setSearch} returnKeyType="search" autoCapitalize="none" placeholder={t('purchaseSearchPlaceholder')}/></View>
+          {searching?<ActivityIndicator size="small" color={colors.primary}/>:null}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <Chip label={t('purchaseAllCategories')} active={!categoryId} onPress={()=>setCategoryId('')}/>
+          {categories.map(category=><Chip key={category.id} label={category.name} active={categoryId===category.id} onPress={()=>setCategoryId(category.id)}/>)}
+        </ScrollView>
+      </View>
+      <GroupedList>
+        {results.length?results.map((product,index)=><PurchaseProductRow
+          key={product.id}
+          product={product}
+          warehouseId={warehouseId}
+          last={index===results.length-1}
+          added={lines.some(line=>line.product.id===product.id)}
+          onAdd={()=>addProduct(product)}
+        />):<EmptyState title={searching?t('loading'):t('noResults')}/>}
+      </GroupedList>
+    </Sheet>
+
+    <Sheet visible={warehousePicker} title={t('warehouse')} onClose={()=>setWarehousePicker(false)}>
+      <View style={styles.warehouseOptions}>
+        {warehouses.map(item=><Button
+          key={item.id}
+          title={item.name}
+          variant={warehouseId===item.id?'primary':'secondary'}
+          disabled={lines.length>0&&warehouseId!==item.id}
+          onPress={()=>{setWarehouseId(item.id);setWarehousePicker(false)}}
+        />)}
+      </View>
+    </Sheet>
+
+    <PartyPicker visible={supplierPicker} parties={suppliers} directLabel={t('purchaseDirect')} createLabel={t('partyNewSupplier')} onCreate={()=>{setSupplierPicker(false);router.push({pathname:'/parties/suppliers',params:{create:'1'}})}} onClose={()=>setSupplierPicker(false)} onSelect={party=>setSupplierId(party?.id??null)}/>
+
+    <Sheet visible={Boolean(quantityLineId)} title={t('posEditQuantity')} onClose={()=>setQuantityLineId(null)} footer={<Button title={t('save')} onPress={saveQuantity}/>}>
+      <FormField label={t('quantity')} value={quantityDraft} onChangeText={setQuantityDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/>
+    </Sheet>
+
+    <Sheet visible={Boolean(priceLineId)} title={t('purchasePrice')} onClose={closePrice} footer={<Button title={t('save')} onPress={savePrice}/>}>
+      {priceLine?<View style={styles.priceEditor}>
+        <AppText variant="subheading">{priceLine.product.name}</AppText>
+        <Surface tone="muted" style={styles.currentCost}>
+          <View style={[styles.costRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+            <AppText variant="caption" muted>{t('purchaseLastCost')}</AppText>
+            <Money value={Number(priceLine.product.lastPurchaseCost??priceLine.product.pieceCost??0)}/>
+          </View>
+        </Surface>
+        <FormField label={t('purchasePrice')} value={priceDraft} onChangeText={setPriceDraft} keyboardType="number-pad" autoFocus selectTextOnFocus trailing={<AppText variant="caption" muted>MRU</AppText>}/>
+        <AppText variant="caption" muted>{t('purchasePriceRequired')}</AppText>
+      </View>:null}
+    </Sheet>
   </Screen>;
 }
 
+function PurchaseInvoiceStage({
+  warehouse,warehouses,warehouseId,supplier,lines,total,totalQuantity,onBack,onChooseSupplier,onChooseWarehouse,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
+}:{
+  warehouse:Warehouse|null;
+  warehouses:Warehouse[];
+  warehouseId:string;
+  supplier:Party|null;
+  lines:PurchaseLine[];
+  total:number;
+  totalQuantity:number;
+  onBack:()=>void;
+  onChooseSupplier:()=>void;
+  onChooseWarehouse:()=>void;
+  onAddProduct:()=>void;
+  onChangeQuantity:(id:string,value:number)=>void;
+  onEditQuantity:(line:PurchaseLine)=>void;
+  onEditPrice:(line:PurchaseLine)=>void;
+}){
+  const {t,number,isRTL}=useI18n();
+  return <View style={styles.stage}>
+    <View style={styles.headerPad}><PageHeader title={t('purchaseNewTitle')} subtitle={warehouse?.name} onBack={onBack}/></View>
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content,styles.contentWithBar]}>
+      <GroupedList>
+        <SelectRow
+          label={t('supplier')}
+          value={supplier?.name??t('purchaseDirect')}
+          hint={supplier?.phone??t('purchaseSupplierOptional')}
+          leading={<SupplierTile/>}
+          onPress={onChooseSupplier}
+        />
+        {warehouses.length>1?<SelectRow
+          label={t('warehouse')}
+          value={warehouse?.name??t('warehouse')}
+          disabled={lines.length>0}
+          leading={<WarehouseTile/>}
+          onPress={onChooseWarehouse}
+        />:null}
+      </GroupedList>
+
+      <Pressable accessibilityRole="button" accessibilityLabel={t('purchaseAddProduct')} onPress={onAddProduct} style={({pressed})=>[styles.productSearchTrigger,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed]}>
+        <SearchGlyph/>
+        <AppText variant="body" muted style={styles.productSearchText}>{t('purchaseSearchPlaceholder')}</AppText>
+        <View style={styles.productSearchAdd}><AppText variant="heading" style={styles.productSearchPlus}>+</AppText></View>
+      </Pressable>
+
+      <FramedSection
+        title={`${t('purchaseInvoiceLines')} (${number(lines.length)})`}
+        padded={false}
+      >
+        {lines.length?lines.map((line,index)=><PurchaseInvoiceLine
+          key={line.product.id}
+          line={line}
+          warehouseId={warehouseId}
+          last={index===lines.length-1}
+          onDecrease={()=>onChangeQuantity(line.product.id,line.quantity-1)}
+          onIncrease={()=>onChangeQuantity(line.product.id,line.quantity+1)}
+          onEditQuantity={()=>onEditQuantity(line)}
+          onEditPrice={()=>onEditPrice(line)}
+          onRemove={()=>onChangeQuantity(line.product.id,0)}
+        />):<EmptyState
+          title={t('posNoLinesTitle')}
+          description={t('posNoLinesDescription')}
+          action={<Button compact title={t('purchaseAddProduct')} variant="secondary" onPress={onAddProduct}/>}
+        />}
+      </FramedSection>
+
+      {lines.length?<View style={styles.summaryBlock}>
+        <AppText variant="subheading">{t('purchaseInvoiceSummary')}</AppText>
+        <FinancialSummary items={[
+          {label:t('posItemsCount'),value:lines.length,format:'number'},
+          {label:t('posTotalQuantity'),value:totalQuantity,format:'number'},
+          {label:t('posInvoiceTotal'),value:total,emphasize:true},
+        ]}/>
+      </View>:null}
+    </ScrollView>
+  </View>;
+}
+
+function PurchasePaymentStage({
+  total,accounts,settlement,setSettlement,paymentMethod,setPaymentMethod,tender,setTender,paid,due,underpaid,needsSupplier,supplier,onChooseSupplier,onBack,
+}:{
+  total:number;
+  accounts:PaymentAccount[];
+  settlement:SettlementType;
+  setSettlement:(value:SettlementType)=>void;
+  paymentMethod:string;
+  setPaymentMethod:(value:string)=>void;
+  tender:string;
+  setTender:(value:string)=>void;
+  paid:number;
+  due:number;
+  underpaid:boolean;
+  needsSupplier:boolean;
+  supplier:Party|null;
+  onChooseSupplier:()=>void;
+  onBack:()=>void;
+}){
+  const {t,isRTL}=useI18n();
+  return <View style={styles.stage}>
+    <View style={styles.headerPad}><PageHeader title={t('purchasePaymentTitle')} onBack={onBack}/></View>
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content,styles.contentWithBar]}>
+      <FramedSection title={t('supplier')} padded={false}>
+        <SelectRow
+          label={t('supplier')}
+          value={supplier?.name??(needsSupplier?t('supplier'):t('purchaseDirect'))}
+          hint={supplier?.phone??(needsSupplier?t('purchaseSupplierRequired'):t('purchaseSupplierOptional'))}
+          leading={<SupplierTile warning={needsSupplier&&!supplier}/>}
+          onPress={onChooseSupplier}
+        />
+      </FramedSection>
+
+      <FramedSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('purchaseCreditHint'):t('purchasePayNowHint')}>
+        <SegmentedControl
+          value={settlement}
+          options={[{value:'payNow',label:t('posPayNow')},{value:'credit',label:t('onCredit')}]}
+          onChange={setSettlement}
+        />
+      </FramedSection>
+
+      {settlement==='payNow'?<FramedSection title={t('posPaymentAccounts')}>
+        {accounts.length?<View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          {accounts.map(account=><PaymentMethodCard
+            key={account.id}
+            label={account.name}
+            selected={paymentMethod===account.id}
+            onPress={()=>setPaymentMethod(account.id)}
+            icon={<PaymentGlyph selected={paymentMethod===account.id}/>}
+            style={styles.paymentMethodCard}
+          />)}
+        </View>:<Surface tone="warning"><AppText variant="caption">{t('posNoPaymentAccounts')}</AppText></Surface>}
+      </FramedSection>:null}
+
+      {settlement==='payNow'?<FramedSection title={t('purchasePaidAmount')}>
+        <FormField
+          label={t('purchasePaidAmount')}
+          value={tender}
+          onChangeText={setTender}
+          keyboardType="number-pad"
+          selectTextOnFocus
+          placeholder="0"
+          trailing={<AppText variant="subheading" muted>MRU</AppText>}
+        />
+      </FramedSection>:null}
+
+      <View style={styles.summaryBlock}>
+        <AppText variant="subheading">{t('purchasePaymentSummary')}</AppText>
+        <FinancialSummary items={settlement==='credit'?[
+          {label:t('total'),value:total},
+          {label:t('due'),value:due,tone:'negative',emphasize:true},
+        ]:[
+          {label:t('total'),value:total},
+          {label:t('paid'),value:paid,tone:'positive',emphasize:true},
+        ]}/>
+      </View>
+
+      {underpaid?<AlertCard title={t('purchasePartialPayment')} tone="warning"/>:null}
+      {needsSupplier&&!supplier?<AlertCard title={t('purchaseSupplierRequired')} tone="warning"/>:null}
+    </ScrollView>
+  </View>;
+}
+
+function PurchaseProductRow({product,warehouseId,last,onAdd,added}:{product:Product;warehouseId:string;last:boolean;onAdd:()=>void;added:boolean}){
+  const {t,money,number,isRTL}=useI18n();
+  const currentStock=Number(product.stocks?.[warehouseId]??0);
+  const lastCost=Number(product.lastPurchaseCost??product.pieceCost??0);
+  const meta=[product.categoryName,product.sku?'#'+product.sku:null,product.barcode].filter(Boolean).join(' • ');
+  return <View style={[styles.productRow,{flexDirection:isRTL?'row-reverse':'row'},last&&styles.lastRow]}>
+    <View style={styles.productCopy}>
+      <AppText variant="subheading" numberOfLines={2}>{product.name}</AppText>
+      {meta?<AppText variant="caption" muted numberOfLines={1}>{meta}</AppText>:null}
+      <AppText variant="caption" muted>{format(t('purchaseCurrentStock'),{count:number(currentStock)})}</AppText>
+    </View>
+    <View style={styles.productEnd}>
+      <AppText variant="caption" muted>{t('purchaseLastCost')}</AppText>
+      <AppText variant="subheading">{money(lastCost)}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('add')} hitSlop={4} onPress={onAdd} style={({pressed})=>[styles.addButton,pressed&&styles.pressed]}>
+        <AppText variant="heading" style={[styles.plusText,added&&styles.addedText]}>{added?'✓':'+'}</AppText>
+      </Pressable>
+    </View>
+  </View>;
+}
+
+function PurchaseInvoiceLine({line,warehouseId,last,onDecrease,onIncrease,onEditQuantity,onEditPrice,onRemove}:{line:PurchaseLine;warehouseId:string;last:boolean;onDecrease:()=>void;onIncrease:()=>void;onEditQuantity:()=>void;onEditPrice:()=>void;onRemove:()=>void}){
+  const {t,money,number}=useI18n();
+  const currentStock=Number(line.product.stocks?.[warehouseId]??0);
+  const meta=[format(t('purchaseCurrentStock'),{count:number(currentStock)}),line.product.categoryName,line.product.sku?'#'+line.product.sku:null].filter(Boolean).join(' • ');
+  return <InvoiceLineView
+    productName={line.product.name}
+    context={meta}
+    status={line.unitPrice<=0?<Badge label={t('purchasePrice')} tone="warning"/>:undefined}
+    quantityLabel={t('quantity')}
+    quantityControl={<QuantityStepper compact value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEditQuantity}/>}
+    unitPriceLabel={t('purchasePrice')}
+    unitPrice={<Pressable accessibilityRole="button" onPress={onEditPrice} style={({pressed})=>[styles.invoicePrice,line.unitPrice<=0&&styles.priceMissing,pressed&&styles.pressed]}><AppText variant="subheading">{money(line.unitPrice)}</AppText></Pressable>}
+    lineTotalLabel={t('total')}
+    lineTotal={<AppText variant="subheading" numberOfLines={1} style={styles.lineMoney}>{money(Math.round(line.quantity*line.unitPrice))}</AppText>}
+    actions={<Pressable accessibilityRole="button" accessibilityLabel={t('delete')} hitSlop={4} onPress={onRemove} style={({pressed})=>[styles.deleteButton,pressed&&styles.deletePressed]}><TrashGlyph/></Pressable>}
+    last={last}
+  />;
+}
+
+function PurchaseSuccessView({success,onNew,onView}:{success:PurchaseSuccess;onNew:()=>void;onView?:()=>void}){
+  const {t,date,isRTL}=useI18n();
+  const documentNumber=success.document?.number;
+  const summaryItems=[
+    {label:t('total'),value:success.total},
+    {label:t('paid'),value:success.paid,tone:success.paid>0?'positive' as const:'normal' as const,emphasize:success.due===0},
+    ...(success.due>0?[{label:t('due'),value:success.due,tone:'negative' as const,emphasize:true}]:[]),
+  ];
+
+  return <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.successScreen}>
+    <View style={styles.successHero}>
+      <View style={styles.successMark}><CheckGlyph/></View>
+      <AppText variant="title" style={styles.successTitle}>{t('purchaseSuccessTitle')}</AppText>
+      <AppText variant="body" muted style={styles.successDescription}>{t('purchaseSuccessDescription')}</AppText>
+      <Badge label={success.settlement==='credit'?t('purchasePaymentStatusCredit'):t('purchasePaymentStatusPaid')} tone={success.settlement==='credit'?'warning':'positive'}/>
+    </View>
+
+    <FramedSection title={documentNumber?t('posInvoiceNumber'):undefined}>
+      {documentNumber?<View style={[styles.documentNumberRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{documentNumber}</AppText><View style={styles.documentGlyph}><ReceiptGlyph/></View></View>:null}
+      <View style={styles.successDetails}>
+        <SuccessDetailRow label={t('posSaleDate')} value={date(success.occurredAt)}/>
+        {success.supplierName?<SuccessDetailRow label={t('supplier')} value={success.supplierName}/>:null}
+        {success.paymentName?<SuccessDetailRow label={t('paymentMethod')} value={success.paymentName}/>:null}
+      </View>
+    </FramedSection>
+
+    <FinancialSummary items={summaryItems}/>
+
+    <View style={[styles.successActions,{flexDirection:isRTL?'row-reverse':'row'}]}>
+      {onView?<View style={styles.actionFlex}><Button title={t('posViewInvoice')} variant="secondary" onPress={onView}/></View>:null}
+      <View style={styles.actionFlex}><Button title={t('purchaseNewAction')} onPress={onNew}/></View>
+    </View>
+  </ScrollView>;
+}
+
+function SuccessDetailRow({label,value}:{label:string;value:string}){
+  const {isRTL}=useI18n();
+  return <View style={[styles.successDetailRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+    <AppText variant="caption" muted>{label}</AppText>
+    <AppText variant="subheading" numberOfLines={1} style={styles.successDetailValue}>{value}</AppText>
+  </View>;
+}
+
+function SearchGlyph(){
+  return <View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View>;
+}
+
+function SupplierTile({warning=false}:{warning?:boolean}){
+  return <View style={[styles.partyTile,warning&&styles.partyTileWarning]}><SupplierGlyph warning={warning}/></View>;
+}
+
+function WarehouseTile(){
+  return <View style={styles.warehouseTile}><WarehouseGlyph/></View>;
+}
+
+function SupplierGlyph({warning=false}:{warning?:boolean}){
+  const color=warning?colors.warning:colors.primary;
+  return <View style={styles.supplierGlyph}><View style={[styles.supplierBox,{borderColor:color}]}/><View style={[styles.supplierLine,{backgroundColor:color}]}/><View style={[styles.supplierWheelOne,{borderColor:color}]}/><View style={[styles.supplierWheelTwo,{borderColor:color}]}/></View>;
+}
+
+function WarehouseGlyph(){
+  return <View style={styles.warehouseGlyph}><View style={styles.warehouseRoof}/><View style={styles.warehouseBody}/><View style={styles.warehouseDoor}/></View>;
+}
+
 const styles=StyleSheet.create({
-  content:{padding:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
-  top:{alignItems:'center',gap:spacing.md},
-  flex:{flex:1},
-  chips:{gap:spacing.xs,flexWrap:'wrap'},
-  resultSection:{gap:spacing.sm},
-  panel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
-  productRow:{minHeight:68,alignItems:'center',gap:spacing.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  productEnd:{alignItems:'flex-end',gap:spacing.xs},
-  addButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center'},
+  root:{flex:1,backgroundColor:colors.background},
+  stage:{flex:1},
+  headerPad:{paddingHorizontal:spacing.md},
+  content:{paddingHorizontal:spacing.md,paddingTop:spacing.xs,gap:spacing.sm,paddingBottom:spacing.lg},
+  contentWithBar:{paddingBottom:112},
+  flex:{flex:1,minWidth:0},
+  summaryBlock:{gap:spacing.xs},
+  productSearchTrigger:{minHeight:48,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
+  productSearchText:{flex:1,minWidth:0},
+  productSearchAdd:{width:34,height:34,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  productSearchPlus:{color:colors.primary,lineHeight:24},
+  searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
+  searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
+  searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
+  pickerControls:{gap:spacing.sm},
+  pickerSearchRow:{alignItems:'center',gap:spacing.sm},
+  chips:{gap:spacing.xs,paddingVertical:2},
+  warehouseOptions:{gap:spacing.sm},
+  productRow:{minHeight:64,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
+  productCopy:{flex:1,minWidth:0,gap:2},
+  productEnd:{minWidth:96,alignItems:'flex-end',gap:2},
+  addButton:{width:38,height:38,borderRadius:radius.md,backgroundColor:colors.primarySoft,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.primarySoft},
   plusText:{color:colors.primary,lineHeight:24},
-  rowPressed:{backgroundColor:colors.surfaceMuted},
+  addedText:{color:colors.positive},
   lastRow:{borderBottomWidth:0},
-  invoicePanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
-  invoiceLine:{padding:spacing.md,gap:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  lineHead:{alignItems:'flex-start',gap:spacing.md},
-  controls:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
-  priceButton:{minWidth:112,padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border,alignItems:'flex-end',gap:spacing.xxs},
-  priceMissing:{borderColor:colors.warning,backgroundColor:colors.warningSoft},
-  pricePressed:{backgroundColor:colors.surfaceStrong},
-  editHint:{color:colors.primary,fontWeight:'700'},
-  quick:{gap:spacing.sm},
-  grid:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm},
-  quickProduct:{width:'48%',minHeight:116,borderRadius:radius.md,backgroundColor:colors.surface,padding:spacing.md,gap:spacing.xs,borderWidth:1,borderColor:colors.border},
-  quickRule:{width:24,height:2,borderRadius:2,backgroundColor:colors.accent,marginBottom:spacing.xxs},
-  quickPressed:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
-  totalRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
-  paymentBlock:{gap:spacing.sm},
-  summary:{gap:spacing.xl},
-  warning:{color:colors.warning,fontWeight:'700'},
-  success:{alignItems:'center',gap:spacing.md,paddingVertical:spacing.md},
-  successMark:{width:64,height:64,borderRadius:radius.lg,backgroundColor:colors.positiveSoft,borderWidth:1,borderColor:'#D3E7DA',alignItems:'center',justifyContent:'center'},
-  successCheck:{color:colors.positive},
+  pressed:{opacity:.72,transform:[{scale:.99}]},
+  lineMoney:{fontWeight:'800',fontVariant:['tabular-nums'],fontSize:16},
+  invoicePrice:{minHeight:34,alignItems:'center',justifyContent:'center',paddingHorizontal:2,borderRadius:radius.sm},
+  priceMissing:{backgroundColor:colors.warningSoft,borderWidth:1,borderColor:colors.warning,paddingHorizontal:spacing.xs},
+  deleteButton:{width:touch.min,height:touch.min,borderRadius:radius.sm,alignItems:'center',justifyContent:'center'},
+  deletePressed:{backgroundColor:colors.negativeSoft},
+  paymentMethods:{flexWrap:'wrap',gap:spacing.xs},
+  paymentMethodCard:{width:'31.4%',flexGrow:0,flexBasis:'31.4%',minWidth:96},
+  priceEditor:{gap:spacing.sm},
+  currentCost:{gap:spacing.xs},
+  costRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.md},
+  partyTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  partyTileWarning:{backgroundColor:colors.warningSoft},
+  warehouseTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceStrong},
+  successScreen:{flexGrow:1,padding:spacing.md,paddingTop:spacing.lg,paddingBottom:spacing.xl,gap:spacing.md,backgroundColor:colors.background},
+  successHero:{alignItems:'center',gap:spacing.sm,paddingVertical:spacing.md},
+  successMark:{width:72,height:72,borderRadius:36,alignItems:'center',justifyContent:'center',backgroundColor:colors.positive},
+  successTitle:{textAlign:'center'},
+  successDescription:{textAlign:'center',maxWidth:330,lineHeight:20},
+  documentNumberRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
+  documentGlyph:{width:40,height:40,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.primarySoft},
+  successDetails:{gap:0,borderTopWidth:1,borderTopColor:colors.border,marginTop:spacing.xs},
+  successDetailRow:{minHeight:42,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,borderBottomWidth:1,borderBottomColor:colors.border},
+  successDetailValue:{flex:1,minWidth:0},
+  successActions:{marginTop:'auto',gap:spacing.sm},
+  actionFlex:{flex:1,minWidth:0},
+  supplierGlyph:{width:27,height:22,position:'relative'},
+  supplierBox:{position:'absolute',left:1,top:3,width:17,height:13,borderWidth:2,borderRadius:3},
+  supplierLine:{position:'absolute',right:1,top:8,width:8,height:2},
+  supplierWheelOne:{position:'absolute',left:5,bottom:0,width:6,height:6,borderRadius:3,borderWidth:2},
+  supplierWheelTwo:{position:'absolute',right:2,bottom:0,width:6,height:6,borderRadius:3,borderWidth:2},
+  warehouseGlyph:{width:25,height:24,position:'relative'},
+  warehouseRoof:{position:'absolute',left:2,right:2,top:2,height:8,borderLeftWidth:2,borderRightWidth:2,borderTopWidth:2,borderColor:colors.textMuted,borderTopLeftRadius:3,borderTopRightRadius:3},
+  warehouseBody:{position:'absolute',left:4,right:4,top:9,bottom:2,borderWidth:2,borderColor:colors.textMuted,borderRadius:2},
+  warehouseDoor:{position:'absolute',left:9,bottom:3,width:7,height:8,borderWidth:1.5,borderColor:colors.textMuted,borderBottomWidth:0},
 });

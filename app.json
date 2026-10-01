@@ -23,7 +23,12 @@
       "expo-secure-store"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/Contamobile"
+    },
+    "web": {
+      "output": "single",
+      "name": "الكرنه"
     }
   }
 }

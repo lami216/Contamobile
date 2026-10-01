@@ -8,6 +8,27 @@ export type ReportFilters={allTime?:boolean;productId?:string;categoryId?:string
 const isoEnd=(date:string)=>`${date}T23:59:59.999Z`,isoStart=(date:string)=>`${date}T00:00:00.000Z`;
 const period=(column:string,from:string,to:string,allTime=false)=>allTime?{sql:'',args:[] as (string|number)[]}:{sql:` AND ${column} BETWEEN ? AND ?`,args:[isoStart(from),isoEnd(to)] as (string|number)[]};
 
+export type SalesTrendPoint={date:string;value:number};
+
+export async function salesTrend(db:SQLiteDatabase,from:string,to:string,allTime=false,limit=14):Promise<SalesTrendPoint[]> {
+  if(!allTime){const issue=validateRequiredDateRange(from,to);if(issue)return []}
+  const safeLimit=Math.max(3,Math.min(31,Math.trunc(limit)||14));
+  const args:(string|number)[]=[];
+  let range='';
+  if(!allTime){range=' AND business_date BETWEEN ? AND ?';args.push(from,to)}
+  args.push(safeLimit);
+  const rows=await db.getAllAsync<{date:string;value:number|null}>(
+    `SELECT business_date date,COALESCE(SUM(total),0) value
+     FROM documents
+     WHERE kind='sale' AND status='posted' AND business_date IS NOT NULL${range}
+     GROUP BY business_date
+     ORDER BY business_date DESC
+     LIMIT ?`,
+    args,
+  );
+  return rows.reverse().map(row=>({date:row.date,value:Number(row.value??0)}));
+}
+
 export async function runReport(db:SQLiteDatabase,type:ReportType,from:string,to:string,filters:ReportFilters={}):Promise<ReportData>{
   if(type!=='debts'&&!filters.allTime){const issue=validateRequiredDateRange(from,to);if(issue)throw new Error(`invalid-report-range:${issue}`)}
   if(type==='debts')return debtsReport(db,filters);

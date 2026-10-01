@@ -1,41 +1,207 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import type { Product, Warehouse } from '@/domain/types';
-import { listProducts, listWarehouses } from '@/db/queries';
-import { AppText, Badge, Chip, EmptyState, Money, Screen, SearchField, SectionTitle } from '@/components/ui';
+import type { Warehouse } from '@/domain/types';
+import { listWarehouses, stockOverview, type StockOverviewItem } from '@/db/queries';
+import {
+  AppText,
+  Badge,
+  Button,
+  EmptyState,
+  GroupedList,
+  Money,
+  PageHeader,
+  Screen,
+  SearchField,
+  SegmentedControl,
+  SelectRow,
+  Surface,
+} from '@/components/ui';
+import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing } from '@/theme';
 
+type StockFilter='all'|'available'|'low'|'out';
+
 export function StockScreen(){
-  const db=useSQLiteContext(),{t,number,locale,isRTL}=useI18n(),auth=useAuth(),ar=locale==='ar';
-  const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[warehouseId,setWarehouseId]=useState(''),[search,setSearch]=useState('');
-  const load=useCallback(async()=>{if(!auth.has('warehouses.inventory.view'))return;const wh=await listWarehouses(db);setWarehouses(wh);const selected=warehouseId||wh.find(w=>w.isSalesDefault)?.id||wh[0]?.id||'';if(!warehouseId&&selected)setWarehouseId(selected);setProducts(await listProducts(db,search,selected,false,150))},[auth,db,search,warehouseId]);
+  const db=useSQLiteContext(),{t,number,isRTL}=useI18n(),auth=useAuth();
+  const [items,setItems]=useState<StockOverviewItem[]>([]);
+  const [warehouses,setWarehouses]=useState<Warehouse[]>([]);
+  const [warehouseId,setWarehouseId]=useState('');
+  const [warehousePicker,setWarehousePicker]=useState(false);
+  const [search,setSearch]=useState('');
+  const [filter,setFilter]=useState<StockFilter>('all');
+
+  const load=useCallback(async()=>{
+    if(!auth.has('warehouses.inventory.view'))return;
+    const wh=await listWarehouses(db);
+    setWarehouses(wh);
+    const selected=warehouseId||wh.find(warehouse=>warehouse.isSalesDefault)?.id||wh[0]?.id||'';
+    if(!warehouseId&&selected)setWarehouseId(selected);
+    setItems(selected?await stockOverview(db,selected):[]);
+  },[auth,db,warehouseId]);
+
   useFocusEffect(useCallback(()=>{void load()},[load]));
-  const summary=useMemo(()=>products.reduce((acc,item)=>{const qty=Number(item.stocks?.[warehouseId]??0),cost=Number(item.lastPurchaseCost??item.pieceCost??0);acc.quantity+=qty;acc.value+=qty*cost;if(qty<=5)acc.low+=1;return acc},{quantity:0,value:0,low:0}),[products,warehouseId]);
-  if(!auth.has('warehouses.inventory.view'))return <Screen><EmptyState title={ar?'ليس لديك صلاحية عرض جرد المخزون':'Vous n’avez pas accès à l’inventaire du stock.'}/></Screen>;
-  return <Screen padded={false}><FlatList data={products} keyExtractor={item=>item.id} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list} ListHeaderComponent={<View style={styles.header}><SectionTitle title={t('stock')} subtitle={ar?'اعرف الكمية والقيمة والمنتجات التي تحتاج إعادة تزويد بسرعة.':'Quantités, valeur et produits à réapprovisionner en un coup d’œil.'}/>{warehouses.length>1?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(w=><Chip key={w.id} label={w.name} active={warehouseId===w.id} onPress={()=>setWarehouseId(w.id)}/>)}</ScrollView>:null}<View style={[styles.summaryPanel,{flexDirection:isRTL?'row-reverse':'row'}]}><Metric label={ar?'إجمالي الكمية':'Quantité totale'} value={<AppText variant="heading">{number(summary.quantity)}</AppText>}/><Metric label={t('inventoryValue')} value={<Money value={Math.round(summary.value)}/>}/><Metric label={t('lowStock')} value={<AppText variant="heading" style={summary.low>0?styles.warning:undefined}>{number(summary.low)}</AppText>} warning={summary.low>0} last/></View><SearchField value={search} onChangeText={setSearch} placeholder={ar?'ابحث بالاسم أو الباركود…':'Nom ou code-barres…'}/></View>} ListEmptyComponent={<EmptyState title={search?t('noResults'):t('noData')}/>} renderItem={({item})=>{const qty=Number(item.stocks?.[warehouseId]??0),cost=Number(item.lastPurchaseCost??item.pieceCost??0);return <View style={[styles.row,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.body}><View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1} style={styles.name}>{item.name}</AppText>{qty<=5?<Badge label={t('lowStock')} tone="warning"/>:null}</View><AppText variant="caption" muted>{item.sku}{item.barcode?` • ${item.barcode}`:''}</AppText><View style={[styles.costRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="caption" muted>{t('purchasePrice')}</AppText><Money value={cost}/></View></View><View style={styles.trailing}><AppText variant="caption" muted>{t('quantity')}</AppText><AppText variant="title" style={qty<=5?styles.warning:styles.quantity}>{number(qty)}</AppText>{cost>0?<AppText variant="caption" muted>{ar?'القيمة':'Valeur'}</AppText>:null}{cost>0?<Money value={Math.round(qty*cost)}/>:null}</View></View>}}/></Screen>;
+
+  const selectedWarehouse=warehouses.find(warehouse=>warehouse.id===warehouseId)??null;
+  const summary=useMemo(()=>items.reduce((acc,item)=>{
+    acc.quantity+=item.quantity;
+    acc.value+=item.inventoryValue;
+    if(item.quantity>0&&item.quantity<=5)acc.low+=1;
+    if(item.quantity===0)acc.out+=1;
+    return acc;
+  },{quantity:0,value:0,low:0,out:0}),[items]);
+
+  const visible=useMemo(()=>{
+    const query=search.trim().toLocaleLowerCase();
+    return items.filter(item=>{
+      const matchesSearch=!query||`${item.name} ${item.categoryName??''} ${item.sku} ${item.barcode}`.toLocaleLowerCase().includes(query);
+      const matchesFilter=
+        filter==='all'||
+        (filter==='available'&&item.quantity>5)||
+        (filter==='low'&&item.quantity>0&&item.quantity<=5)||
+        (filter==='out'&&item.quantity===0);
+      return matchesSearch&&matchesFilter;
+    });
+  },[filter,items,search]);
+
+  if(!auth.has('warehouses.inventory.view'))return <Screen><EmptyState title={t('error')}/></Screen>;
+
+  return <Screen padded={false}>
+    <FlatList
+      data={visible}
+      keyExtractor={item=>item.id}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={<View style={styles.header}>
+        <PageHeader title={t('stock')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined}/>
+
+        {warehouses.length>1?<GroupedList>
+          <SelectRow
+            label={t('warehouse')}
+            value={selectedWarehouse?.name??t('warehouse')}
+            leading={<WarehouseTile/>}
+            onPress={()=>setWarehousePicker(true)}
+          />
+        </GroupedList>:null}
+
+        <SearchField value={search} onChangeText={setSearch} placeholder={t('stockSearchPlaceholder')}/>
+
+        <SegmentedControl
+          value={filter}
+          options={[
+            {value:'all',label:t('stockFilterAll')},
+            {value:'available',label:t('stockAvailable')},
+            {value:'low',label:t('stockFilterLow')},
+            {value:'out',label:t('stockFilterOut')},
+          ]}
+          onChange={setFilter}
+        />
+
+        <Surface padded={false} style={styles.summaryStrip}>
+          <View style={[styles.summaryRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+            <SummaryMetric label={t('stockInventoryValue')} value={<Money value={Math.round(summary.value)}/>}/>
+            <SummaryDivider/>
+            <SummaryMetric label={t('stockTotalUnits')} value={<AppText variant="subheading" style={styles.tabular}>{number(summary.quantity)}</AppText>}/>
+            <SummaryDivider/>
+            <SummaryMetric
+              label={t('lowStock')}
+              value={<AppText variant="subheading" style={[styles.tabular,summary.low>0&&styles.warning]}>{number(summary.low)}</AppText>}
+            />
+            <SummaryDivider/>
+            <SummaryMetric
+              label={t('stockOut')}
+              value={<AppText variant="subheading" style={[styles.tabular,summary.out>0&&styles.negative]}>{number(summary.out)}</AppText>}
+            />
+          </View>
+        </Surface>
+      </View>}
+      ListEmptyComponent={<EmptyState title={search?t('noResults'):filter==='out'?t('stockNoOut'):filter==='low'?t('stockNoLow'):t('noData')}/>}
+      renderItem={({item,index})=><StockRow item={item} first={index===0} last={index===visible.length-1}/>}
+    />
+
+    <Sheet visible={warehousePicker} title={t('warehouse')} onClose={()=>setWarehousePicker(false)}>
+      <View style={styles.warehouseOptions}>
+        {warehouses.map(warehouse=><Button
+          key={warehouse.id}
+          title={warehouse.name}
+          variant={warehouse.id===warehouseId?'primary':'secondary'}
+          onPress={()=>{setWarehouseId(warehouse.id);setWarehousePicker(false)}}
+        />)}
+      </View>
+    </Sheet>
+  </Screen>;
 }
 
-function Metric({label,value,warning=false,last=false}:{label:string;value:ReactNode;warning?:boolean;last?:boolean}){return <View style={[styles.metric,last&&styles.lastMetric]}><View style={[styles.metricRule,warning&&styles.warningRule]}/><AppText variant="caption" muted>{label}</AppText>{value}</View>}
+function SummaryMetric({label,value}:{label:string;value:ReactNode}){
+  return <View style={styles.summaryMetric}><AppText variant="caption" muted numberOfLines={1}>{label}</AppText>{value}</View>;
+}
+
+function SummaryDivider(){
+  return <View style={styles.summaryDivider}/>;
+}
+
+function StockRow({item,first,last}:{item:StockOverviewItem;first:boolean;last:boolean}){
+  const {t,isRTL,number}=useI18n();
+  const tone=item.quantity===0?'negative':item.quantity<=5?'warning':'positive';
+  const status=item.quantity===0?t('stockFilterOut'):item.quantity<=5?t('lowStock'):t('stockAvailable');
+  const context=[item.categoryName,item.sku?'#'+item.sku:null,item.barcode].filter(Boolean).join(' • ');
+
+  return <View style={[styles.row,first&&styles.firstRow,last&&styles.lastRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+    <View style={styles.body}>
+      <View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <AppText variant="subheading" numberOfLines={2} style={styles.name}>{item.name}</AppText>
+        <Badge label={status} tone={tone}/>
+      </View>
+      {context?<AppText variant="caption" muted numberOfLines={1}>{context}</AppText>:null}
+      <View style={[styles.quantityLine,{flexDirection:isRTL?'row-reverse':'row'}]}>
+        <AppText variant="caption" muted>{t('quantity')}</AppText>
+        <AppText variant="heading" style={[styles.quantity,item.quantity===0&&styles.negative,item.quantity>0&&item.quantity<=5&&styles.warning]}>{number(item.quantity)}</AppText>
+      </View>
+    </View>
+
+    <View style={styles.values}>
+      <View style={styles.valueBlock}>
+        <AppText variant="caption" muted>{t('stockUnitCost')}</AppText>
+        <Money value={Math.round(item.unitCost)}/>
+      </View>
+      <View style={styles.valueBlock}>
+        <AppText variant="caption" muted>{t('stockItemValue')}</AppText>
+        <Money value={Math.round(item.inventoryValue)}/>
+      </View>
+    </View>
+  </View>;
+}
+
+function WarehouseTile(){
+  return <View style={styles.warehouseTile}><View style={styles.warehouseRoof}/><View style={styles.warehouseBody}/><View style={styles.warehouseDoor}/></View>;
+}
 
 const styles=StyleSheet.create({
-  list:{padding:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
-  header:{gap:spacing.md,marginBottom:spacing.sm},
-  chips:{gap:spacing.xs},
-  summaryPanel:{borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,backgroundColor:colors.surface,overflow:'hidden'},
-  metric:{flex:1,minWidth:104,padding:spacing.md,gap:spacing.xs,borderRightWidth:StyleSheet.hairlineWidth,borderRightColor:colors.border},
-  lastMetric:{borderRightWidth:0},
-  metricRule:{width:24,height:2,borderRadius:2,backgroundColor:colors.accent},
-  warningRule:{backgroundColor:colors.warning},
-  row:{minHeight:104,alignItems:'center',gap:spacing.md,paddingVertical:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
-  body:{flex:1,gap:spacing.xs},
-  nameRow:{alignItems:'center',gap:spacing.xs},
-  name:{flexShrink:1},
-  costRow:{alignItems:'center',gap:spacing.xs},
-  trailing:{alignItems:'flex-end',gap:spacing.xxs,minWidth:86},
-  quantity:{color:colors.text},
+  list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
+  header:{gap:spacing.sm,marginBottom:spacing.sm},
+  summaryStrip:{overflow:'hidden'},
+  summaryRow:{minHeight:64,alignItems:'stretch'},
+  summaryMetric:{flex:1,minWidth:0,justifyContent:'center',gap:2,paddingHorizontal:spacing.xs,paddingVertical:spacing.xs},
+  summaryDivider:{width:1,backgroundColor:colors.border},
+  tabular:{fontVariant:['tabular-nums']},
   warning:{color:colors.warning},
+  negative:{color:colors.negative},
+  row:{minHeight:76,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,backgroundColor:colors.surface,borderLeftWidth:1,borderRightWidth:1,borderTopWidth:1,borderColor:colors.border},
+  firstRow:{borderTopColor:colors.borderStrong,borderLeftColor:colors.borderStrong,borderRightColor:colors.borderStrong,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg},
+  lastRow:{borderBottomWidth:1,borderBottomColor:colors.borderStrong,borderBottomLeftRadius:radius.lg,borderBottomRightRadius:radius.lg},
+  body:{flex:1,minWidth:0,gap:3},
+  nameRow:{alignItems:'center',gap:spacing.xs},
+  name:{flex:1,minWidth:0},
+  quantityLine:{alignItems:'center',gap:spacing.xs},
+  quantity:{fontVariant:['tabular-nums'],color:colors.positive},
+  values:{minWidth:104,alignItems:'flex-end',gap:4},
+  valueBlock:{alignItems:'flex-end',gap:1},
+  warehouseOptions:{gap:spacing.xs},
+  warehouseTile:{width:38,height:38,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceStrong,position:'relative'},
+  warehouseRoof:{position:'absolute',left:9,right:9,top:8,height:7,borderLeftWidth:2,borderRightWidth:2,borderTopWidth:2,borderColor:colors.textMuted,borderTopLeftRadius:3,borderTopRightRadius:3},
+  warehouseBody:{position:'absolute',left:10,right:10,top:14,bottom:8,borderWidth:2,borderColor:colors.textMuted,borderRadius:2},
+  warehouseDoor:{position:'absolute',left:16,bottom:9,width:6,height:7,borderWidth:1.5,borderColor:colors.textMuted,borderBottomWidth:0},
 });

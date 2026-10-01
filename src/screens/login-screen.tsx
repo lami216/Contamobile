@@ -20,7 +20,7 @@ const styles=StyleSheet.create({
   heroTop:{gap:spacing.xs,flexWrap:'wrap'},
   brand:{gap:spacing.sm},
   brandName:{color:colors.onPrimary},
-  brandSubtitle:{color:'#DCEFE9',lineHeight:23},
+  brandSubtitle:{color:colors.onPrimaryMuted,lineHeight:23},
   loginPanel:{gap:spacing.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,padding:spacing.md},
   formTitle:{gap:spacing.xxs},
   errorNote:{gap:spacing.xs,backgroundColor:colors.warningSoft,borderRadius:radius.md,padding:spacing.sm},

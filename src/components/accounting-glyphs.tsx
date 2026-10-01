@@ -1,0 +1,14 @@
+import { StyleSheet, View } from 'react-native';
+import { colors } from '@/theme';
+
+export function PaymentGlyph({selected}:{selected:boolean}){const color=selected?colors.primary:colors.textMuted;return <View style={styles.paymentGlyph}><View style={[styles.paymentCard,{borderColor:color}]}/><View style={[styles.paymentLine,{backgroundColor:color}]}/><View style={[styles.paymentDot,{backgroundColor:color}]}/></View>}
+export function ReceiptGlyph(){return <View style={styles.receiptGlyph}><View style={styles.receiptPage}/><View style={styles.receiptLine}/><View style={styles.receiptLineShort}/></View>}
+export function TrashGlyph(){return <View style={styles.trashGlyph}><View style={styles.trashLid}/><View style={styles.trashCan}/><View style={styles.trashLineOne}/><View style={styles.trashLineTwo}/></View>}
+export function CheckGlyph(){return <View style={styles.checkGlyph}><View style={styles.checkShort}/><View style={styles.checkLong}/></View>}
+
+const styles=StyleSheet.create({
+  paymentGlyph:{width:28,height:22,position:'relative'},paymentCard:{position:'absolute',left:1,right:1,top:2,bottom:2,borderWidth:2,borderRadius:4},paymentLine:{position:'absolute',left:4,right:4,top:8,height:2,borderRadius:1},paymentDot:{position:'absolute',right:5,bottom:5,width:4,height:4,borderRadius:2},
+  receiptGlyph:{width:22,height:26,position:'relative'},receiptPage:{position:'absolute',left:2,right:2,top:1,bottom:1,borderWidth:2,borderColor:colors.primary,borderRadius:3},receiptLine:{position:'absolute',left:6,right:6,top:9,height:2,backgroundColor:colors.primary,borderRadius:1},receiptLineShort:{position:'absolute',left:6,right:9,top:15,height:2,backgroundColor:colors.primary,borderRadius:1},
+  trashGlyph:{width:20,height:22,position:'relative'},trashLid:{position:'absolute',left:3,right:3,top:3,height:2,borderRadius:1,backgroundColor:colors.negative},trashCan:{position:'absolute',left:5,right:5,top:7,bottom:1,borderWidth:2,borderColor:colors.negative,borderTopWidth:0,borderBottomLeftRadius:3,borderBottomRightRadius:3},trashLineOne:{position:'absolute',left:8,top:9,bottom:4,width:1.5,backgroundColor:colors.negative},trashLineTwo:{position:'absolute',right:8,top:9,bottom:4,width:1.5,backgroundColor:colors.negative},
+  checkGlyph:{width:34,height:26,position:'relative',transform:[{rotate:'-4deg'}]},checkShort:{position:'absolute',left:3,top:13,width:13,height:4,borderRadius:2,backgroundColor:colors.onPrimary,transform:[{rotate:'45deg'}]},checkLong:{position:'absolute',left:11,top:10,width:22,height:4,borderRadius:2,backgroundColor:colors.onPrimary,transform:[{rotate:'-45deg'}]},
+});
