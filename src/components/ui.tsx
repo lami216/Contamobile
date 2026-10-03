@@ -1,6 +1,8 @@
 import { forwardRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,13 +21,13 @@ import { StitchHeader, StitchIcon } from '@/components/stitch';
 
 export function Screen({children,scroll=false,padded=true}:{children:ReactNode;scroll?:boolean;padded?:boolean}){
   const content=<View style={[styles.screenContent,padded&&styles.padded]}>{children}</View>;
-  return <SafeAreaView edges={['top']} style={styles.safe}>{scroll?<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>{content}</ScrollView>:content}</SafeAreaView>;
+  return <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS==='android'?'height':undefined}><SafeAreaView edges={['top']} style={styles.safe}>{scroll?<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>{content}</ScrollView>:content}</SafeAreaView></KeyboardAvoidingView>;
 }
 
 export function AppText({children,variant='body',muted=false,style,numberOfLines}:{children:ReactNode;variant?:'display'|'title'|'heading'|'subheading'|'body'|'caption'|'amount'|'amountLarge';muted?:boolean;style?:StyleProp<TextStyle>;numberOfLines?:number}){
   const {isRTL}=useI18n();
   const bold=['display','title','heading','subheading','amount','amountLarge'].includes(variant);
-  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontFamily:bold?'StitchArabicBold':'StitchArabic',fontSize:typography[variant],lineHeight:Math.round(typography[variant]*(typography[variant]>=24?1.25:1.4)),includeFontPadding:false,textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
+  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontFamily:isRTL?(bold?'StitchArabicBold':'StitchArabic'):'sans-serif',fontSize:typography[variant],lineHeight:Math.round(typography[variant]*(typography[variant]>=24?1.25:1.4)),includeFontPadding:false,textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
 }
 
 export function Card({children,style,tone='default'}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning'}){
@@ -112,6 +114,7 @@ export function SectionTitle({title,action,subtitle}:{title:string;action?:React
 }
 
 export function Button({title,onPress,variant='primary',disabled=false,loading=false,compact=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'success'|'warning'|'ghost';disabled?:boolean;loading?:boolean;compact?:boolean}){
+  const {isRTL}=useI18n();
   const spinner=['primary','success','danger','warning'].includes(variant)?colors.onPrimary:colors.accent;
   return <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[
     styles.button,
@@ -126,24 +129,24 @@ export function Button({title,onPress,variant='primary',disabled=false,loading=f
     pressed&&variant==='success'&&styles.buttonSuccessPressed,
     pressed&&variant!=='primary'&&variant!=='success'&&styles.buttonPressed,
     (disabled||loading)&&styles.disabled,
-  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextGold,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='warning'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
+  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,{fontFamily:isRTL?'StitchArabicBold':'sans-serif'},variant==='primary'&&styles.buttonTextGold,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='warning'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
 }
 
 export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>}>(({label,error,style,containerStyle,...props},ref)=>{
   const {isRTL}=useI18n();
-  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
+  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left',fontFamily:isRTL?'StitchArabic':'sans-serif'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 Field.displayName='Field';
 
 export const FormField=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>;leading?:ReactNode;trailing?:ReactNode}>(({label,error,style,containerStyle,leading,trailing,...props},ref)=>{
   const {isRTL}=useI18n();
-  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><View style={[styles.formInputShell,{flexDirection:isRTL?'row-reverse':'row'}]}>{leading?<View style={styles.formAdornment}>{leading}</View>:null}<TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.formInput,{textAlign:isRTL?'right':'left'},style]} {...props}/>{trailing?<View style={styles.formAdornment}>{trailing}</View>:null}</View>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
+  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><View style={[styles.formInputShell,{flexDirection:isRTL?'row-reverse':'row'}]}>{leading?<View style={styles.formAdornment}>{leading}</View>:null}<TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.formInput,{textAlign:isRTL?'right':'left',fontFamily:isRTL?'StitchArabic':'sans-serif'},style]} {...props}/>{trailing?<View style={styles.formAdornment}>{trailing}</View>:null}</View>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 FormField.displayName='FormField';
 
 export function SearchField({style,placeholder,...props}:TextInputProps){
   const {t,isRTL}=useI18n();
-  return <View style={[styles.search,{flexDirection:isRTL?'row-reverse':'row'}]}><StitchIcon name="search" color={colors.textMuted}/><TextInput accessibilityLabel={t('search')} placeholder={placeholder??t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left'},style]} {...props}/></View>;
+  return <View style={[styles.search,{flexDirection:isRTL?'row-reverse':'row'}]}><StitchIcon name="search" color={colors.textMuted}/><TextInput accessibilityLabel={t('search')} placeholder={placeholder??t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left',fontFamily:isRTL?'StitchArabic':'sans-serif'},style]} {...props}/></View>;
 }
 
 export function EmptyState({title,description,action}:{title:string;description?:string;action?:ReactNode}){
@@ -156,7 +159,8 @@ export function Money({value,tone='normal',large=false}:{value:number;tone?:'nor
 }
 
 export function Chip({label,active,onPress,disabled=false}:{label:string;active:boolean;onPress:()=>void;disabled?:boolean}){
-  return <Pressable accessibilityRole="button" accessibilityState={{selected:active,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.chip,active&&styles.chipActive,pressed&&styles.chipPressed,disabled&&styles.disabled]}><Text style={[styles.chipText,active&&styles.chipTextActive]}>{label}</Text></Pressable>;
+  const {isRTL}=useI18n();
+  return <Pressable accessibilityRole="button" accessibilityState={{selected:active,disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.chip,active&&styles.chipActive,pressed&&styles.chipPressed,disabled&&styles.disabled]}><Text style={[styles.chipText,{fontFamily:isRTL?'StitchArabicBold':'sans-serif'},active&&styles.chipTextActive]}>{label}</Text></Pressable>;
 }
 
 export function Row({title,subtitle,trailing,onPress,leading}:{title:string;subtitle?:string;trailing?:ReactNode;onPress?:()=>void;leading?:ReactNode}){
@@ -198,7 +202,7 @@ export function QuickAction({label,caption,onPress,tone='primary',disabled=false
 
 export function SegmentedControl<T extends string>({value,options,onChange}:{value:T;options:{value:T;label:string}[];onChange:(value:T)=>void}){
   const {isRTL}=useI18n();
-  return <View style={[styles.segmented,{flexDirection:isRTL?'row-reverse':'row'}]}>{options.map(option=><Pressable key={option.value} accessibilityRole="button" accessibilityState={{selected:value===option.value}} onPress={()=>onChange(option.value)} style={({pressed})=>[styles.segment,value===option.value&&styles.segmentActive,pressed&&styles.segmentPressed]}><Text style={[styles.segmentText,value===option.value&&styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>;
+  return <View style={[styles.segmented,{flexDirection:isRTL?'row-reverse':'row'}]}>{options.map(option=><Pressable key={option.value} accessibilityRole="button" accessibilityState={{selected:value===option.value}} onPress={()=>onChange(option.value)} style={({pressed})=>[styles.segment,value===option.value&&styles.segmentActive,pressed&&styles.segmentPressed]}><Text style={[styles.segmentText,{fontFamily:isRTL?'StitchArabic':'sans-serif'},value===option.value&&styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>;
 }
 
 export function PaymentMethodCard({label,subtitle,icon,selected,onPress,disabled=false,style}:{label:string;subtitle?:string;icon?:ReactNode;selected:boolean;onPress:()=>void;disabled?:boolean;style?:StyleProp<ViewStyle>}){

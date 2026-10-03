@@ -1,9 +1,6 @@
-name: Verify existing Golden Android release
+name: Recheck Golden Android 0.2.2
 on:
   workflow_dispatch:
-  push:
-    branches: [feat/stitch-golden-android]
-    paths: [scripts/stitch-visual-qa.py, .github/workflows/stitch-golden-verify.yml]
 permissions:
   contents: read
   actions: read
