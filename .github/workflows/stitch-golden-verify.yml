@@ -1,0 +1,159 @@
+name: Verify existing Golden Android release
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/stitch-golden-android]
+    paths: [scripts/stitch-visual-qa.py, .github/workflows/stitch-golden-verify.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: golden-verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Wait for the exact 0.2.2 APK artifact
+        env:
+          GOLDEN_ARTIFACT_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import urllib.request,json,os,time
+          url='https://api.github.com/repos/lami216/Contamobile/actions/runs/37159532003/artifacts'
+          for attempt in range(60):
+            request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GOLDEN_ARTIFACT_TOKEN'],'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request,timeout=30) as response:data=json.load(response)
+            if any(a['name']=='contamobile-golden-release' for a in data.get('artifacts',[])):
+              print('Exact release artifact is ready');break
+            if attempt==0:print('Waiting for the existing native build; no APK rebuild is needed')
+            time.sleep(15)
+          else:raise SystemExit('Release artifact did not become available')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: contamobile-golden-release
+          run-id: 37159532003
+          github-token: ${{ github.token }}
+          path: release-output
+      - name: Prepare fresh visual verification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('release-output/screenshots')
+          if p.exists():p.rename(Path('release-output/previous-screenshots'))
+          PY
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify real workflows on the unchanged Release APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb shell wm size 1080x2340
+            adb shell wm density 440
+            adb install release-output/contamobile-golden.apk
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell am start -W -n mr.alkarna.mobile.golden/.MainActivity
+            sleep 20
+            python3 scripts/stitch-visual-qa.py
+      - name: Prepare reliable local APK transfer parts
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          src=Path('release-output/contamobile-golden.apk')
+          data=src.read_bytes();out=Path('release-output/apk-parts');out.mkdir(exist_ok=True)
+          parts=[]
+          for index,start in enumerate(range(0,len(data),8*1024*1024)):
+            payload=data[start:start+8*1024*1024];name=f'part-{index:02d}.bin';(out/name).write_bytes(payload)
+            parts.append({'file':name,'bytes':len(payload),'sha256':hashlib.sha256(payload).hexdigest()})
+          (out/'manifest.json').write_text(json.dumps({'sourceCommit':'a29e6ddc8ca9ecb3ec6ca0b74733f3aa4a3ec2a9','version':'0.2.2','bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'parts':parts},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contamobile-golden-visual-proof
+          path: |
+            release-output/screenshots/
+            release-output/ui-scenarios.json
+            release-output/manifest.txt
+            release-output/signature.txt
+            release-output/SHA256SUMS
+            release-output/apk-parts/manifest.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-00
+          path: release-output/apk-parts/part-00.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-01
+          path: release-output/apk-parts/part-01.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-02
+          path: release-output/apk-parts/part-02.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-03
+          path: release-output/apk-parts/part-03.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-04
+          path: release-output/apk-parts/part-04.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-05
+          path: release-output/apk-parts/part-05.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-06
+          path: release-output/apk-parts/part-06.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-07
+          path: release-output/apk-parts/part-07.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-08
+          path: release-output/apk-parts/part-08.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-09
+          path: release-output/apk-parts/part-09.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-apk-part-10
+          path: release-output/apk-parts/part-10.bin
+          if-no-files-found: error

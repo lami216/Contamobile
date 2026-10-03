@@ -29,15 +29,24 @@ def find(text,editable=False,scrolls=0):
  raise ValueError('UI element missing: '+text+'; visible fields: '+str([(n.get('class'),n.get('text'),n.get('content-desc')) for n in ui().iter('node') if n.get('class','').endswith('EditText')]))
 def click(text,scrolls=0):tap(find(text,scrolls=scrolls))
 def field(label,value,scrolls=0):
- tap(find(label,editable=True,scrolls=scrolls))
- adb('shell','input','keyevent','123')
- # Values in the fixture are ASCII; long press/select-all is avoided by clearing a bounded draft.
- adb('shell','input','keyevent',*(['67']*24))
- adb('shell','input','text',value.replace(' ','%s'))
- hide_keyboard();time.sleep(.3)
+ for attempt in range(3):
+  hide_keyboard()
+  tap(find(label,editable=True,scrolls=scrolls));time.sleep(1)
+  target=find(label,editable=True)
+  if target.get('focused')!='true':
+   time.sleep(.6);continue
+  adb('shell','input','keyevent','123')
+  adb('shell','input','keyevent',*(['67']*40))
+  adb('shell','input','text',value.replace(' ','%s'));time.sleep(.8)
+  actual=find(label,editable=True).get('text','')
+  if actual==value:
+   hide_keyboard();return
+ raise ValueError('Could not focus and set field '+label+' to '+value+'; actual: '+str([(n.get('content-desc'),n.get('text'),n.get('focused')) for n in ui().iter('node') if n.get('class','').endswith('EditText')]))
 def hide_keyboard():
- # BACK closes a modal when the IME is already hidden; only dismiss an observed keyboard.
- if any('inputmethod' in n.get('package','') for n in ui().iter('node')):adb('shell','input','keyevent','4')
+ # Wait for IME resizing before locating the next input in a bottom sheet.
+ state=adb('shell','dumpsys','input_method').decode('utf-8',errors='replace')
+ if re.search(r'(?:mInputShown|mIsInputViewShown|isInputViewShown)\s*=\s*true',state):
+  adb('shell','input','keyevent','4');time.sleep(1)
 def route(path):
  adb('shell','am','start','-W','-a','android.intent.action.VIEW','-d','alkarna://'+path,package);time.sleep(2)
 def capture(name):

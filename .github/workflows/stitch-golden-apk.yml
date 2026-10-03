@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/stitch-golden-android]
+    paths-ignore:
+      - scripts/stitch-visual-qa.py
+      - .github/workflows/stitch-golden-verify.yml
+      - .github/workflows/stitch-golden-apk.yml
 
 permissions:
   contents: read
