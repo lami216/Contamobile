@@ -2,7 +2,7 @@
   "expo": {
     "name": "الكرنه • ذهبي",
     "slug": "alkarna-mobile",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "orientation": "portrait",
     "scheme": "alkarna",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "mr.alkarna.mobile.golden",
-      "versionCode": 5,
+      "versionCode": 6,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -24,7 +24,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-localization",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": false,
+          "forcesRTL": false
+        }
+      ],
       "expo-secure-store",
       "./plugins/with-golden-system-bars"
     ],

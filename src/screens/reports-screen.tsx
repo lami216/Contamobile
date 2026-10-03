@@ -8,6 +8,7 @@ import { listParties, listPaymentAccounts, listProductCategories, listProducts }
 import { runReport, salesTrend, type ReportData, type ReportFilters, type ReportType, type SalesTrendPoint } from '@/db/report-queries';
 import { PartyPicker, ProductPicker } from '@/components/pickers';
 import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
+import { StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
@@ -70,12 +71,12 @@ const documentKindLabels:Record<string,MessageKey>={
 function localDay(){const value=new Date(),y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,'0'),d=String(value.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
 
 export function ReportsScreen(){
-  const db=useSQLiteContext(),{t,isRTL,number,money}=useI18n(),auth=useAuth(),allowed=auth.has('reports.view'),today=localDay();
+  const db=useSQLiteContext(),{t,isRTL,number,money,locale}=useI18n(),auth=useAuth(),allowed=auth.has('reports.view'),today=localDay();
   const [type,setType]=useState<ReportType>('overview'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[allTime,setAllTime]=useState(false),[data,setData]=useState<ReportData>({metrics:[],rows:[]}),[reportError,setReportError]=useState(''),[loaded,setLoaded]=useState(false);
   const [trend,setTrend]=useState<SalesTrendPoint[]>([]),[topProducts,setTopProducts]=useState<ReportData['rows']>([]);
   const [products,setProducts]=useState<Product[]>([]),[categories,setCategories]=useState<ProductCategory[]>([]),[parties,setParties]=useState<Party[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]);
   const [categoryId,setCategoryId]=useState(''),[productId,setProductId]=useState(''),[partyId,setPartyId]=useState(''),[partyType,setPartyType]=useState<'customer'|'supplier'>('customer'),[accountId,setAccountId]=useState(''),[movementType,setMovementType]=useState(''),[direction,setDirection]=useState<'in'|'out'|''>(''),[debtSide,setDebtSide]=useState<'receivable'|'payable'|'clear'|''>(''),[search,setSearch]=useState('');
-  const [productPicker,setProductPicker]=useState(false),[partyPicker,setPartyPicker]=useState(false),[filtersOpen,setFiltersOpen]=useState(false),[typeOpen,setTypeOpen]=useState(false);
+  const [productPicker,setProductPicker]=useState(false),[partyPicker,setPartyPicker]=useState(false),[filtersOpen,setFiltersOpen]=useState(false),[typeOpen,setTypeOpen]=useState(false),[periodOpen,setPeriodOpen]=useState(true);
 
   const filters:ReportFilters=useMemo(()=>({
     allTime,
@@ -203,13 +204,14 @@ export function ReportsScreen(){
       keyExtractor={item=>item.id}
       contentContainerStyle={styles.content}
       ListHeaderComponent={<View style={styles.header}>
-        <PageHeader title={t('reports')}/>
+        <PageHeader title={t('reports')} subtitle={locale==='ar'?'التحليل المحاسبي • العملة الوطنية MRU':'Analyse comptable • monnaie nationale MRU'}/>
 
         <View style={{flexDirection:isRTL?'row-reverse':'row',flexWrap:'wrap',gap:8}}>{reportTypes.map((report,index)=><Chip key={report.id} label={`${number(index+1)}. ${t(report.label)}`} active={type===report.id} onPress={()=>changeType(report.id)}/>)}</View>
 
 
         {type!=='debts'?<Surface style={styles.periodSurface}>
-          <View style={[styles.dates,{flexDirection:isRTL?'row-reverse':'row'}]}>
+          <Pressable accessibilityRole="button" accessibilityState={{expanded:periodOpen}} onPress={()=>setPeriodOpen(v=>!v)} style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:8,minHeight:36}}><StitchIcon name="more" size={20}/><StitchText bold style={{flex:1}}>{locale==='ar'?'معايير وفلاتر التقرير':'Critères et filtres du rapport'}</StitchText><StitchText color={stitch.gold}>{periodOpen?'−':'+'}</StitchText></Pressable>
+          {periodOpen?<><View style={[styles.dates,{flexDirection:isRTL?'row-reverse':'row'}]}>
             <Field label={t('from')} value={from} onChangeText={value=>{setFrom(value);setAllTime(false)}} containerStyle={styles.flex}/>
             <Field label={t('to')} value={to} onChangeText={value=>{setTo(value);setAllTime(false)}} containerStyle={styles.flex}/>
           </View>
@@ -217,7 +219,7 @@ export function ReportsScreen(){
             <Chip label={t('reportsAllTime')} active={allTime} onPress={()=>{if(allTime){setAllTime(false);setFrom(today);setTo(today)}else{setFrom('');setTo('');setAllTime(true);setReportError('')}}}/>
             {hasAdvancedFilters?<Button compact title={activeFilterCount?`${t('reportsFilters')} · ${number(activeFilterCount)}`:t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/>:null}
           </View>
-          {reportError?<AppText variant="caption" style={styles.error}>{reportError}</AppText>:null}
+          {reportError?<AppText variant="caption" style={styles.error}>{reportError}</AppText>:null}</>:null}
         </Surface>:hasAdvancedFilters?<View style={[styles.debtTools,{flexDirection:isRTL?'row-reverse':'row'}]}><Button title={activeFilterCount?`${t('reportsFilters')} · ${number(activeFilterCount)}`:t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/></View>:null}
 
         {!loaded?<Surface style={styles.loadingSurface}><AppText variant="caption" muted>{t('loading')}</AppText></Surface>:null}
@@ -313,10 +315,10 @@ function FilterBlock({label,children}:{label:string;children:ReactNode}){
 }
 
 function ReportMetricTile({label,value,format,tone}:{label:string;value:number;format:'money'|'number';tone:'normal'|'positive'|'negative'}){
-  const {number}=useI18n();
+  const {number,isRTL}=useI18n();
   return <Surface style={styles.metricCard}>
     <View style={styles.metricHead}><IconTile tone={tone==='positive'?'positive':tone==='negative'?'negative':'primary'} size="sm"><MetricGlyph tone={tone}/></IconTile><AppText variant="caption" muted numberOfLines={2} style={styles.metricLabel}>{label}</AppText></View>
-    {format==='number'?<AppText variant="amountLarge" style={[styles.metricValue,tone==='positive'&&styles.positive,tone==='negative'&&styles.negative]}>{number(value)}</AppText>:<Money value={value} tone={tone} large/>}
+    <View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'baseline',flexWrap:'wrap',gap:5}}><StitchText size={24} bold color={tone==='positive'?colors.positive:tone==='negative'?colors.negative:colors.text} style={styles.metricValue}>{number(value)}</StitchText>{format==='money'?<StitchText size={11} color={stitch.gold}>MRU</StitchText>:null}</View>
   </Surface>;
 }
 
@@ -343,7 +345,7 @@ const styles=StyleSheet.create({
   error:{color:colors.negative,fontWeight:'700'},
   loadingSurface:{minHeight:54,alignItems:'center',justifyContent:'center'},
   metrics:{flexWrap:'wrap',gap:spacing.sm},
-  metricCard:{width:'48.4%',minHeight:108,gap:spacing.sm,padding:spacing.sm},
+  metricCard:{width:'48%',flexGrow:1,minHeight:108,gap:spacing.sm,padding:spacing.sm},
   metricHead:{flexDirection:'row',alignItems:'center',gap:spacing.xs},
   metricLabel:{flex:1,minWidth:0},
   metricValue:{fontVariant:['tabular-nums']},
