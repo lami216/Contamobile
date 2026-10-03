@@ -1,21 +1,26 @@
 {
   "expo": {
-    "name": "الكرنه",
+    "name": "الكرنه • ذهبي",
     "slug": "alkarna-mobile",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "scheme": "alkarna",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "android": {
-      "package": "mr.alkarna.mobile",
-      "versionCode": 1,
+      "package": "mr.alkarna.mobile.golden",
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#F4FAFF"
-      }
+        "backgroundColor": "#080C14"
+      },
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -29,6 +34,11 @@
     "web": {
       "output": "single",
       "name": "الكرنه"
+    },
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080C14"
     }
   }
 }

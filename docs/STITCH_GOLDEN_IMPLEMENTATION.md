@@ -1,0 +1,1 @@
+Native Stitch navy/gold adaptation; keep SQLite, accounting, permissions and existing native workflows. Base ui-redesign-v2 at 4759e8e; new feat/stitch-golden-android. Standalone release APK, separate application ID for safe side-by-side review.

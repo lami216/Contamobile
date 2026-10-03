@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Button, Money } from '@/components/ui';
-import { colors, elevation, radius, spacing, touch } from '@/theme';
+import { actionColors, colors, elevation, radius, spacing, touch } from '@/theme';
 import { useI18n } from '@/i18n/provider';
 
 export function QuantityStepper({value,onDecrease,onIncrease,onEdit,compact=false}:{value:number;onDecrease:()=>void;onIncrease:()=>void;onEdit?:()=>void;compact?:boolean}){
@@ -57,7 +57,7 @@ const styles=StyleSheet.create({
   bottomInner:{alignItems:'center',gap:spacing.sm},
   bottomSummary:{flex:1,gap:spacing.xxs},
   secondarySlot:{flex:1},
-  checkout:{minHeight:48,minWidth:144,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:colors.primary,borderWidth:1,borderColor:colors.primary},
+  checkout:{minHeight:48,minWidth:144,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:actionColors.sale,borderWidth:1,borderColor:colors.accent},
   checkoutPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.99}]},
   checkoutText:{color:colors.onPrimary},
   overlay:{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay},
@@ -71,17 +71,17 @@ const styles=StyleSheet.create({
   sheetBody:{gap:spacing.sm,paddingVertical:spacing.sm},
   sheetContent:{flex:1,minHeight:0,paddingVertical:spacing.sm,gap:spacing.sm},
   sheetFooter:{paddingTop:spacing.sm,gap:spacing.xs,borderTopWidth:1,borderTopColor:colors.border},
-  hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,backgroundColor:colors.primary,padding:spacing.lg,gap:spacing.lg,...elevation.floating},
+  hero:{position:'relative',overflow:'hidden',borderRadius:radius.xl,borderWidth:1,borderColor:colors.accent,backgroundColor:colors.surfaceRaised,padding:spacing.lg,gap:spacing.lg,...elevation.floating},
   heroAccent:{position:'absolute',top:0,left:0,right:0,height:3,backgroundColor:colors.accent},
   heroTop:{alignItems:'flex-start',justifyContent:'space-between',gap:spacing.md},
   heroCopy:{flex:1,gap:spacing.xs},
   heroEyebrow:{color:colors.onPrimarySoft,fontWeight:'700',letterSpacing:.25},
   heroTitle:{color:colors.onPrimary},
   heroSubtitle:{color:colors.onPrimaryMuted,lineHeight:18,maxWidth:420},
-  heroButton:{minHeight:52,borderRadius:radius.md,backgroundColor:colors.surface,alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.md,gap:spacing.md,borderWidth:1,borderColor:'rgba(255,255,255,.72)'},
-  heroButtonPressed:{backgroundColor:'#F4F8FF',transform:[{scale:.99}]},
-  heroButtonText:{color:colors.primary},
-  heroArrow:{color:colors.accent},
+  heroButton:{minHeight:52,borderRadius:radius.md,backgroundColor:actionColors.sale,alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.md,gap:spacing.md,borderWidth:1,borderColor:colors.accent},
+  heroButtonPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.99}]},
+  heroButtonText:{color:colors.onPrimary},
+  heroArrow:{color:colors.onPrimary},
   metric:{flex:1,minWidth:132,backgroundColor:colors.surface,paddingVertical:spacing.md,paddingHorizontal:spacing.md,gap:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
   metricRule:{width:28,height:2,borderRadius:2,backgroundColor:colors.accent,marginBottom:spacing.xxs},
 });

@@ -13,7 +13,7 @@ import {
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, control, layout, radius, spacing, touch, type as typography } from '@/theme';
+import { actionColors, colors, control, layout, radius, spacing, touch, type as typography } from '@/theme';
 import { useI18n } from '@/i18n/provider';
 
 export function Screen({children,scroll=false,padded=true}:{children:ReactNode;scroll?:boolean;padded?:boolean}){
@@ -117,8 +117,8 @@ export function SectionTitle({title,action,subtitle}:{title:string;action?:React
   return <View style={styles.sectionWrap}><View style={[styles.sectionHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText>{action}</View>{subtitle?<AppText variant="caption" muted>{subtitle}</AppText>:null}</View>;
 }
 
-export function Button({title,onPress,variant='primary',disabled=false,loading=false,compact=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'success'|'ghost';disabled?:boolean;loading?:boolean;compact?:boolean}){
-  const spinner=variant==='primary'||variant==='success'?colors.onPrimary:variant==='danger'?colors.negative:colors.primary;
+export function Button({title,onPress,variant='primary',disabled=false,loading=false,compact=false}:{title:string;onPress:()=>void;variant?:'primary'|'secondary'|'danger'|'success'|'warning'|'ghost';disabled?:boolean;loading?:boolean;compact?:boolean}){
+  const spinner=['primary','success','danger','warning'].includes(variant)?colors.onPrimary:colors.accent;
   return <Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[
     styles.button,
     compact&&styles.buttonCompact,
@@ -126,12 +126,13 @@ export function Button({title,onPress,variant='primary',disabled=false,loading=f
     variant==='secondary'&&styles.buttonSecondary,
     variant==='danger'&&styles.buttonDanger,
     variant==='success'&&styles.buttonSuccess,
+    variant==='warning'&&styles.buttonWarning,
     variant==='ghost'&&styles.buttonGhost,
     pressed&&variant==='primary'&&styles.buttonPrimaryPressed,
     pressed&&variant==='success'&&styles.buttonSuccessPressed,
     pressed&&variant!=='primary'&&variant!=='success'&&styles.buttonPressed,
     (disabled||loading)&&styles.disabled,
-  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextDanger,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
+  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='warning'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
 }
 
 export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>}>(({label,error,style,containerStyle,...props},ref)=>{
@@ -236,7 +237,7 @@ const styles=StyleSheet.create({
   surfacePadded:{padding:layout.panelPadding},
   surfaceMuted:{backgroundColor:colors.surfaceMuted},
   surfacePrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
-  surfaceWarning:{backgroundColor:colors.warningSoft,borderColor:'#F4D9A8'},
+  surfaceWarning:{backgroundColor:colors.warningSoft,borderColor:colors.warning},
   framedHead:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'space-between',gap:spacing.sm,paddingHorizontal:layout.panelPadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
   framedHeadCopy:{flex:1,minWidth:0,gap:2},
   framedBody:{gap:spacing.sm},
@@ -248,10 +249,10 @@ const styles=StyleSheet.create({
   iconTileNegative:{backgroundColor:colors.negativeSoft},
   iconTileWarning:{backgroundColor:colors.warningSoft},
   iconTileNeutral:{backgroundColor:colors.surfaceStrong},
-  pageHeader:{minHeight:56,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xxs},
+  pageHeader:{minHeight:64,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border,marginBottom:spacing.xs},
   pageHeaderButton:{width:touch.min,height:touch.min,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
   pageHeaderButtonPressed:{backgroundColor:colors.surfaceMuted},
-  pageHeaderArrow:{fontSize:27,lineHeight:28,color:colors.text},
+  pageHeaderArrow:{fontSize:27,lineHeight:28,color:colors.accent},
   pageHeaderCopy:{flex:1,minWidth:0,alignItems:'center',gap:2},
   pageHeaderSlot:{width:touch.min,minHeight:touch.min,alignItems:'center',justifyContent:'center'},
   formSection:{gap:spacing.sm},
@@ -281,22 +282,23 @@ const styles=StyleSheet.create({
   financialSummaryEmphasis:{minHeight:touch.comfortable,backgroundColor:colors.primaryFaint,borderTopWidth:1,borderTopColor:colors.primarySoft},
   tabular:{fontVariant:['tabular-nums']},
   stateBlock:{minHeight:132,alignItems:'center',justifyContent:'center',gap:spacing.sm,padding:spacing.lg},
-  errorState:{backgroundColor:colors.negativeSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F3C9CD'},
+  errorState:{backgroundColor:colors.negativeSoft,borderRadius:radius.lg,borderWidth:1,borderColor:colors.negative},
   errorStateMark:{width:9,height:9,borderRadius:5,backgroundColor:colors.negative},
   sectionWrap:{gap:spacing.xxs},
   sectionHead:{minHeight:touch.min,justifyContent:'space-between',alignItems:'center',gap:spacing.sm},
   button:{minHeight:control.height,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
   buttonCompact:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm},
-  buttonPrimary:{backgroundColor:colors.primary,borderColor:colors.primary},
+  buttonPrimary:{backgroundColor:actionColors.sale,borderColor:colors.accent},
   buttonPrimaryPressed:{backgroundColor:colors.primaryPressed,borderColor:colors.primaryPressed,transform:[{scale:.99}]},
-  buttonSecondary:{backgroundColor:colors.surface,borderColor:colors.primary},
-  buttonDanger:{backgroundColor:colors.surface,borderColor:colors.negative},
-  buttonSuccess:{backgroundColor:colors.positive,borderColor:colors.positive},
-  buttonSuccessPressed:{backgroundColor:'#138A3C',borderColor:'#138A3C',transform:[{scale:.99}]},
+  buttonSecondary:{backgroundColor:colors.accentSoft,borderColor:colors.accent},
+  buttonDanger:{backgroundColor:actionColors.spend,borderColor:colors.accent},
+  buttonSuccess:{backgroundColor:actionColors.receive,borderColor:colors.accent},
+  buttonWarning:{backgroundColor:actionColors.purchase,borderColor:colors.accent},
+  buttonSuccessPressed:{backgroundColor:'#047857',borderColor:colors.accent,transform:[{scale:.99}]},
   buttonGhost:{backgroundColor:'transparent',borderColor:'transparent'},
   buttonPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
   disabled:{opacity:.45},
-  buttonText:{fontSize:typography.body,fontWeight:'700',color:colors.primary,textAlign:'center'},
+  buttonText:{fontSize:typography.body,fontWeight:'700',color:colors.accent,textAlign:'center'},
   buttonTextPrimary:{color:colors.onPrimary},
   buttonTextDanger:{color:colors.negative},
   buttonTextGhost:{fontWeight:'600'},
@@ -321,10 +323,10 @@ const styles=StyleSheet.create({
   positive:{color:colors.positive},
   negative:{color:colors.negative},
   chip:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.borderStrong},
-  chipActive:{backgroundColor:colors.primarySoft,borderColor:colors.primary},
+  chipActive:{backgroundColor:colors.accentSoft,borderColor:colors.accent},
   chipPressed:{backgroundColor:colors.surfaceMuted},
   chipText:{color:colors.textMuted,fontWeight:'700',fontSize:typography.caption},
-  chipTextActive:{color:colors.primary},
+  chipTextActive:{color:colors.accent},
   row:{minHeight:control.rowMinHeight,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs,paddingHorizontal:2,borderBottomWidth:1,borderBottomColor:colors.border},
   rowBody:{flex:1,gap:spacing.xxs},
   rowPressed:{backgroundColor:colors.surfaceMuted,borderRadius:radius.sm},
@@ -344,16 +346,16 @@ const styles=StyleSheet.create({
   appHeaderCopy:{flex:1,gap:spacing.xs},
   appHeaderEyebrow:{color:colors.primary,fontWeight:'800',letterSpacing:.35},
   appHeaderSubtitle:{maxWidth:440,lineHeight:18},
-  heroMetric:{position:'relative',overflow:'hidden',backgroundColor:colors.primary,borderRadius:radius.xl,borderCurve:'continuous',padding:spacing.lg,gap:spacing.xs,minHeight:150},
+  heroMetric:{position:'relative',overflow:'hidden',backgroundColor:colors.surfaceRaised,borderWidth:1,borderColor:colors.accent,borderRadius:radius.xl,borderCurve:'continuous',padding:spacing.lg,gap:spacing.xs,minHeight:150},
   heroMetricPositive:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.positiveSoft},
   heroMetricNeutral:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border},
   heroMetricGlow:{position:'absolute',width:150,height:150,borderRadius:75,right:-56,top:-64,backgroundColor:'rgba(255,255,255,.09)'},
-  heroMetricLabel:{color:'#D9E8FF',fontWeight:'800'},
+  heroMetricLabel:{color:colors.onPrimarySoft,fontWeight:'800'},
   heroMetricAmount:{fontSize:typography.amountLarge,fontWeight:'800',letterSpacing:-.55,color:colors.onPrimary,fontVariant:['tabular-nums']},
   heroMetricAmountPositive:{color:colors.positive},
   heroMetricAmountNeutral:{color:colors.text},
   heroMetricLabelNeutral:{color:colors.textMuted,fontWeight:'800'},
-  heroMetricSecondary:{color:'#E7F0FF',lineHeight:18},
+  heroMetricSecondary:{color:colors.onPrimaryMuted,lineHeight:18},
   heroMetricSecondaryNeutral:{color:colors.textMuted,lineHeight:18},
   heroMetricFooter:{marginTop:spacing.sm},
   metricCard:{flex:1,minWidth:145,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,borderCurve:'continuous',padding:spacing.md,gap:spacing.xs},
@@ -375,14 +377,14 @@ const styles=StyleSheet.create({
   segmentText:{color:colors.textMuted,fontSize:typography.caption,fontWeight:'700',textAlign:'center'},
   segmentTextActive:{color:colors.onPrimary,fontWeight:'800'},
   paymentMethodCard:{flexGrow:1,flexBasis:104,minWidth:96,minHeight:84,alignItems:'center',justifyContent:'center',gap:4,padding:spacing.xs,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  paymentMethodCardSelected:{backgroundColor:colors.primaryFaint,borderColor:colors.primary,borderWidth:2},
+  paymentMethodCardSelected:{backgroundColor:colors.primaryFaint,borderColor:colors.accent,borderWidth:2},
   paymentMethodCardPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
   paymentMethodIcon:{width:34,height:30,alignItems:'center',justifyContent:'center'},
   paymentMethodIconSelected:{},
   paymentMethodTextSelected:{color:colors.primary},
-  alertCard:{backgroundColor:colors.warningSoft,borderRadius:radius.lg,borderWidth:1,borderColor:'#F4D9A8',padding:spacing.md},
+  alertCard:{backgroundColor:colors.warningSoft,borderRadius:radius.lg,borderWidth:1,borderColor:colors.warning,padding:spacing.md},
   alertCardPrimary:{backgroundColor:colors.primaryFaint,borderColor:colors.primarySoft},
-  alertCardNegative:{backgroundColor:colors.negativeSoft,borderColor:'#F3C9CD'},
+  alertCardNegative:{backgroundColor:colors.negativeSoft,borderColor:colors.negative},
   alertRow:{alignItems:'flex-start',gap:spacing.sm},
   alertMark:{width:8,height:8,borderRadius:4,backgroundColor:colors.warning,marginTop:7},
   alertMarkPrimary:{backgroundColor:colors.primary},

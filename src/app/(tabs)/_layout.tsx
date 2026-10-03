@@ -23,7 +23,7 @@ export default function TabsLayout(){
   return <Tabs screenOptions={({route})=>({
     headerShown:false,
     tabBarHideOnKeyboard:true,
-    tabBarActiveTintColor:colors.primary,
+    tabBarActiveTintColor:colors.accent,
     tabBarInactiveTintColor:colors.textSoft,
     sceneStyle:{backgroundColor:colors.background},
     tabBarStyle:styles.tabBar,
@@ -40,11 +40,11 @@ export default function TabsLayout(){
 }
 
 const styles=StyleSheet.create({
-  tabBar:{height:72,paddingTop:6,paddingBottom:8,borderTopColor:colors.border,backgroundColor:colors.surface,elevation:0},
+  tabBar:{height:72,paddingTop:6,paddingBottom:8,borderTopColor:colors.accent,backgroundColor:colors.surface,elevation:0},
   tabItem:{marginHorizontal:1,marginVertical:1},
   tabLabel:{fontSize:type.caption,fontWeight:'700',marginTop:1},
   iconShell:{width:38,height:30,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
-  iconShellActive:{backgroundColor:colors.primarySoft},
+  iconShellActive:{backgroundColor:colors.accentSoft},
   homeGlyph:{width:20,height:19,alignItems:'center',justifyContent:'flex-end'},
   homeRoof:{position:'absolute',top:1,width:13,height:13,borderTopWidth:2,borderLeftWidth:2,transform:[{rotate:'45deg'}],borderRadius:2},
   homeBody:{width:14,height:11,borderWidth:2,borderTopWidth:0,borderRadius:3},
