@@ -21,17 +21,23 @@ def tap(node):
  adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.5)
 def find(text,editable=False,scrolls=0):
  for attempt in range(scrolls+1):
-  nodes=[n for n in ui().iter('node') if (n.get('content-desc')==text or n.get('text')==text) and (not editable or n.get('class','').endswith('EditText')) and bounds(n)[3]>bounds(n)[1]]
+  tree=ui()
+  nodes=[n for n in tree.iter('node') if (n.get('content-desc')==text or n.get('text')==text) and (not editable or n.get('class','').endswith('EditText')) and bounds(n)[3]>bounds(n)[1]]
   if nodes:return nodes[0]
-  partial=[n for n in ui().iter('node') if text in (n.get('content-desc','') or n.get('text','')) and (not editable or n.get('class','').endswith('EditText')) and bounds(n)[3]>bounds(n)[1]]
+  partial=[n for n in tree.iter('node') if text in (n.get('content-desc','') or n.get('text','')) and (not editable or n.get('class','').endswith('EditText')) and bounds(n)[3]>bounds(n)[1]]
   if partial:return partial[0]
-  if attempt<scrolls:adb('shell','input','swipe','540','1850','540','650','350');time.sleep(.4)
+  if attempt<scrolls:
+   areas=[n for n in tree.iter('node') if n.get('scrollable')=='true' and bounds(n)[3]-bounds(n)[1]>180]
+   if not areas:break
+   area=max(areas,key=lambda n:(bounds(n)[2]-bounds(n)[0])*(bounds(n)[3]-bounds(n)[1]))
+   x1,y1,x2,y2=bounds(area);x=(x1+x2)//2
+   adb('shell','input','swipe',str(x),str(y2-65),str(x),str(y1+65),'450');time.sleep(.7)
  raise ValueError('UI element missing: '+text+'; visible fields: '+str([(n.get('class'),n.get('text'),n.get('content-desc')) for n in ui().iter('node') if n.get('class','').endswith('EditText')]))
 def click(text,scrolls=0):tap(find(text,scrolls=scrolls))
 def field(label,value,scrolls=0):
  for attempt in range(3):
-  hide_keyboard()
-  tap(find(label,editable=True,scrolls=scrolls));time.sleep(1)
+  target=find(label,editable=True,scrolls=scrolls)
+  if target.get('focused')!='true':tap(target);time.sleep(1)
   target=find(label,editable=True)
   if target.get('focused')!='true':
    time.sleep(.6);continue
@@ -40,13 +46,8 @@ def field(label,value,scrolls=0):
   adb('shell','input','text',value.replace(' ','%s'));time.sleep(.8)
   actual=find(label,editable=True).get('text','')
   if actual==value:
-   hide_keyboard();return
+   print('Verified field: '+label+' = '+value);return
  raise ValueError('Could not focus and set field '+label+' to '+value+'; actual: '+str([(n.get('content-desc'),n.get('text'),n.get('focused')) for n in ui().iter('node') if n.get('class','').endswith('EditText')]))
-def hide_keyboard():
- # Wait for IME resizing before locating the next input in a bottom sheet.
- state=adb('shell','dumpsys','input_method').decode('utf-8',errors='replace')
- if re.search(r'(?:mInputShown|mIsInputViewShown|isInputViewShown)\s*=\s*true',state):
-  adb('shell','input','keyevent','4');time.sleep(1)
 def route(path):
  adb('shell','am','start','-W','-a','android.intent.action.VIEW','-d','alkarna://'+path,package);time.sleep(2)
 def capture(name):
@@ -62,13 +63,13 @@ def scenario(name,action):
   adb('shell','input','keyevent','4');time.sleep(.4)
 
 def product():
- route('inventory/products');click('إضافة');time.sleep(1);hide_keyboard()
+ route('inventory/products');click('إضافة');time.sleep(1)
  field('الاسم','QA Rice')
  field('سعر الشراء','100',3);field('سعر البيع','150',2);field('سعر الجملة','140',2)
  field('الكمية','20',5);click('حفظ',4);time.sleep(2)
  route('inventory/products');capture('products-populated');click('QA Rice');capture('product-detail');adb('shell','input','keyevent','4')
 def customer():
- route('parties/customers');click('عميل جديد');time.sleep(1);hide_keyboard()
+ route('parties/customers');click('عميل جديد');time.sleep(1)
  field('الاسم','QA Customer');field('الهاتف','22112211');click('حفظ');time.sleep(2)
  route('parties/customers');capture('customers-populated');click('QA Customer');capture('party-ledger');click('استلام');capture('party-cash-form');adb('shell','input','keyevent','4')
 def deposit():
