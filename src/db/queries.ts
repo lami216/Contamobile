@@ -62,7 +62,13 @@ const partySummarySql=`SELECT p.id party_id,
   (SELECT COALESCE(SUM(d.total),0) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_trade_total,
   (SELECT COUNT(*) FROM documents d WHERE d.party_id=p.id AND d.status='posted' AND d.kind='purchase') supplier_invoice_count
 FROM parties p`;
-export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier'):Promise<PartyFinancialSummary[]>{const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${type?' WHERE p.party_type=?':''}`,type?[type]:[]);return rows.map(mapPartySummary)}
+export async function listPartyFinancialSummaries(db:SQLiteDatabase,type?:'customer'|'supplier',partyIds?:string[]):Promise<PartyFinancialSummary[]>{
+  if(partyIds&&!partyIds.length)return [];
+  const clauses:string[]=[],values:string[]=[];
+  if(type){clauses.push('p.party_type=?');values.push(type)}
+  if(partyIds){clauses.push(`p.id IN (${partyIds.map(()=>'?').join(',')})`);values.push(...partyIds)}
+  const rows=await db.getAllAsync<PartySummaryRow>(`${partySummarySql}${clauses.length?' WHERE '+clauses.join(' AND '):''}`,values);return rows.map(mapPartySummary);
+}
 export async function getPartyFinancialSummary(db:SQLiteDatabase,partyId:string):Promise<PartyFinancialSummary>{const row=await db.getFirstAsync<PartySummaryRow>(`${partySummarySql} WHERE p.id=?`,[partyId]);return row?mapPartySummary(row):{partyId,cashIn:0,cashOut:0,customerTradeTotal:0,customerGrossProfit:0,supplierTradeTotal:0,supplierInvoiceCount:0}}
 
 export async function listPaymentAccounts(db:SQLiteDatabase,includeArchived=false):Promise<PaymentAccount[]> {

@@ -6,7 +6,8 @@ import { CAPABILITIES, expandPermissionDependencies, permissionPresets, removePe
 import { useAuth } from '@/auth/provider';
 import { createUser, deleteUser, listUsers, updateUser } from '@/auth/service';
 import type { AppUser } from '@/auth/types';
-import { AccountingRow, AppText, Badge, Button, Chip, EmptyState, Field, GroupedList, PageHeader, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
+import { AppText, Badge, Button, Chip, EmptyState, Field, PageHeader, Screen, SectionTitle, SegmentedControl } from '@/components/ui';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { StickyActionBar } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { colors, radius, spacing } from '@/theme';
@@ -43,21 +44,15 @@ export function UsersScreen(){
     <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <PageHeader title={t('usersTitle')} subtitle={t('usersHint')} onBack={()=>router.back()} trailing={<Button compact title={t('add')} onPress={()=>setEditing(null)}/>}/>
+        <StitchPanel><View style={{flexDirection:isRTL?'row-reverse':'row',gap:10,alignItems:'center'}}><StitchIcon name="shield"/><AppText variant="subheading">{t('usersAllRights')}</AppText></View><AppText variant="caption" muted>{t('usersOwner')}</AppText></StitchPanel>
         <View style={[styles.summary,{flexDirection:isRTL?'row-reverse':'row'}]}>
           <MiniStat label={t('usersCount')} value={String(items.length)}/>
           <MiniStat label={t('usersActiveCount')} value={String(items.filter(user=>user.isActive).length)}/>
           <MiniStat label={t('usersOwnersCount')} value={String(items.filter(user=>user.owner).length)} last/>
         </View>
       </View>
-      {items.length?<GroupedList>{items.map((item,index)=><AccountingRow
-        key={item.id}
-        title={item.name}
-        subtitle={`@${item.username}`}
-        meta={item.owner?t('usersAllRights'):t('usersRightsCount').replace('{count}',String(item.permissions.length))}
-        trailing={<Badge label={item.owner?t('usersOwner'):!item.isActive?t('usersDisabled'):t('usersActive')} tone={item.owner?'primary':!item.isActive?'warning':'positive'}/>}
-        onPress={()=>setEditing(item)}
-        last={index===items.length-1}
-      />)}</GroupedList>:<EmptyState title={t('usersEmpty')} description={t('usersEmptyHint')}/>}
+      {items.length?items.map(item=><StitchPanel key={item.id}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:12}}><View style={{width:44,height:44,borderRadius:12,backgroundColor:'#272319',alignItems:'center',justifyContent:'center'}}><StitchText size={24} bold color={stitch.gold}>{item.name.slice(0,1)}</StitchText></View><View style={{flex:1}}><AppText variant="heading">{item.name}</AppText><AppText variant="caption" muted>@{item.username}</AppText></View><Badge label={item.owner?t('usersOwner'):!item.isActive?t('usersDisabled'):t('usersActive')} tone={item.owner?'primary':!item.isActive?'warning':'positive'}/></View><View style={{backgroundColor:'#080C14',padding:12,borderRadius:8,gap:4}}><AppText variant="caption" muted>{t('usersPermissions')}</AppText><AppText variant="caption">{item.owner?t('usersAllRights'):t('usersRightsCount').replace('{count}',String(item.permissions.length))}</AppText></View><Button compact title={t('edit')} variant="secondary" onPress={()=>setEditing(item)}/></StitchPanel>):<EmptyState title={t('usersEmpty')} description={t('usersEmptyHint')}/>}
+
     </ScrollView>
     {editing!==undefined?<UserEditor user={editing} locale={locale} busy={busy} onClose={()=>{if(!busy)setEditing(undefined)}} onSave={save} onDelete={editing&&!editing.owner?()=>remove(editing):undefined}/>:null}
   </Screen>;
@@ -83,7 +78,7 @@ function UserEditor({user,locale,busy,onClose,onSave,onDelete}:{user:AppUser|nul
 }
 
 const styles=StyleSheet.create({
-  list:{padding:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
+  list:{padding:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background,gap:12},
   header:{gap:spacing.md,marginBottom:spacing.sm},
   summary:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
   miniStat:{flex:1,minWidth:100,padding:spacing.md,gap:spacing.xs,borderRightWidth:StyleSheet.hairlineWidth,borderRightColor:colors.border},

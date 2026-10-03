@@ -3,7 +3,7 @@ import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PartyType } from '@/domain/types';
-import { listParties } from '@/db/queries';
+import { listParties, listPartyFinancialSummaries } from '@/db/queries';
 import { createParty } from '@/services/accounting-service';
 import { restoreParty } from '@/services/management-service';
 import {
@@ -18,6 +18,7 @@ import {
   SearchField,
   SegmentedControl,
 } from '@/components/ui';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -29,6 +30,7 @@ const format=(template:string,values:Record<string,string|number>)=>Object.entri
 export function PartiesScreen({type}:{type:PartyType}){
   const db=useSQLiteContext(),{t,isRTL,number,errorMessage}=useI18n(),auth=useAuth();
   const params=useLocalSearchParams<{create?:string}>();
+  const [summaries,setSummaries]=useState<Awaited<ReturnType<typeof listPartyFinancialSummaries>>>([]);
   const [items,setItems]=useState<Party[]>([]),[search,setSearch]=useState(''),[state,setState]=useState<PartyState>('active');
   const [createOpen,setCreateOpen]=useState(false),[name,setName]=useState(''),[phone,setPhone]=useState(''),[busy,setBusy]=useState(false);
 
@@ -42,7 +44,9 @@ export function PartiesScreen({type}:{type:PartyType}){
   const load=useCallback(async()=>{
     if(!allowed)return;
     const rows=await listParties(db,type,search,200,includeArchived);
-    setItems(state==='archived'?rows.filter(item=>item.isArchived):state==='active'?rows.filter(item=>!item.isArchived):rows);
+    const visible=state==='archived'?rows.filter(item=>item.isArchived):state==='active'?rows.filter(item=>!item.isArchived):rows;
+    setItems(visible);
+    setSummaries(await listPartyFinancialSummaries(db,type,visible.map(item=>item.id)));
   },[allowed,db,includeArchived,search,state,type]);
 
   useFocusEffect(useCallback(()=>{void load();if(params.create==='1'&&canCreate)setCreateOpen(true)},[canCreate,load,params.create]));
@@ -80,9 +84,10 @@ export function PartiesScreen({type}:{type:PartyType}){
         <PageHeader
           title={title}
           onBack={()=>router.back()}
-          trailing={canCreate&&!showArchived?<HeaderAddButton label={t('add')} onPress={()=>setCreateOpen(true)}/>:undefined}
         />
 
+        <StitchPanel><StitchText size={12} color={stitch.muted}>{type==='customer'?t('receivable'):t('payable')}</StitchText><Money value={items.reduce((total,p)=>total+(type==='customer'?p.receivable:p.payable),0)} large tone={type==='customer'?'positive':'negative'}/><StitchText size={11} color={stitch.muted}>{t('partyCount').replace('{count}',number(items.length))}</StitchText></StitchPanel>
+        {canCreate&&!showArchived?<Button title={type==='customer'?t('partyNewCustomer'):t('partyNewSupplier')} onPress={()=>setCreateOpen(true)}/>:null}
         <SearchField
           value={search}
           onChangeText={setSearch}
@@ -106,6 +111,8 @@ export function PartiesScreen({type}:{type:PartyType}){
       ListEmptyComponent={<EmptyState title={search?t('noResults'):showArchived?t('partyNoArchived'):t('noData')}/>}
       renderItem={({item,index})=><PartyRow
         item={item}
+        summary={summaries.find(s=>s.partyId===item.id)}
+        canCash={!item.isArchived&&auth.has(type==='customer'?'customers.collect':'suppliers.pay')}
         first={index===0}
         last={index===items.length-1}
         canRestore={item.isArchived&&canArchive}
@@ -129,48 +136,17 @@ export function PartiesScreen({type}:{type:PartyType}){
   </Screen>;
 }
 
-function PartyRow({item,first,last,canRestore,restoring,onRestore}:{item:Party;first:boolean;last:boolean;canRestore:boolean;restoring:boolean;onRestore:()=>void}){
-  const {t,isRTL}=useI18n();
-  const label=item.net>0?t('partyReceivable'):item.net<0?t('partyPayable'):t('partySettled');
-  const tone=item.net>0?'positive':item.net<0?'negative':'neutral';
-
-  return <Pressable
-    accessibilityRole="button"
-    onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})}
-    style={({pressed})=>[
-      styles.row,
-      first&&styles.firstRow,
-      last&&styles.lastRow,
-      {flexDirection:isRTL?'row-reverse':'row'},
-      pressed&&styles.pressed,
-    ]}
-  >
-    <View style={styles.body}>
-      <View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <AppText variant="subheading" numberOfLines={1} style={styles.name}>{item.name}</AppText>
-        {item.isArchived?<Badge label={t('partyAccountArchived')} tone="warning"/>:null}
-      </View>
-      {item.phone?<AppText variant="caption" muted numberOfLines={1}>{item.phone}</AppText>:null}
-      <Badge label={label} tone={tone}/>
-    </View>
-
-    <View style={styles.trailing}>
-      <AppText variant="caption" muted>{t('partyBalance')}</AppText>
-      <Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/>
-      {canRestore?<Pressable accessibilityRole="button" disabled={restoring} onPress={event=>{event.stopPropagation();onRestore()}} style={({pressed})=>[styles.restoreButton,pressed&&styles.restorePressed]}>
-        <AppText variant="caption" style={styles.restoreText}>{t('partyRestore')}</AppText>
-      </Pressable>:<AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>}
-    </View>
-  </Pressable>;
+function PartyRow({item,summary,canCash,canRestore,restoring,onRestore}:{item:Party;summary?:Awaited<ReturnType<typeof listPartyFinancialSummaries>>[number];first:boolean;last:boolean;canCash:boolean;canRestore:boolean;restoring:boolean;onRestore:()=>void}){
+ const {t,isRTL,locale}=useI18n(),ar=locale==='ar',customer=item.partyType==='customer',row={flexDirection:isRTL?'row-reverse' as const:'row' as const};
+ const total=customer?summary?.customerTradeTotal:summary?.supplierTradeTotal,paid=customer?summary?.cashIn:summary?.cashOut;
+ return <View style={styles.stitchParty}><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={[styles.nameRow,row]}><View style={styles.stitchAvatar}><StitchIcon name={customer?'people':'purchase'} size={27} color={customer?stitch.green:stitch.amber}/></View><View style={styles.body}><AppText variant="subheading" numberOfLines={2}>{item.name}</AppText>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}</View><Badge label={item.isArchived?t('partyAccountArchived'):item.net>0?t('partyReceivable'):item.net<0?t('partyPayable'):t('partySettled')} tone={item.net>0?'positive':item.net<0?'negative':'neutral'}/></Pressable>
+ <View style={[styles.stitchFigures,row]}><View style={styles.stitchFigure}><AppText variant="caption" muted>{customer?t('sales'):t('purchases')}</AppText><Money value={total??0}/></View><View style={styles.stitchFigure}><AppText variant="caption" muted>{ar?'المسدد':'Réglé'}</AppText><Money value={paid??0} tone="positive"/></View><View style={styles.stitchFigure}><AppText variant="caption" muted>{t('partyBalance')}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/></View></View>
+ <View style={[styles.stitchActions,row]}><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={styles.stitchAction}><StitchIcon name="receipt" size={17}/><AppText variant="caption">{ar?'كشف حساب':'Relevé'}</AppText></Pressable>{canRestore?<Button compact title={t('restore')} loading={restoring} onPress={onRestore}/>:canCash?<Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id,action:customer?'receive':'pay'}})} style={[styles.stitchAction,{backgroundColor:customer?stitch.green:stitch.red}]}><StitchIcon name={customer?'receive':'spend'} color="#FFFFFF" size={17}/><AppText variant="caption" style={{color:'#FFFFFF'}}>{customer?(ar?'سند قبض':'Encaisser'):(ar?'سند دفع':'Payer')}</AppText></Pressable>:null}</View></View>;
 }
 
-function HeaderAddButton({label,onPress}:{label:string;onPress:()=>void}){
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({pressed})=>[styles.headerAdd,pressed&&styles.headerAddPressed]}>
-    <AppText variant="heading" style={styles.headerPlus}>+</AppText>
-  </Pressable>;
-}
 
 const styles=StyleSheet.create({
+  stitchParty:{padding:16,gap:12,borderRadius:12,borderWidth:1,borderColor:stitch.border,backgroundColor:stitch.card,marginBottom:12},stitchAvatar:{width:44,height:44,borderRadius:10,backgroundColor:'#19243A',alignItems:'center',justifyContent:'center'},stitchFigures:{backgroundColor:'#080C14',borderRadius:8,padding:10,gap:8},stitchFigure:{flex:1,minWidth:0,gap:4},stitchActions:{gap:8},stitchAction:{flex:1,minHeight:44,borderRadius:8,backgroundColor:'#1C2638',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},
   list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
   header:{gap:spacing.sm,marginBottom:spacing.sm},
   countRow:{minHeight:30,alignItems:'center'},

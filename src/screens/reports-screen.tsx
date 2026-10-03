@@ -7,7 +7,7 @@ import { validateRequiredDateRange, type DateRangeIssue } from '@/domain/date-ra
 import { listParties, listPaymentAccounts, listProductCategories, listProducts } from '@/db/queries';
 import { runReport, salesTrend, type ReportData, type ReportFilters, type ReportType, type SalesTrendPoint } from '@/db/report-queries';
 import { PartyPicker, ProductPicker } from '@/components/pickers';
-import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SegmentedControl, SelectRow, Surface } from '@/components/ui';
+import { AppText, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SearchField, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
 import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
@@ -134,7 +134,6 @@ export function ReportsScreen(){
 
   if(!allowed)return <Screen><EmptyState title={t('reportsNoPermission')}/></Screen>;
 
-  const currentReport=reportTypes.find(report=>report.id===type)??reportTypes[0]!;
   const filteredProducts=categoryId?products.filter(product=>product.categoryId===categoryId):products;
   const selectedProduct=products.find(product=>product.id===productId);
   const selectedParty=parties.find(party=>party.id===partyId);
@@ -206,9 +205,8 @@ export function ReportsScreen(){
       ListHeaderComponent={<View style={styles.header}>
         <PageHeader title={t('reports')}/>
 
-        <GroupedList>
-          <SelectRow label={t('reportsReportType')} value={t(currentReport.label)} onPress={()=>setTypeOpen(true)} leading={<IconTile tone="primary" size="sm"><ReportGlyph/></IconTile>}/>
-        </GroupedList>
+        <View style={{flexDirection:isRTL?'row-reverse':'row',flexWrap:'wrap',gap:8}}>{reportTypes.map((report,index)=><Chip key={report.id} label={`${number(index+1)}. ${t(report.label)}`} active={type===report.id} onPress={()=>changeType(report.id)}/>)}</View>
+
 
         {type!=='debts'?<Surface style={styles.periodSurface}>
           <View style={[styles.dates,{flexDirection:isRTL?'row-reverse':'row'}]}>
@@ -329,7 +327,6 @@ function metricTone(label:string,value:number):'normal'|'positive'|'negative'{
   return 'normal';
 }
 
-function ReportGlyph(){return <View style={styles.reportGlyph}><View style={[styles.reportBar,{height:8}]}/><View style={[styles.reportBar,{height:14}]}/><View style={[styles.reportBar,{height:20}]}/></View>}
 
 function MetricGlyph({tone}:{tone:'normal'|'positive'|'negative'}){
   return <View style={styles.metricGlyph}><View style={[styles.metricGlyphBar,styles.metricGlyphBarOne,tone==='positive'&&styles.metricGlyphPositive,tone==='negative'&&styles.metricGlyphNegative]}/><View style={[styles.metricGlyphBar,styles.metricGlyphBarTwo,tone==='positive'&&styles.metricGlyphPositive,tone==='negative'&&styles.metricGlyphNegative]}/><View style={[styles.metricGlyphBar,styles.metricGlyphBarThree,tone==='positive'&&styles.metricGlyphPositive,tone==='negative'&&styles.metricGlyphNegative]}/></View>;

@@ -31,6 +31,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Typecheck, lint and accounting tests
         run: npm run check
+      - name: Prepare pinned offline Stitch fonts
+        run: python3 scripts/prepare-stitch-fonts.py
       - name: Verify Android JavaScript bundle
         run: npx expo export --platform android --output-dir dist-check
       - name: Generate native Android release
@@ -69,7 +71,8 @@ jobs:
           chmod +x android/gradlew
           ./android/gradlew -p android :app:processReleaseResources --no-daemon --stacktrace
           ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
-          mkdir -p release-output
+          mkdir -p release-output/fonts
+          cp assets/fonts/* release-output/fonts/
           cp android/app/build/outputs/apk/release/app-release.apk release-output/contamobile-golden.apk
       - name: Verify signature and non-debug release manifest
         shell: bash
@@ -97,6 +100,8 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
+            adb shell wm size 1080x2340
+            adb shell wm density 440
             adb install -r release-output/contamobile-golden.apk
             adb shell svc wifi disable
             adb shell svc data disable
@@ -108,6 +113,7 @@ jobs:
             adb exec-out screencap -p > release-output/golden-home.png
             adb logcat -d '*:E' > release-output/launch-errors.txt
             ! grep -E 'FATAL EXCEPTION|Unable to load script|Could not connect to development server' release-output/launch-errors.txt
+            python3 scripts/stitch-visual-qa.py
       - name: Upload APK and verification
         if: always()
         uses: actions/upload-artifact@v4

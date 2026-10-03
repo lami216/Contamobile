@@ -27,6 +27,7 @@ import { FilterSheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
 import { useAuth } from '@/auth/provider';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { colors, radius, spacing } from '@/theme';
 
 const kindLabels:Record<DocumentRecord['kind'],MessageKey>={
@@ -190,6 +191,7 @@ export function RecordsScreen(){
       contentContainerStyle={styles.list}
       ListHeaderComponent={<View style={styles.header}>
         <PageHeader title={t('records')} subtitle={format(t('recordsCount'),{count:items.length})}/>
+        <View style={{flexDirection:isRTL?'row-reverse':'row',gap:12}}><StitchPanel style={{flex:1}}><StitchText size={11} color={stitch.muted}>{t('receive')}</StitchText><Money value={items.reduce((sum,d)=>sum+(d.partyCashDirection==='receive'||d.kind==='sale'?d.cashAmount:0),0)} tone="positive" large/></StitchPanel><StitchPanel style={{flex:1}}><StitchText size={11} color={stitch.muted}>{t('pay')}</StitchText><Money value={items.reduce((sum,d)=>sum+(d.partyCashDirection==='pay'||d.kind==='purchase'||d.kind==='expense'?d.cashAmount:0),0)} tone="negative" large/></StitchPanel></View>
         <SearchField value={search} onChangeText={setSearch} placeholder={t('recordsSearchPlaceholder')}/>
 
         <View style={styles.controlBlock}>
@@ -296,36 +298,15 @@ export function RecordsScreen(){
   </Screen>;
 }
 
-function RecordRow({item,accounts,locale,first,last,disabled,onPress}:{item:DocumentRecord;accounts:PaymentAccount[];locale:'ar'|'fr';first:boolean;last:boolean;disabled:boolean;onPress:()=>void}){
+function RecordRow({item,accounts,locale,disabled,onPress}:{item:DocumentRecord;accounts:PaymentAccount[];locale:'ar'|'fr';first:boolean;last:boolean;disabled:boolean;onPress:()=>void}){
   const {t,date,isRTL}=useI18n();
   const name=item.partyName??item.title??t(kindLabels[item.kind]);
   const payment=paymentName(item,accounts,t('onCredit'));
   const status=documentStatus(item,t);
   const moment=`${date(item.occurredAt)} • ${timeLabel(item.occurredAt,locale)}`;
 
-  return <Pressable
-    accessibilityRole="button"
-    disabled={disabled}
-    onPress={onPress}
-    style={({pressed})=>[styles.row,first&&styles.firstRow,last&&styles.lastRow,{flexDirection:isRTL?'row-reverse':'row'},pressed&&styles.pressed,disabled&&styles.disabled]}
-  >
-    <View style={styles.rowBody}>
-      <View style={[styles.rowTop,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <Badge label={t(kindLabels[item.kind])} tone={kindTone(item.kind)}/>
-        <AppText variant="caption" muted numberOfLines={1}>{item.number}</AppText>
-      </View>
-      <AppText variant="subheading" numberOfLines={1}>{name}</AppText>
-      <View style={[styles.rowMeta,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <AppText variant="caption" muted numberOfLines={1}>{moment}</AppText>
-        {payment&&item.paymentMethod!=='note'?<AppText variant="caption" muted numberOfLines={1}>• {payment}</AppText>:null}
-      </View>
-    </View>
-    <View style={styles.amountSide}>
-      <Money value={item.total}/>
-      <Badge label={status.label} tone={status.tone}/>
-      <AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>
-    </View>
-  </Pressable>;
+  const outgoing=item.kind==='purchase'||item.kind==='expense'||item.partyCashDirection==='pay';
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[styles.stitchRecord,pressed&&styles.pressed,disabled&&styles.disabled]}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:10}}><View style={styles.stitchRecordIcon}><StitchIcon name={item.kind==='sale'?'sale':item.kind==='purchase'?'purchase':'receipt'} color={outgoing?stitch.red:stitch.green}/></View><View style={styles.rowBody}><AppText variant="subheading">{t(kindLabels[item.kind])}</AppText><AppText variant="caption" muted>{item.number}</AppText></View><Money value={item.total} tone={outgoing?'negative':'positive'}/></View><AppText variant="caption" muted>{name} · {payment}</AppText><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',paddingTop:8,borderTopWidth:1,borderTopColor:stitch.border}}><Badge label={status.label} tone={status.tone}/><AppText variant="caption" muted>{moment}</AppText><StitchIcon name="arrow" size={17}/></View></Pressable>;
 }
 
 function DocumentModal({item,accounts,onClose,onChanged}:{item:DocumentRecord;accounts:PaymentAccount[];onClose:()=>void;onChanged:()=>Promise<void>}){
@@ -423,6 +404,7 @@ function FilterGlyph({active}:{active:boolean}){
 }
 
 const styles=StyleSheet.create({
+  stitchRecord:{backgroundColor:stitch.card,borderWidth:1,borderColor:stitch.border,borderRadius:12,padding:16,gap:10,marginBottom:12},stitchRecordIcon:{width:40,height:40,borderRadius:10,backgroundColor:'#19243A',alignItems:'center',justifyContent:'center'},
   list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
   header:{gap:spacing.sm,marginBottom:spacing.sm},
   controlBlock:{gap:spacing.xs},

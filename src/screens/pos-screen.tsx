@@ -42,6 +42,7 @@ import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-int
 import { useI18n } from '@/i18n/provider';
 import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { colors, radius, spacing, touch } from '@/theme';
 
 type SaleLine={product:Product;quantity:number;unitPrice:number;stock:number;priceOverridden:boolean};
@@ -199,8 +200,7 @@ export function PosScreen(){
       return;
     }
     const proceed=()=>{
-      if(settlement==='payNow')setTender(String(total));
-      setStage('payment');
+      void completeSale();
     };
     if(check.warnings.length){
       Alert.alert(
@@ -330,9 +330,7 @@ export function PosScreen(){
         onChangeQuantity={changeQuantity}
         onEditQuantity={openQuantity}
         onEditPrice={openPrice}
-      />:null}
-
-      {stage==='payment'?<PaymentStage
+      ><PaymentStage inline
         total={total}
         accounts={accounts}
         settlement={settlement}
@@ -349,13 +347,16 @@ export function PosScreen(){
         underpaid={underpaid}
         onChooseParty={()=>setPartyPicker(true)}
         onBack={back}
-      />:null}
+      /></InvoiceStage>:null}
+
+
 
       {stage==='invoice'?<BottomActionBar
-        label={t('posContinuePayment')}
+        label={t('completeSale')}
         total={total}
         secondary={format(t('posProductsCount'),{count:lines.length})}
-        disabled={!lines.length}
+        disabled={!lines.length||underpaid||(needsParty&&!selectedParty)||(settlement==='payNow'&&!paymentMethod)}
+        loading={busy}
         onPress={openPayment}
       />:null}
       {stage==='payment'?<BottomActionBar
@@ -410,9 +411,9 @@ export function PosScreen(){
   </Screen>;
 }
 
-function InvoiceStage({
+function InvoiceStage({children,
   onBack,selectedWarehouse,selectedParty,lines,total,totalQuantity,onChooseParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
-}:{
+}:{children?:import('react').ReactNode;
   onBack:()=>void;
   selectedWarehouse:Warehouse|null;
   selectedParty:Party|null;
@@ -429,6 +430,8 @@ function InvoiceStage({
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
+      <StitchPanel style={{padding:12}}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between'}}><StitchIcon name="receipt" color={stitch.blue}/><StitchText size={12} color={stitch.lightGold}>{t('posNewSaleTitle')}</StitchText><Badge label={t('posNewSaleTitle')} tone="neutral"/></View></StitchPanel>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('posAddProduct')} onPress={onAddProduct} style={styles.stitchSearch}><StitchIcon name="search" color={stitch.muted}/><AppText variant="caption" muted style={{flex:1}}>{t('posSearchPlaceholder')}</AppText><StitchIcon name="barcode"/></Pressable>
       <View style={[styles.invoiceContextRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
         <Pressable accessibilityRole="button" onPress={onChooseParty} style={({pressed})=>[styles.contextCard,pressed&&styles.controlPressed]}>
           <AppText variant="caption" muted>{t('customer')}</AppText>
@@ -468,13 +471,14 @@ function InvoiceStage({
           {label:t('posInvoiceTotal'),value:total,emphasize:true},
         ]}/>
       </View>:null}
+      {children}
     </ScrollView>
   </View>;
 }
 
-function PaymentStage({
+function PaymentStage({inline=false,
   total,accounts,settlement,setSettlement,paymentMethod,setPaymentMethod,tender,setTender,normalizedTender,changeValue,dueValue,needsParty,selectedParty,underpaid,onChooseParty,onBack,
-}:{
+}:{inline?:boolean;
   total:number;
   accounts:PaymentAccount[];
   settlement:SettlementType;
@@ -493,10 +497,7 @@ function PaymentStage({
   onBack:()=>void;
 }){
   const {t,isRTL}=useI18n();
-  return <View style={styles.stage}>
-    <View style={styles.headerPad}><PageHeader title={t('posCheckoutTitle')} onBack={onBack}/></View>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <FramedSection title={t('customer')} padded={false}>
+  const body=<>      <FramedSection title={t('customer')} padded={false}>
         <SelectRow
           label={t('customer')}
           value={selectedParty?.name??(needsParty?t('posChooseCustomer'):t('posCashCustomer'))}
@@ -553,8 +554,10 @@ function PaymentStage({
 
       {underpaid?<AlertCard title={t('posPartialPaymentError')} tone="warning"/>:null}
       {needsParty&&!selectedParty?<AlertCard title={t('posCreditCustomerRequired')} tone="warning"/>:null}
-    </ScrollView>
-  </View>;
+</>;
+  return inline?<View style={{gap:12}}>{body}</View>:<View style={styles.stage}>
+    <View style={styles.headerPad}><PageHeader title={t('posCheckoutTitle')} onBack={onBack}/></View>
+<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.stageScroll}>{body}</ScrollView></View>;
 }
 
 function SaleSuccess({success,onNewSale,onViewInvoice}:{success:SuccessState;onNewSale:()=>void;onViewInvoice?:()=>void}){
@@ -652,6 +655,7 @@ function CustomerGlyph({warning=false}:{warning?:boolean}){
 }
 
 const styles=StyleSheet.create({
+  stitchSearch:{minHeight:48,backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border,borderRadius:8,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10},
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
   headerPad:{paddingHorizontal:spacing.md},

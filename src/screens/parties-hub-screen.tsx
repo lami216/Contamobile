@@ -1,17 +1,10 @@
-import { router } from 'expo-router';
-import { FeatureMenu } from '@/components/feature-menu';
-import { EmptyState, PageHeader, Screen } from '@/components/ui';
+import { useCallback, useState } from 'react';
+import { View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { dashboardSummary } from '@/db/queries';
+import { Screen } from '@/components/ui';
+import { StitchHeader, StitchAction, StitchPanel, StitchText, stitch } from '@/components/stitch';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
-
-export function PartiesHubScreen(){
-  const {t}=useI18n(),auth=useAuth();
-  const items=[
-    auth.has('customers.view')?{title:t('customers'),description:t('partyHubCustomersHint'),onPress:()=>router.push('/parties/customers'),primary:true}:null,
-    auth.has('suppliers.view')?{title:t('suppliers'),description:t('partyHubSuppliersHint'),onPress:()=>router.push('/parties/suppliers')}:null,
-  ].filter((item):item is NonNullable<typeof item>=>item!==null);
-
-  return <Screen scroll>\n    <PageHeader title={t('parties')} subtitle={t('partyHubHint')}/>
-    {items.length?<FeatureMenu items={items}/>:<EmptyState title={t('partyNoFunctions')}/>}
-  </Screen>;
-}
+export function PartiesHubScreen(){const {t,locale,isRTL,money}=useI18n(),auth=useAuth(),db=useSQLiteContext(),ar=locale==='ar';const [receivable,setReceivable]=useState(0),[payable,setPayable]=useState(0);useFocusEffect(useCallback(()=>{void dashboardSummary(db).then(s=>{setReceivable(s.receivable);setPayable(s.payable)})},[db]));return <Screen scroll padded={false}><StitchHeader module="PARTIES"/><View style={{padding:16,gap:16}}><StitchPanel><StitchText size={12} color={stitch.muted}>{ar?'صافي المركز المالي للذمم':'Position nette des tiers'}</StitchText><StitchText size={30} bold color={receivable-payable>=0?stitch.green:stitch.red}>{money(receivable-payable)}</StitchText><View style={{height:5,backgroundColor:stitch.red,borderRadius:3,overflow:'hidden'}}><View style={{height:5,width:(receivable+payable?100*receivable/(receivable+payable):0)+'%' as `${number}%`,backgroundColor:stitch.green}}/></View></StitchPanel><View style={{flexDirection:isRTL?'row-reverse':'row',gap:12}}><StitchPanel style={{flex:1}}><StitchText size={12} color={stitch.muted}>{t('receivable')}</StitchText><StitchText size={21} bold color={stitch.green}>{money(receivable)}</StitchText></StitchPanel><StitchPanel style={{flex:1}}><StitchText size={12} color={stitch.muted}>{t('payable')}</StitchText><StitchText size={21} bold color={stitch.red}>{money(payable)}</StitchText></StitchPanel></View>{auth.has('customers.view')?<StitchAction title={ar?'حسابات العملاء والزبائن':t('customers')} description={t('partyHubCustomersHint')} button={ar?'دخول حسابات الزبائن':t('customers')} color={stitch.green} icon="people" onPress={()=>router.push('/parties/customers')}/>:null}{auth.has('suppliers.view')?<StitchAction title={ar?'سجل الموردين والشراكات':t('suppliers')} description={t('partyHubSuppliersHint')} button={ar?'دخول حسابات الموردين':t('suppliers')} color={stitch.amber} icon="purchase" onPress={()=>router.push('/parties/suppliers')}/>:null}</View></Screen>}

@@ -6,7 +6,8 @@ import { useAuth } from '@/auth/provider';
 import { exportAndShareBackup, chooseAndRestoreBackup } from '@/services/backup-service';
 import { chooseDesktopBackup, importDesktopBackup } from '@/services/desktop-import-service';
 import { getPrintSettings, printProfileLabel, printProfiles, savePrintSettings, type PrintProfile } from '@/services/print-settings-service';
-import { AppText, Badge, Button, EmptyState, GroupedList, IconTile, PageHeader, Screen, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
+import { AppText, Badge, Button, EmptyState, GroupedList, IconTile, PageHeader, Screen, SectionTitle, Surface } from '@/components/ui';
+import { StitchIcon, stitch } from '@/components/stitch';
 import { useI18n } from '@/i18n/provider';
 import { colors, radius, spacing } from '@/theme';
 
@@ -104,13 +105,7 @@ export function SettingsScreen(){
 
     <View style={styles.section}>
       <SectionTitle title={t('language')} subtitle={t('settingsLanguageHint')}/>
-      <Surface style={styles.languageSurface}>
-        <SegmentedControl
-          value={locale}
-          options={[{value:'ar',label:t('arabic')},{value:'fr',label:t('french')}]}
-          onChange={value=>void setLocale(value)}
-        />
-      </Surface>
+      <View style={{flexDirection:isRTL?'row-reverse':'row',gap:12}}>{(['ar','fr'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{selected:locale===value}} onPress={()=>void setLocale(value)} style={{flex:1,minHeight:108,padding:16,gap:6,borderRadius:12,borderWidth:1,borderColor:locale===value?stitch.gold:colors.border,backgroundColor:locale===value?colors.accentSoft:colors.surface}}><View style={{flexDirection:isRTL?'row-reverse':'row',justifyContent:'space-between'}}><AppText variant="heading" style={{color:locale===value?stitch.gold:colors.text}}>{value==='ar'?'العربية':'Français'}</AppText>{locale===value?<StitchIcon name="check"/>:null}</View><AppText variant="caption" muted>{value==='ar'?'من اليمين إلى اليسار':'De gauche à droite'}</AppText></Pressable>)}</View>
     </View>
 
     <View style={styles.section}>

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Party, PaymentAccount } from '@/domain/types';
 import { listParties, listPaymentAccounts } from '@/db/queries';
@@ -8,6 +8,7 @@ import { listAccountTransfers, listFinancialMovements, type AccountTransfer, typ
 import { adjustAccount, correctOpeningBalance, createPaymentAccount, transferAccount } from '@/services/accounting-service';
 import { archivePaymentAccount, restorePaymentAccount, updatePaymentAccount } from '@/services/management-service';
 import { AppText, Badge, Button, Chip, EmptyState, Field, GroupedList, IconTile, Money, PageHeader, Screen, SectionTitle, SegmentedControl, Surface } from '@/components/ui';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { FilterSheet, Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import type { MessageKey } from '@/i18n/messages';
@@ -29,9 +30,11 @@ const within=(occurredAt:string,from:string,to:string)=>(!from||occurredAt.slice
 const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 
 export function AccountsScreen(){
+  const params=useLocalSearchParams<{tab?:BankTab}>();
   const db=useSQLiteContext(),{t,date,isRTL,number,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
   const [accounts,setAccounts]=useState<PaymentAccount[]>([]),[archived,setArchived]=useState<PaymentAccount[]>([]),[movements,setMovements]=useState<FinancialMovement[]>([]),[transfers,setTransfers]=useState<AccountTransfer[]>([]),[parties,setParties]=useState<Party[]>([]);
-  const [showArchived,setShowArchived]=useState(false),[filtersOpen,setFiltersOpen]=useState(false),[mode,setMode]=useState<ModalMode>(null),[selected,setSelected]=useState<PaymentAccount|null>(null),[tab,setTab]=useState<BankTab>('accounts'),[busy,setBusy]=useState(false);
+  const [adjustDirection,setAdjustDirection]=useState<'deposit'|'withdrawal'>('deposit'),[adjustRevision,setAdjustRevision]=useState(0);
+  const [showArchived,setShowArchived]=useState(false),[filtersOpen,setFiltersOpen]=useState(false),[mode,setMode]=useState<ModalMode>(null),[selected,setSelected]=useState<PaymentAccount|null>(null),[tab,setTab]=useState<BankTab>(['accounts','movements','transfers','adjustments'].includes(params.tab??'')?params.tab as BankTab:'accounts'),[busy,setBusy]=useState(false);
   const [movementFrom,setMovementFrom]=useState(today),[movementTo,setMovementTo]=useState(today),[movementAccount,setMovementAccount]=useState(''),[movementType,setMovementType]=useState('');
   const [transferFromDate,setTransferFromDate]=useState(today),[transferToDate,setTransferToDate]=useState(today),[transferFromAccount,setTransferFromAccount]=useState(''),[transferToAccount,setTransferToAccount]=useState('');
   const [adjustFrom,setAdjustFrom]=useState(today),[adjustTo,setAdjustTo]=useState(today),[adjustAccountFilter,setAdjustAccountFilter]=useState(''),[adjustType,setAdjustType]=useState('');
@@ -131,11 +134,7 @@ export function AccountsScreen(){
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <PageHeader title={t('accounts')}/>
       <View style={styles.toolbar}>
-        <SegmentedControl
-          value={tab}
-          options={tabs.filter(item=>item.allowed).map(item=>({value:item.value,label:t(item.label)}))}
-          onChange={value=>{setTab(value);setShowArchived(false);setFiltersOpen(false)}}
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:6,flexDirection:isRTL?'row-reverse':'row'}}>{tabs.filter(item=>item.allowed).map(item=><Chip key={item.value} label={t(item.label)} active={tab===item.value} onPress={()=>{setTab(item.value);setShowArchived(false);setFiltersOpen(false)}}/>)}</ScrollView>
         {tab==='accounts'&&canCreate?<Button title={t('add')} onPress={()=>open('create')}/>:null}
       </View>
 
@@ -155,11 +154,11 @@ export function AccountsScreen(){
 
         {archived.length&&canEdit?<View style={styles.archiveToggle}><Button compact title={showArchived?t('accountsShowActive'):format(t('accountsArchived'),{count:archived.length})} variant="secondary" onPress={()=>setShowArchived(value=>!value)}/></View>:null}
 
-        <GroupedList>
+        <View>
           {showArchived
             ?archived.length?archived.map((account,index)=><AccountRow key={account.id} account={account} archived last={index===archived.length-1} busy={busy} onRestore={()=>void restore(account)}/>):<EmptyState title={t('noData')}/>
             :accounts.length?accounts.map((account,index)=><AccountRow key={account.id} account={account} last={index===accounts.length-1} canEdit={canEdit} onEdit={()=>open('edit',account)}/>):<EmptyState title={t('noData')}/>}
-        </GroupedList>
+        </View>
       </>:null}
 
       {tab==='movements'&&canMovements?<>
@@ -177,7 +176,9 @@ export function AccountsScreen(){
       </>:null}
 
       {tab==='adjustments'&&canAdjust?<>
-        <SectionTitle title={t('accountsAdjustmentsTitle')} action={<View style={[styles.inlineActions,{flexDirection:isRTL?'row-reverse':'row'}]}><Button compact title={t('accountsDeposit')} variant="success" onPress={()=>open('deposit')}/><Button compact title={t('accountsWithdrawal')} variant="danger" onPress={()=>open('withdrawal')}/></View>}/>
+        <SegmentedControl value={adjustDirection} options={[{value:'deposit',label:t('accountsDeposit')},{value:'withdrawal',label:t('accountsWithdrawal')}]} onChange={setAdjustDirection}/>
+        <AccountSheet key={adjustDirection+adjustRevision} inline mode={adjustDirection} selected={null} accounts={activeAccounts} busy={busy} onClose={()=>setAdjustRevision(v=>v+1)} onRun={payload=>void (async()=>{if(!canAdjust||busy)return;setBusy(true);try{await adjustAccount(db,{accountId:payload.from,direction:adjustDirection,amount:Number(payload.amount),note:payload.note});await load();setAdjustRevision(v=>v+1)}catch(error){Alert.alert(t('error'),errorMessage(error))}finally{setBusy(false)}})()}/>
+        <SectionTitle title={t('accountsAdjustmentsTitle')}/>
         <DateFilter from={adjustFrom} to={adjustTo} setFrom={setAdjustFrom} setTo={setAdjustTo} reset={()=>{setAdjustFrom('');setAdjustTo('');setAdjustAccountFilter('');setAdjustType('')}}/>
         <View style={styles.filterTrigger}><Button title={t('reportsFilters')} variant="secondary" onPress={()=>setFiltersOpen(true)}/></View>
         <MovementList rows={adjustments} label={movement=>`${t(movementLabels[movement.type]??'partyMovementOther')} • ${accountName(movement.paymentMethod)}`} subtitle={movement=>`${date(movement.occurredAt)} • ${movement.documentNumber}${movement.note?' • '+movement.note:''}`} empty={t('noData')}/>
@@ -217,16 +218,11 @@ export function AccountsScreen(){
   </Screen>;
 }
 
-function AccountRow({account,last,archived=false,canEdit=false,busy=false,onEdit,onRestore}:{account:PaymentAccount;last:boolean;archived?:boolean;canEdit?:boolean;busy?:boolean;onEdit?:()=>void;onRestore?:()=>void}){
+function AccountRow({account,archived=false,canEdit=false,busy=false,onEdit,onRestore}:{account:PaymentAccount;last:boolean;archived?:boolean;canEdit?:boolean;busy?:boolean;onEdit?:()=>void;onRestore?:()=>void}){
   const {t,isRTL}=useI18n();
-  return <View style={[styles.accountRow,last&&styles.lastRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-    <View style={[styles.accountDot,{backgroundColor:account.color||colors.primary}]}/>
-    <View style={styles.flex}>
-      <View style={[styles.accountTitle,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={1}>{account.name}</AppText>{archived?<Badge label={t('accountsArchivedBadge')} tone="neutral"/>:!account.isActive?<Badge label={t('accountsInactive')} tone="warning"/>:null}</View>
-      <AppText variant="caption" muted>{account.code}</AppText>
-    </View>
-    {archived?<Button compact title={t('restore')} variant="secondary" disabled={busy} onPress={()=>onRestore?.()}/>:<View style={styles.accountEnd}><Money value={account.balance} tone={account.balance<0?'negative':'normal'}/>{canEdit?<Button compact title={t('edit')} variant="ghost" onPress={()=>onEdit?.()}/>:null}</View>}
-  </View>;
+  return <StitchPanel style={{marginBottom:12}}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:12}}><View style={{width:44,height:44,borderRadius:10,backgroundColor:(account.color||'#D4AF37')+'20',alignItems:'center',justifyContent:'center'}}><StitchIcon name={account.code==='cash'?'wallet':'bank'} color={account.color||stitch.gold} size={26}/></View><View style={styles.flex}><AppText variant="subheading">{account.name}</AppText><AppText variant="caption" muted>{account.code==='cash'?t('accountsCurrent'):account.code}</AppText></View>{archived?<Badge label={t('accountsArchivedBadge')} tone="neutral"/>:!account.isActive?<Badge label={t('accountsInactive')} tone="warning"/>:null}</View>
+  <View style={{padding:12,backgroundColor:'#080C14',borderRadius:8,gap:4}}><AppText variant="caption" muted>{t('accountsCurrentBalance')}</AppText><Money value={account.balance} tone={account.balance<0?'negative':'normal'} large/></View>
+  {archived?<Button compact title={t('restore')} variant="secondary" disabled={busy} onPress={()=>onRestore?.()}/>:canEdit?<Button compact title={t('edit')} variant="secondary" onPress={()=>onEdit?.()}/>:null}</StitchPanel>;
 }
 
 function AccountMetric({label,value,tone}:{label:string;value:number;tone:'positive'|'negative'}){
@@ -251,22 +247,23 @@ function MovementList({rows,label,subtitle,empty}:{rows:FinancialMovement[];labe
 }
 
 function TransferList({rows,date,empty,isRTL}:{rows:AccountTransfer[];date:(value:string)=>string;empty:string;isRTL:boolean}){
-  return <GroupedList>{rows.length?rows.map((row,index)=><View key={row.id} style={[styles.movementRow,{flexDirection:isRTL?'row-reverse':'row'},index===rows.length-1&&styles.lastRow]}><View style={styles.flex}><AppText variant="subheading">{row.fromName} → {row.toName}</AppText><AppText variant="caption" muted>{date(row.occurredAt)} • {row.number}{row.note?' • '+row.note:''}</AppText></View><Money value={row.amount}/></View>):<EmptyState title={empty}/>}</GroupedList>;
+ const {t}=useI18n();return <View style={{gap:12}}>{rows.length?rows.map(row=><StitchPanel key={row.id}><View style={{flexDirection:isRTL?'row-reverse':'row',justifyContent:'space-between'}}><AppText variant="caption" muted>{row.number} · {date(row.occurredAt)}</AppText><Badge label={t('posted')} tone="positive"/></View><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:10}}><View style={{flex:1,backgroundColor:'#080C14',padding:12,borderRadius:8}}><AppText variant="caption" muted>{t('from')}</AppText><AppText variant="subheading">{row.fromName}</AppText></View><StitchIcon name="transfer"/><View style={{flex:1,backgroundColor:'#080C14',padding:12,borderRadius:8}}><AppText variant="caption" muted>{t('to')}</AppText><AppText variant="subheading">{row.toName}</AppText></View></View>{row.note?<AppText variant="caption" muted>{row.note}</AppText>:null}<Money value={row.amount} large/></StitchPanel>):<EmptyState title={empty}/>}</View>;
 }
 
-function AccountSheet({mode,selected,accounts,busy,onClose,onRun,onArchive,onCorrect}:{mode:Exclude<ModalMode,null>;selected:PaymentAccount|null;accounts:PaymentAccount[];busy:boolean;onClose:()=>void;onRun:(payload:Payload)=>void;onArchive?:()=>void;onCorrect?:()=>void}){
+function AccountSheet({inline=false,mode,selected,accounts,busy,onClose,onRun,onArchive,onCorrect}:{inline?:boolean;mode:Exclude<ModalMode,null>;selected:PaymentAccount|null;accounts:PaymentAccount[];busy:boolean;onClose:()=>void;onRun:(payload:Payload)=>void;onArchive?:()=>void;onCorrect?:()=>void}){
   const {t,isRTL}=useI18n();
   const [name,setName]=useState(selected?.name??''),[amount,setAmount]=useState(mode==='correct'?String(selected?.openingBalance??0):''),[from,setFrom]=useState(selected?.id??accounts[0]?.id??''),[to,setTo]=useState(accounts.find(account=>account.id!==from)?.id??''),[note,setNote]=useState(''),[color,setColor]=useState(selected?.color??colors.info),[isActive,setActive]=useState(selected?.isActive??true);
   const title=mode==='create'?t('accountsNew'):mode==='transfer'?t('transfer'):mode==='deposit'?t('accountsDeposit'):mode==='withdrawal'?t('accountsWithdrawal'):mode==='correct'?t('accountsCorrectOpening'):selected?.name??t('accounts');
   const numeric=Number(amount),validAmount=Number.isFinite(numeric)&&numeric>0;
   const valid=mode==='create'?Boolean(name.trim()):mode==='edit'?Boolean(name.trim()):mode==='transfer'?Boolean(from&&to&&from!==to&&validAmount):(mode==='deposit'||mode==='withdrawal')?Boolean(from&&validAmount):mode==='correct'?Number.isFinite(numeric):false;
   const footer=<><Button title={t('confirm')} variant={mode==='deposit'?'success':mode==='withdrawal'?'danger':'primary'} loading={busy} disabled={!valid} onPress={()=>onRun({name:name.trim(),amount,from,to,note,color,isActive})}/>{onCorrect?<Button title={t('accountsCorrectOpening')} variant="secondary" disabled={busy} onPress={onCorrect}/>:null}{onArchive?<Button title={t('accountsArchiveAction')} variant="danger" disabled={busy} onPress={onArchive}/>:null}<Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onClose}/></>;
-  return <Sheet visible title={title} onClose={onClose} footer={footer}>
+  const body=<>
     {mode==='create'||mode==='edit'?<><Field label={t('name')} value={name} onChangeText={setName} autoFocus/>{mode==='create'?<Field label={t('openingBalance')} keyboardType="number-pad" value={amount} onChangeText={setAmount}/>:<><Field label={t('accountsColor')} value={color} onChangeText={setColor} autoCapitalize="none"/><SegmentedControl value={isActive?'active':'inactive'} options={[{value:'active',label:t('accountsActive')},{value:'inactive',label:t('accountsInactive')}]} onChange={value=>setActive(value==='active')}/></>}</>:null}
     {mode==='transfer'?<><FilterLabel label={t('from')}/><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(account=><Chip key={account.id} label={account.name} active={from===account.id} onPress={()=>{setFrom(account.id);if(to===account.id)setTo('')}}/>)}</View><FilterLabel label={t('to')}/><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.filter(account=>account.id!==from).map(account=><Chip key={account.id} label={account.name} active={to===account.id} onPress={()=>setTo(account.id)}/>)}</View><Field label={t('amount')} keyboardType="number-pad" value={amount} onChangeText={setAmount}/><Field label={t('note')} value={note} onChangeText={setNote}/></>:null}
     {mode==='deposit'||mode==='withdrawal'?<><FilterLabel label={t('accounts')}/><View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{accounts.map(account=><Chip key={account.id} label={account.name} active={from===account.id} onPress={()=>setFrom(account.id)}/>)}</View><Field label={t('amount')} keyboardType="number-pad" value={amount} onChangeText={setAmount}/><Field label={t('note')} value={note} onChangeText={setNote}/></>:null}
     {mode==='correct'?<><View style={styles.currentBalance}><AppText variant="caption" muted>{t('accountsCurrent')}</AppText><Money value={selected?.balance??0} large/></View><Field label={t('openingBalance')} keyboardType="number-pad" value={amount} onChangeText={setAmount}/><Field label={t('reason')} value={note} onChangeText={setNote}/></>:null}
-  </Sheet>;
+  </>;
+  return inline?<StitchPanel><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:10}}><StitchIcon name={mode==='deposit'?'receive':'spend'} color={mode==='deposit'?stitch.green:stitch.red}/><StitchText bold size={18}>{title}</StitchText></View>{body}{footer}</StitchPanel>:<Sheet visible title={title} onClose={onClose} footer={footer}>{body}</Sheet>;
 }
 
 function WalletGlyph(){return <View style={styles.walletGlyph}><View style={styles.walletBody}/><View style={styles.walletFlap}/><View style={styles.walletDot}/></View>}

@@ -40,7 +40,7 @@ export function BrandingScreen(){
   };
   return <Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <PageHeader title={t('brandingTitle')} subtitle={t('brandingHint')} onBack={()=>router.back()}/>
-    <View style={styles.preview}><View style={styles.previewRule}/><AppText variant="caption" muted>{t('brandingPreview')}</AppText><View style={[styles.previewBrand,{flexDirection:isRTL?'row-reverse':'row'}]}>{form.storeLogoDataUrl?<Image accessibilityLabel={t('brandingLogoAlt')} source={{uri:form.storeLogoDataUrl}} resizeMode="contain" style={styles.previewLogo}/>:null}<View style={styles.previewCopy}><AppText variant="title" style={styles.previewName}>{form.storeName.trim()||t('appName')}</AppText>{form.storePhone?<AppText variant="caption" muted>{form.storePhone}</AppText>:null}{form.storeAddress?<AppText variant="caption" muted>{form.storeAddress}</AppText>:null}</View></View></View>
+    <View style={styles.preview}><AppText variant="caption" style={{color:'#64748B',textAlign:'center'}}>{t('brandingPreview')}</AppText>{form.storeLogoDataUrl?<Image accessibilityLabel={t('brandingLogoAlt')} source={{uri:form.storeLogoDataUrl}} resizeMode="contain" style={styles.previewLogo}/>:null}<AppText style={{color:'#171717',textAlign:'center',fontSize:form.nameFontSize,fontWeight:String(form.nameFontWeight) as '400'|'600'|'800'}}>{form.storeName.trim()||t('appName')}</AppText>{[form.storePhone,form.storeAddress,form.registrationNumber,form.taxNumber].filter(Boolean).map((line,index)=><AppText key={index} variant="caption" style={{color:'#444444',textAlign:'center'}}>{line}</AppText>)}<View style={{borderTopWidth:1,borderStyle:'dashed',borderColor:'#AAA',marginVertical:12}}/><AppText variant="subheading" style={{color:'#171717',textAlign:'center'}}>{t('brandingPreview')}</AppText><View style={{height:32,borderTopWidth:1,borderBottomWidth:1,borderColor:'#DDD',marginVertical:8}}/>{form.footerNote?<AppText variant="caption" style={{color:'#444444',textAlign:'center'}}>{form.footerNote}</AppText>:null}</View>
     <View style={styles.formPanel}>
       <FormSection title={t('brandingBusinessInfo')}>
         <Field label={t('brandingStoreName')} value={form.storeName} onChangeText={set('storeName')}/>
@@ -60,14 +60,14 @@ function FormSection({title,children,last=false}:{title:string;children:ReactNod
 
 const styles=StyleSheet.create({
   content:{padding:spacing.md,gap:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
-  preview:{gap:spacing.sm,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,padding:spacing.md},
+  preview:{gap:4,backgroundColor:'#F8F5E9',borderWidth:1,borderColor:colors.accent,borderRadius:radius.md,padding:24},
   previewRule:{width:34,height:3,borderRadius:2,backgroundColor:colors.accent},
   previewBrand:{alignItems:'center',gap:spacing.md},
-  previewLogo:{width:58,height:58,borderRadius:radius.md,backgroundColor:colors.surfaceMuted},
+  previewLogo:{width:58,height:58,alignSelf:'center'},
   previewCopy:{flex:1,gap:spacing.xs},
   previewName:{color:colors.primary},
-  formPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
-  formSection:{padding:spacing.md,gap:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  formPanel:{gap:12},
+  formSection:{padding:spacing.md,gap:spacing.md,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface},
   lastSection:{borderBottomWidth:0,backgroundColor:colors.primaryFaint},
   chips:{flexWrap:'wrap',gap:spacing.xs},
   logoRow:{alignItems:'center',gap:spacing.md,padding:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surfaceMuted},

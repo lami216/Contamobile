@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { StitchIcon, type StitchIconName } from '@/components/stitch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useI18n } from '@/i18n/provider';
@@ -6,13 +7,8 @@ import { useAuth } from '@/auth/provider';
 import { colors, radius, type } from '@/theme';
 
 function TabGlyph({route,color,focused}:{route:string;color:ColorValue;focused:boolean}){
-  return <View style={[styles.iconShell,focused&&styles.iconShellActive]}>
-    {route==='index'?<View style={styles.homeGlyph}><View style={[styles.homeRoof,{borderColor:color}]}/><View style={[styles.homeBody,{borderColor:color}]}/></View>:null}
-    {route==='sales'?<View style={styles.salesGlyph}><View style={[styles.salesBar,{backgroundColor:color,width:15}]}/><View style={[styles.salesBar,{backgroundColor:color,width:11}]}/><View style={[styles.salesDot,{backgroundColor:color}]}/></View>:null}
-    {route==='inventory'?<View style={styles.gridGlyph}>{[0,1,2,3].map(i=><View key={i} style={[styles.gridCell,{borderColor:color}]}/>)}</View>:null}
-    {route==='parties'?<View style={styles.peopleGlyph}><View style={[styles.personHead,{borderColor:color}]}/><View style={[styles.personBody,{borderColor:color}]}/><View style={[styles.personHead,styles.personHeadSmall,{borderColor:color}]}/></View>:null}
-    {route==='more'?<View style={styles.moreGlyph}>{[0,1,2].map(i=><View key={i} style={[styles.moreDot,{backgroundColor:color}]}/>)}</View>:null}
-  </View>;
+ const names:Record<string,StitchIconName>={index:'home',sales:'sale',inventory:'inventory',parties:'people',more:'settings'};
+ return <View style={[styles.iconShell,focused&&styles.iconShellActive]}><StitchIcon name={names[route]??'more'} size={23} color={String(color)}/></View>;
 }
 
 export default function TabsLayout(){
@@ -41,9 +37,9 @@ export default function TabsLayout(){
 }
 
 const styles=StyleSheet.create({
-  tabBar:{height:72,paddingTop:6,paddingBottom:8,borderTopColor:colors.accent,backgroundColor:colors.surface,elevation:0},
+  tabBar:{height:72,paddingTop:6,paddingBottom:8,borderTopColor:colors.border,backgroundColor:colors.surface,elevation:0},
   tabItem:{marginHorizontal:1,marginVertical:1},
-  tabLabel:{fontSize:type.caption,fontWeight:'700',marginTop:1},
+  tabLabel:{fontSize:type.caption,fontWeight:'500',fontFamily:'StitchArabic',marginTop:1},
   iconShell:{width:38,height:30,borderRadius:radius.md,alignItems:'center',justifyContent:'center'},
   iconShellActive:{backgroundColor:colors.accentSoft},
   homeGlyph:{width:20,height:19,alignItems:'center',justifyContent:'flex-end'},

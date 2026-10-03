@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StitchHeader } from '@/components/stitch';
 import { AppText, Button, Money } from '@/components/ui';
 import { actionColors, colors, elevation, radius, spacing, touch } from '@/theme';
 import { useI18n } from '@/i18n/provider';
@@ -21,8 +22,9 @@ export function StickyActionBar({label,onPress,disabled=false,loading=false,summ
   return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}>{summary?<View style={styles.bottomSummary}><AppText variant="caption" muted>{summary}</AppText></View>:secondaryAction?<View style={styles.secondarySlot}>{secondaryAction}</View>:<View style={styles.bottomSummary}/>}<Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color={colors.onPrimary}/>:<AppText variant="subheading" style={styles.checkoutText}>{label}</AppText>}</Pressable></View></View>;
 }
 
-export function Sheet({visible,title,onClose,children,footer,fixedHeight=false,scrollable=true}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode;fixedHeight?:boolean;scrollable?:boolean}){
+export function Sheet({visible,title,onClose,children,footer,fixedHeight=false,scrollable=true,page=false}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode;fixedHeight?:boolean;scrollable?:boolean;page?:boolean}){
   const insets=useSafeAreaInsets(),{isRTL}=useI18n();
+  if(page)return <Modal visible={visible} animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={{flex:1,backgroundColor:colors.background,paddingTop:insets.top,paddingBottom:insets.bottom}} behavior={Platform.OS==='ios'?'padding':undefined}><StitchHeader title={title} module="" back onBack={onClose}/><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:16,gap:16}}>{children}</ScrollView>{footer?<View style={{padding:16,gap:8,borderTopWidth:1,borderTopColor:colors.border}}>{footer}</View>:null}</KeyboardAvoidingView></Modal>;
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS==='ios'?'padding':undefined}><Pressable accessibilityRole="button" accessibilityLabel="close" style={StyleSheet.absoluteFill} onPress={onClose}/><View style={[styles.sheet,fixedHeight&&styles.sheetFixed,{paddingBottom:Math.max(insets.bottom,spacing.lg)}]}><View style={styles.handle}/><View style={[styles.sheetHead,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="heading">{title}</AppText><Pressable accessibilityRole="button" onPress={onClose} style={({pressed})=>[styles.close,pressed&&styles.closePressed]}><AppText variant="subheading" muted>×</AppText></Pressable></View>{scrollable?<ScrollView style={styles.sheetScroll} contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>:<View style={styles.sheetContent}>{children}</View>}{footer?<View style={styles.sheetFooter}>{footer}</View>:null}</View></KeyboardAvoidingView></Modal>;
 }
 

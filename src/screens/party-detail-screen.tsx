@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -25,6 +25,7 @@ import {
   Screen,
   SegmentedControl,
 } from '@/components/ui';
+import { StitchIcon, StitchPanel } from '@/components/stitch';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -42,11 +43,12 @@ function timeLabel(value:string,locale:'ar'|'fr'){
 }
 
 export function PartyDetailScreen(){
-  const {id}=useLocalSearchParams<{id:string}>(),db=useSQLiteContext(),{t,date,isRTL,number,locale,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
+  const {id,action:requestedAction}=useLocalSearchParams<{id:string;action?:string}>(),db=useSQLiteContext(),{t,date,isRTL,number,locale,errorMessage}=useI18n(),auth=useAuth(),today=localDay();
   const [party,setParty]=useState<Party|null>(null),[docs,setDocs]=useState<DocumentRecord[]>([]),[accounts,setAccounts]=useState<PaymentAccount[]>([]),[summary,setSummary]=useState<PartyFinancialSummary>(()=>emptySummary(id));
   const [action,setAction]=useState<Action>(null),[period,setPeriod]=useState<Period>('today'),[from,setFrom]=useState(today),[to,setTo]=useState(today),[dateSheet,setDateSheet]=useState(false),[busy,setBusy]=useState(false);
   const [loaded,setLoaded]=useState(false),[loadError,setLoadError]=useState(false);
 
+  const requestedOpened=useRef(false);
   const load=useCallback(async()=>{
     if(!id)return;
     const range=period==='today'?{from:today,to:today}:period==='custom'?{from:from||undefined,to:to||undefined}:{from:undefined,to:undefined};
@@ -58,6 +60,8 @@ export function PartyDetailScreen(){
         getPartyFinancialSummary(db,id),
       ]);
       setParty(p);
+      if(p&&!requestedOpened.current&&['receive','pay'].includes(requestedAction??'')&&!p.isArchived&&auth.has(p.partyType==='customer'?'customers.collect':'suppliers.pay')){requestedOpened.current=true;setAction(requestedAction as 'receive'|'pay')}
+
       setDocs(d);
       setAccounts(a.filter(account=>account.isActive&&!account.isArchived));
       setSummary(s);
@@ -65,9 +69,10 @@ export function PartyDetailScreen(){
     }catch{
       setLoadError(true);
     }finally{setLoaded(true)}
-  },[db,from,id,period,to,today]);
+  },[auth,db,from,id,period,to,today,requestedAction]);
 
   useFocusEffect(useCallback(()=>{void load()},[load]));
+
 
   if(!loaded)return <Screen><LoadingState/></Screen>;
   if(loadError&&!party)return <Screen><PageHeader title={t('partyLedger')} onBack={()=>router.back()}/><ErrorState title={t('partyLoadFailed')} action={<Button title={t('tryAgain')} variant="secondary" onPress={()=>{setLoaded(false);void load()}}/>}/></Screen>;
@@ -141,6 +146,7 @@ export function PartyDetailScreen(){
             {party.isArchived?<Badge label={t('partyAccountArchived')} tone="warning"/>:null}
           </View>}
         >
+          <View style={{alignItems:'center',gap:8,padding:12}}><StitchIcon name={customer?'people':'purchase'} size={36}/><AppText variant="heading">{party.name}</AppText>{party.phone?<AppText variant="caption" muted>{party.phone}</AppText>:null}</View>
           <View style={[styles.primaryBalance,{flexDirection:isRTL?'row-reverse':'row'}]}>
             <View style={styles.flex}>
               <AppText variant="caption" muted>{balanceTitle}</AppText>
@@ -159,7 +165,7 @@ export function PartyDetailScreen(){
 
         {(canMove||canLedger)?<View style={styles.actionsPanel}>
           <View style={[styles.actionRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            {canMove?<ActionSlot><Button title={t('receive')} onPress={()=>setAction('receive')}/></ActionSlot>:null}
+            {canMove?<ActionSlot><Button title={t('receive')} variant="success" onPress={()=>setAction('receive')}/></ActionSlot>:null}
             {canMove?<ActionSlot><Button title={t('pay')} variant="danger" onPress={()=>setAction('pay')}/></ActionSlot>:null}
           </View>
           {(canLedger&&party.net!==0)||(canLedger&&party.receivable>0&&party.payable>0)?<View style={[styles.actionRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
@@ -214,11 +220,11 @@ export function PartyDetailScreen(){
       {action==='edit'?<EditPartyForm party={party} busy={busy} onCancel={()=>setAction(null)} onSave={(name,phone)=>void run(()=>updateParty(db,party.id,{name,phone}))}/>:null}
     </Sheet>
 
-    <Sheet visible={action==='receive'||action==='pay'} title={action==='receive'?t('receive'):t('pay')} onClose={()=>{if(!busy)setAction(null)}}>
-      {action==='receive'||action==='pay'?<CashForm direction={action} accounts={accounts} busy={busy} onCancel={()=>setAction(null)} onSave={(amount,method,note)=>void run(()=>postPartyCash(db,{partyId:party.id,direction:action,amount,paymentMethod:method,note}))}/>:null}
+    <Sheet page visible={action==='receive'||action==='pay'} title={action==='receive'?t('receive'):t('pay')} onClose={()=>{if(!busy)setAction(null)}}>
+      {action==='receive'||action==='pay'?<StitchPanel><View style={{alignItems:'center',gap:6}}><StitchIcon name="person" size={32}/><AppText variant="heading">{party.name}</AppText><Money value={Math.abs(party.net)} tone={balanceTone} large/></View><CashForm direction={action} accounts={accounts} busy={busy} onCancel={()=>setAction(null)} onSave={(amount,method,note)=>void run(()=>postPartyCash(db,{partyId:party.id,direction:action,amount,paymentMethod:method,note}))}/></StitchPanel>:null}
     </Sheet>
 
-    <Sheet visible={action==='settlement'||action==='offset'} title={action==='offset'?t('partyOffset'):t('partyAccountingSettlement')} onClose={()=>{if(!busy)setAction(null)}}>
+    <Sheet page visible={action==='settlement'||action==='offset'} title={action==='offset'?t('partyOffset'):t('partyAccountingSettlement')} onClose={()=>{if(!busy)setAction(null)}}>
       {action==='settlement'||action==='offset'?<LedgerForm mode={action} party={party} busy={busy} onCancel={()=>setAction(null)} onSave={(amount,note)=>void run(()=>action==='offset'?postOffset(db,{partyId:party.id,amount,note}):postSettlement(db,{partyId:party.id,side:party.receivable>0?'receivable':'payable',amount,note}))}/>:null}
     </Sheet>
 
@@ -312,7 +318,7 @@ const styles=StyleSheet.create({
   actionSlot:{flex:1,minWidth:0},
   ledgerHead:{gap:spacing.sm},
   ledgerTitleRow:{alignItems:'center',justifyContent:'space-between',gap:spacing.sm},
-  ledgerRow:{minHeight:70,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,backgroundColor:colors.surface,borderLeftWidth:1,borderRightWidth:1,borderTopWidth:1,borderColor:colors.border},
+  ledgerRow:{minHeight:86,alignItems:'center',gap:spacing.sm,padding:16,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12,marginBottom:12},
   firstLedgerRow:{borderTopColor:colors.borderStrong,borderLeftColor:colors.borderStrong,borderRightColor:colors.borderStrong,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg},
   lastLedgerRow:{borderBottomWidth:1,borderBottomColor:colors.borderStrong,borderBottomLeftRadius:radius.lg,borderBottomRightRadius:radius.lg},
   ledgerCopy:{flex:1,minWidth:0,gap:3},

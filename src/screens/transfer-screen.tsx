@@ -8,7 +8,8 @@ import { getDocumentById } from '@/db/document-queries';
 import { transferStock } from '@/services/accounting-service';
 import { updateStockTransfer } from '@/services/transaction-lifecycle-service';
 import { ProductPicker } from '@/components/pickers';
-import { AppText, Badge, Button, Chip, EmptyState, Field, FramedSection, PageHeader, Screen } from '@/components/ui';
+import { AppText, Badge, Button, EmptyState, Field, FramedSection, PageHeader, Screen, SelectRow } from '@/components/ui';
+import { StitchPanel, StitchIcon } from '@/components/stitch';
 import { QuantityStepper, Sheet, StickyActionBar } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -18,6 +19,7 @@ type Line={product:Product;quantity:number;available:number};
 
 export function TransferScreen(){
   const db=useSQLiteContext(),{t,isRTL,number,locale,errorMessage}=useI18n(),auth=useAuth(),ar=locale==='ar',params=useLocalSearchParams<{documentId?:string}>(),documentId=typeof params.documentId==='string'?params.documentId:'';
+  const [warehousePicker,setWarehousePicker]=useState<'from'|'to'|null>(null);
   const [products,setProducts]=useState<Product[]>([]),[warehouses,setWarehouses]=useState<Warehouse[]>([]),[from,setFrom]=useState(''),[to,setTo]=useState(''),[lines,setLines]=useState<Line[]>([]),[picker,setPicker]=useState(false),[busy,setBusy]=useState(false),[hydrated,setHydrated]=useState(!documentId),[editId,setEditId]=useState<string|null>(null),[draft,setDraft]=useState('1');
   const allowed=auth.has(documentId?'warehouses.transfer.edit':'warehouses.transfer');
   const load=useCallback(async()=>{if(!allowed)return;const [p,w,doc]=await Promise.all([listProducts(db,'',undefined,Boolean(documentId),500),listWarehouses(db,Boolean(documentId)),documentId?getDocumentById(db,documentId):Promise.resolve(null)]);if(documentId){if(!doc||doc.kind!=='transfer'||doc.status!=='posted'){Alert.alert(t('error'),ar?'تحويل المخزون غير موجود أو غير قابل للتعديل.':'Transfert introuvable ou non modifiable.');router.back();return}const fromId=doc.warehouseId??'',toId=doc.destinationWarehouseId??'',oldIds=new Set(doc.lines.map(line=>line.productId).filter(Boolean));setProducts(p.filter(product=>!product.isArchived||oldIds.has(product.id)));setWarehouses(w.filter(item=>!item.isArchived||item.id===fromId||item.id===toId));setFrom(fromId);setTo(toId);setLines(doc.lines.flatMap(line=>{if(!line.productId)return[];const product=p.find(item=>item.id===line.productId);if(!product)return[];return[{product,quantity:line.quantity,available:Number(product.stocks?.[fromId]??0)+line.quantity}]}));setHydrated(true);return}setProducts(p);setWarehouses(w);setFrom(current=>current||w.find(item=>item.isSalesDefault)?.id||w[0]?.id||'');setTo(current=>current||w.find(item=>item.id!==(w.find(x=>x.isSalesDefault)?.id||w[0]?.id))?.id||'');setHydrated(true)},[allowed,ar,db,documentId,t]);
@@ -32,17 +34,11 @@ export function TransferScreen(){
   const fromName=warehouses.find(item=>item.id===from)?.name??'',toName=warehouses.find(item=>item.id===to)?.name??'';
   return <Screen padded={false}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
     <PageHeader title={documentId?(ar?'تعديل تحويل المخزون':'Modifier le transfert'):t('transfer')} subtitle={ar?'اختر المصدر والوجهة، ثم أضف المنتجات والكميات.':'Choisissez source et destination, puis produits et quantités.'} onBack={()=>router.back()}/>
-    <FramedSection title={t('warehouse')}>
-      <AppText variant="caption" muted>{t('from')}</AppText>
-      <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.map(item=><Chip key={item.id} label={item.name} active={from===item.id} disabled={item.isArchived&&from!==item.id} onPress={()=>{setFrom(item.id);if(to===item.id)setTo('');setLines([])}}/>)}</View>
-      <View style={styles.divider}/>
-      <AppText variant="caption" muted>{t('to')}</AppText>
-      <View style={[styles.chips,{flexDirection:isRTL?'row-reverse':'row'}]}>{warehouses.filter(item=>item.id!==from).map(item=><Chip key={item.id} label={item.name} active={to===item.id} disabled={item.isArchived&&to!==item.id} onPress={()=>setTo(item.id)}/>)}</View>
-    </FramedSection>
-    <FramedSection title={t('products')} subtitle={lines.length?(ar?'استخدم + و− للكميات المعتادة، واضغط الرقم للكميات الكسرية.':'Utilisez +/− ; touchez le nombre pour une quantité décimale.'):undefined} action={<Button compact title={t('addLine')} onPress={()=>setPicker(true)}/>} padded={false}>
+    <StitchPanel><SelectRow label={t('from')} value={fromName||t('warehouse')} leading={<StitchIcon name="warehouse"/>} onPress={()=>setWarehousePicker('from')}/><View style={{alignItems:'center'}}><StitchIcon name="transfer"/></View><SelectRow label={t('to')} value={toName||t('warehouse')} leading={<StitchIcon name="warehouse"/>} onPress={()=>setWarehousePicker('to')}/></StitchPanel>
+        <FramedSection title={t('products')} subtitle={lines.length?(ar?'استخدم + و− للكميات المعتادة، واضغط الرقم للكميات الكسرية.':'Utilisez +/− ; touchez le nombre pour une quantité décimale.'):undefined} action={<Button compact title={t('addLine')} onPress={()=>setPicker(true)}/>} padded={false}>
       {lines.length?lines.map((line,index)=><View key={line.product.id} style={[styles.line,index===lines.length-1&&styles.lastLine]}><View style={[styles.lineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="subheading" numberOfLines={2}>{line.product.name}</AppText><View style={[styles.meta,{flexDirection:isRTL?'row-reverse':'row'}]}><Badge label={ar?`متوفر ${number(line.available)}`:`Stock ${number(line.available)}`} tone="positive"/><AppText variant="caption" muted>{line.product.sku}</AppText></View></View><Button compact title={t('remove')} variant="ghost" onPress={()=>setLines(current=>current.filter(item=>item.product.id!==line.product.id))}/></View><QuantityStepper value={line.quantity} onDecrease={()=>change(line.product.id,line.quantity-1)} onIncrease={()=>change(line.product.id,line.quantity+1)} onEdit={()=>openEdit(line)}/></View>):<EmptyState title={ar?'لم تضف منتجات بعد':'Aucun produit ajouté'} description={ar?'أضف المنتجات التي تريد نقلها فقط.':'Ajoutez uniquement les produits à transférer.'}/>}
     </FramedSection>
-  </ScrollView><StickyActionBar label={t('confirm')} summary={from&&to?(ar?`${fromName} ← ${toName} • ${lines.length} منتجات`:`${fromName} → ${toName} • ${lines.length} produits`):undefined} loading={busy} disabled={!from||!to||!lines.length} onPress={()=>void submit()}/><ProductPicker visible={picker} products={products.filter(product=>!product.isArchived||lines.some(line=>line.product.id===product.id))} exclude={lines.map(line=>line.product.id)} onClose={()=>setPicker(false)} onSelect={chooseProduct}/><Sheet visible={Boolean(editId)} title={ar?'الكمية المنقولة':'Quantité à transférer'} onClose={()=>setEditId(null)} footer={<Button title={t('save')} onPress={saveEdit}/>}><Field label={t('quantity')} value={draft} onChangeText={setDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/></Sheet></Screen>;
+  </ScrollView><Sheet visible={warehousePicker!==null} title={t('warehouse')} onClose={()=>setWarehousePicker(null)}>{warehouses.filter(item=>warehousePicker!=='to'||item.id!==from).map(item=><Button key={item.id} title={item.name} variant="secondary" disabled={item.isArchived&&item.id!==(warehousePicker==='from'?from:to)} onPress={()=>{if(warehousePicker==='from'){setFrom(item.id);if(to===item.id)setTo('');setLines([])}else setTo(item.id);setWarehousePicker(null)}}/>)}</Sheet><StickyActionBar label={t('confirm')} summary={from&&to?(ar?`${fromName} ← ${toName} • ${lines.length} منتجات`:`${fromName} → ${toName} • ${lines.length} produits`):undefined} loading={busy} disabled={!from||!to||!lines.length} onPress={()=>void submit()}/><ProductPicker visible={picker} products={products.filter(product=>!product.isArchived||lines.some(line=>line.product.id===product.id))} exclude={lines.map(line=>line.product.id)} onClose={()=>setPicker(false)} onSelect={chooseProduct}/><Sheet visible={Boolean(editId)} title={ar?'الكمية المنقولة':'Quantité à transférer'} onClose={()=>setEditId(null)} footer={<Button title={t('save')} onPress={saveEdit}/>}><Field label={t('quantity')} value={draft} onChangeText={setDraft} keyboardType="decimal-pad" autoFocus selectTextOnFocus/></Sheet></Screen>;
 }
 
 const styles=StyleSheet.create({
@@ -52,7 +48,7 @@ const styles=StyleSheet.create({
   divider:{height:StyleSheet.hairlineWidth,backgroundColor:colors.border,marginVertical:spacing.xxs},
   chips:{flexWrap:'wrap',gap:spacing.xs},
   linesPanel:{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:radius.lg,overflow:'hidden'},
-  line:{padding:spacing.md,gap:spacing.md,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},
+  line:{padding:spacing.md,gap:spacing.md,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface,marginBottom:12},
   lastLine:{borderBottomWidth:0},
   lineHead:{alignItems:'center',gap:spacing.md},
   flex:{flex:1},

@@ -21,6 +21,7 @@ import {
   SearchField,
   SegmentedControl,
 } from '@/components/ui';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { Sheet } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -129,8 +130,9 @@ export function ProductsScreen(){
       ListHeaderComponent={<View style={styles.header}>
         <PageHeader
           title={t('products')}
-          trailing={canCreate&&!showArchived?<HeaderAddButton label={t('add')} onPress={()=>setEditing(null)}/>:undefined}
         />
+        <View style={{flexDirection:isRTL?'row-reverse':'row',gap:12}}><StitchPanel style={{flex:1}}><StitchText size={12} color={stitch.muted}>{t('products')}</StitchText><StitchText size={24} bold>{number(items.length)}</StitchText></StitchPanel><StitchPanel style={{flex:1}}><StitchText size={12} color={stitch.muted}>{t('lowStock')}</StitchText><StitchText size={24} bold color="#F59E0B">{number(items.filter(x=>!x.isArchived&&stockOf(x)<=5).length)}</StitchText></StitchPanel></View>
+        {canCreate&&!showArchived?<Button title={t('add')} onPress={()=>setEditing(null)}/>:null}
         <SearchField value={search} onChangeText={setSearch} placeholder={t('productsSearchPlaceholder')}/>
 
         <SegmentedControl
@@ -233,8 +235,8 @@ export function ProductsScreen(){
   </Screen>;
 }
 
-function ProductRow({item,first,last,canRestore,onRestore,onPress}:{item:Product;first:boolean;last:boolean;canRestore:boolean;onRestore:()=>void;onPress:()=>void}){
-  const {t,isRTL,number}=useI18n();
+function ProductRow({item,canRestore,onRestore,onPress}:{item:Product;first:boolean;last:boolean;canRestore:boolean;onRestore:()=>void;onPress:()=>void}){
+  const {t,isRTL,number,locale}=useI18n();
   const qty=stockOf(item),expiry=expiryTone(item.expiryDate);
   const status=item.isArchived
     ?{label:t('productArchived'),tone:'neutral' as const}
@@ -250,44 +252,15 @@ function ProductRow({item,first,last,canRestore,onRestore,onPress}:{item:Product
   const context=[item.categoryName,item.sku?'#'+item.sku:null,item.barcode].filter(Boolean).join(' • ');
   const purchaseCost=Number(item.lastPurchaseCost??item.pieceCost??0);
 
-  return <Pressable
-    accessibilityRole="button"
-    onPress={onPress}
-    style={({pressed})=>[
-      styles.row,
-      first&&styles.firstRow,
-      last&&styles.lastRow,
-      {flexDirection:isRTL?'row-reverse':'row'},
-      pressed&&styles.pressed,
-    ]}
-  >
-    <View style={styles.body}>
-      <View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <AppText variant="subheading" numberOfLines={2} style={styles.name}>{item.name}</AppText>
-        {status?<Badge label={status.label} tone={status.tone}/>:null}
-      </View>
-      {context?<AppText variant="caption" muted numberOfLines={1}>{context}</AppText>:null}
-      <View style={[styles.meta,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <AppText variant="caption" muted>{t('productsStock')}: <AppText variant="caption" style={[styles.stockValue,qty===0&&styles.negative,qty>0&&qty<=5&&styles.warning]}>{number(qty)}</AppText></AppText>
-        {item.expiryDate?<AppText variant="caption" muted>{t('expiryDate')}: {item.expiryDate}</AppText>:null}
-      </View>
-    </View>
-
-    <View style={styles.trailing}>
-      {item.isArchived&&canRestore?<Pressable accessibilityRole="button" onPress={event=>{event.stopPropagation();onRestore()}} style={({pressed})=>[styles.restoreButton,pressed&&styles.restorePressed]}><AppText variant="caption" style={styles.restoreText}>{t('restore')}</AppText></Pressable>:<>
-        <View style={styles.priceValue}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={item.piecePrice??0}/></View>
-        <View style={styles.priceValue}><AppText variant="caption" muted>{t('purchaseLastCost')}</AppText><Money value={purchaseCost}/></View>
-        <AppText variant="heading" style={styles.arrow}>{isRTL?'‹':'›'}</AppText>
-      </>}
-    </View>
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.stitchProduct,pressed&&styles.pressed]}>
+    <View style={[styles.nameRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.name}>{item.name}</AppText>{status?<Badge label={status.label} tone={status.tone}/>:null}</View>
+    <View style={{flexDirection:isRTL?'row-reverse':'row',gap:6,alignItems:'center'}}><StitchIcon name="barcode" size={17}/><AppText variant="caption" muted>{context||'—'}</AppText></View>
+    <View style={{flexDirection:isRTL?'row-reverse':'row',gap:6,alignItems:'center'}}><StitchIcon name="warehouse" color={qty<=5?'#F59E0B':stitch.muted} size={17}/><AppText variant="caption" muted>{t('productsStock')}: {number(qty)}</AppText></View>
+    <View style={[styles.productPriceGrid,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.flex}><AppText variant="caption" muted>{t('salePrice')}</AppText><Money value={item.piecePrice??0}/></View><View style={styles.flex}><AppText variant="caption" muted>{t('purchaseLastCost')}</AppText><Money value={purchaseCost}/></View></View>
+    <View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between'}}><AppText variant="caption" style={{color:stitch.green}}>{locale==='ar'?'هامش الوحدة':'Marge unitaire'}: <Money value={(item.piecePrice??0)-purchaseCost} tone={(item.piecePrice??0)-purchaseCost>=0?'positive':'negative'}/></AppText>{item.isArchived&&canRestore?<Pressable accessibilityRole="button" onPress={event=>{event.stopPropagation();onRestore()}} style={styles.restoreButton}><AppText variant="caption">{t('restore')}</AppText></Pressable>:<StitchIcon name="arrow" size={18}/>}</View>
   </Pressable>;
 }
 
-function HeaderAddButton({label,onPress}:{label:string;onPress:()=>void}){
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({pressed})=>[styles.headerAdd,pressed&&styles.headerAddPressed]}>
-    <AppText variant="heading" style={styles.headerPlus}>+</AppText>
-  </Pressable>;
-}
 
 function ProductDetail({product,warehouses,canEdit,onClose,onEdit}:{product:Product;warehouses:Warehouse[];canEdit:boolean;onClose:()=>void;onEdit:()=>void}){
   const {t,number,isRTL}=useI18n(),totalStock=stockOf(product),expiry=expiryTone(product.expiryDate);
@@ -433,6 +406,8 @@ function ProductEditor({product,warehouses,categories,busy,onClose,onSave,onArch
 }
 
 const styles=StyleSheet.create({
+  stitchProduct:{borderWidth:1,borderColor:stitch.border,borderRadius:12,backgroundColor:stitch.card,padding:16,gap:8,marginBottom:12},
+  productPriceGrid:{padding:12,borderRadius:8,backgroundColor:'#080C14',gap:12},
   list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
   header:{gap:spacing.sm,marginBottom:spacing.sm},
   filters:{gap:spacing.xs},

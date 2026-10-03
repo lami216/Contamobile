@@ -3,7 +3,7 @@ const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
   ...expoConfig,
-  { ignores: ['legacy-source/**', '.expo/**'] },
+  { ignores: ['legacy-source/**', '.expo/**', 'dist-check/**', 'android/**'] },
   {
     rules: {
       // Both T[] and Array<T> are valid TypeScript. This is style-only, not a quality gate.

@@ -41,6 +41,7 @@ import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-int
 import { useI18n } from '@/i18n/provider';
 import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
 import { colors, radius, spacing, touch } from '@/theme';
 
 type PurchaseLine={product:Product;quantity:number;unitPrice:number};
@@ -171,8 +172,7 @@ export function PurchaseScreen(){
       Alert.alert(t('error'),format(t('purchaseInvalidLine'),{product:invalid.product.name}));
       return;
     }
-    if(settlement==='payNow')setTender(String(total));
-    setStage('payment');
+    void complete();
   };
 
   const changeSettlement=(next:SettlementType)=>{
@@ -299,9 +299,7 @@ export function PurchaseScreen(){
         onChangeQuantity={changeQuantity}
         onEditQuantity={openQuantity}
         onEditPrice={openPrice}
-      />:null}
-
-      {stage==='payment'?<PurchasePaymentStage
+      ><PurchasePaymentStage inline
         total={total}
         accounts={accounts}
         settlement={settlement}
@@ -317,14 +315,17 @@ export function PurchaseScreen(){
         supplier={supplier}
         onChooseSupplier={()=>setSupplierPicker(true)}
         onBack={back}
-      />:null}
+      /></PurchaseInvoiceStage>:null}
+
+
 
       {stage==='invoice'?<BottomActionBar tone="purchase"
-        label={t('posContinuePayment')}
+        label={t('completePurchase')}
         total={total}
         secondary={format(t('posProductsCount'),{count:lines.length})}
         onPress={startPayment}
-        disabled={!lines.length}
+        loading={busy}
+        disabled={!lines.length||underpaid||(needsSupplier&&!supplier)||(settlement==='payNow'&&!paymentMethod)}
       />:null}
 
       {stage==='payment'?<BottomActionBar tone="purchase"
@@ -394,9 +395,9 @@ export function PurchaseScreen(){
   </Screen>;
 }
 
-function PurchaseInvoiceStage({
+function PurchaseInvoiceStage({children,
   warehouse,warehouses,warehouseId,supplier,lines,total,totalQuantity,onBack,onChooseSupplier,onChooseWarehouse,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
-}:{
+}:{children?:import('react').ReactNode;
   warehouse:Warehouse|null;
   warehouses:Warehouse[];
   warehouseId:string;
@@ -416,6 +417,7 @@ function PurchaseInvoiceStage({
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('purchaseNewTitle')} subtitle={warehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content,styles.contentWithBar]}>
+      <StitchPanel><StitchText size={12} color={stitch.muted}>{t('purchaseNewTitle')}</StitchText><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:8}}><StitchIcon name="purchase" color={stitch.amber}/><StitchText bold size={20}>{t('purchaseInvoiceLines')}</StitchText></View></StitchPanel>
       <GroupedList>
         <SelectRow
           label={t('supplier')}
@@ -424,7 +426,7 @@ function PurchaseInvoiceStage({
           leading={<SupplierTile/>}
           onPress={onChooseSupplier}
         />
-        {warehouses.length>1?<SelectRow
+        {warehouses.length>=1?<SelectRow
           label={t('warehouse')}
           value={warehouse?.name??t('warehouse')}
           disabled={lines.length>0}
@@ -468,13 +470,14 @@ function PurchaseInvoiceStage({
           {label:t('posInvoiceTotal'),value:total,emphasize:true},
         ]}/>
       </View>:null}
+      {children}
     </ScrollView>
   </View>;
 }
 
-function PurchasePaymentStage({
+function PurchasePaymentStage({inline=false,
   total,accounts,settlement,setSettlement,paymentMethod,setPaymentMethod,tender,setTender,paid,due,underpaid,needsSupplier,supplier,onChooseSupplier,onBack,
-}:{
+}:{inline?:boolean;
   total:number;
   accounts:PaymentAccount[];
   settlement:SettlementType;
@@ -492,10 +495,7 @@ function PurchasePaymentStage({
   onBack:()=>void;
 }){
   const {t,isRTL}=useI18n();
-  return <View style={styles.stage}>
-    <View style={styles.headerPad}><PageHeader title={t('purchasePaymentTitle')} onBack={onBack}/></View>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content,styles.contentWithBar]}>
-      <FramedSection title={t('supplier')} padded={false}>
+  const body=<>      <FramedSection title={t('supplier')} padded={false}>
         <SelectRow
           label={t('supplier')}
           value={supplier?.name??(needsSupplier?t('supplier'):t('purchaseDirect'))}
@@ -551,8 +551,10 @@ function PurchasePaymentStage({
 
       {underpaid?<AlertCard title={t('purchasePartialPayment')} tone="warning"/>:null}
       {needsSupplier&&!supplier?<AlertCard title={t('purchaseSupplierRequired')} tone="warning"/>:null}
-    </ScrollView>
-  </View>;
+</>;
+  return inline?<View style={{gap:12}}>{body}</View>:<View style={styles.stage}>
+    <View style={styles.headerPad}><PageHeader title={t('purchasePaymentTitle')} onBack={onBack}/></View>
+<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>{body}</ScrollView></View>;
 }
 
 function PurchaseProductRow({product,warehouseId,last,onAdd,added}:{product:Product;warehouseId:string;last:boolean;onAdd:()=>void;added:boolean}){
@@ -660,6 +662,7 @@ function WarehouseGlyph(){
 }
 
 const styles=StyleSheet.create({
+  stitchSearch:{minHeight:48,backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border,borderRadius:8,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10},
   root:{flex:1,backgroundColor:colors.background},
   stage:{flex:1},
   headerPad:{paddingHorizontal:spacing.md},

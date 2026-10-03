@@ -1,0 +1,32 @@
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
+import { router } from 'expo-router';
+import { useI18n } from '@/i18n/provider';
+import { colors } from '@/theme';
+
+export const stitch = { gold:'#D4AF37', lightGold:'#F2CA50', blue:'#2563EB', amber:'#D97706', green:'#10B981', red:'#EF4444', background:'#080C14', card:'#101726', border:'rgba(212,175,55,.3)', muted:'#94A3B8' };
+const glyphs = { bank:0xe84f, person:0xe7fd, sale:0xe8cc, purchase:0xe8cb, receive:0xe0b5, spend:0xe0b2, history:0xe889, receipt:0xe8b0, inventory:0xe2c7, people:0xe7ef, more:0xe5d3, home:0xe871, settings:0xe8b8, reports:0xe6e1, warehouse:0xe8d1, transfer:0xe8d4, audit:0xe85d, shield:0xe8e8, print:0xe8ad, logout:0xe9ba, arrow:0xe5c4, search:0xe8b6, plus:0xe145, check:0xe5ca, backup:0xe2c3, edit:0xe3c9, barcode:0xe8b3, wallet:0xe850, sync:0xe627 } as const;
+export type StitchIconName = keyof typeof glyphs;
+export function StitchIcon({name,color=stitch.gold,size=22}:{name:StitchIconName;color?:string;size?:number}){return <Text accessible={false} style={{fontFamily:'StitchIcons',fontSize:size,color,lineHeight:size+3}}>{String.fromCodePoint(glyphs[name])}</Text>}
+export function StitchText({children,size=14,bold=false,color=colors.text,style}:{children:ReactNode;size?:number;bold?:boolean;color?:string;style?:StyleProp<TextStyle>}){
+  const {isRTL}=useI18n();return <Text style={[{fontFamily:bold?'StitchArabicBold':'StitchArabic',fontSize:size,color,textAlign:isRTL?'right':'left'},style]}>{children}</Text>;
+}
+export function StitchHeader({title,module='Contamobile',back=false,subtitle,onBack}:{title?:string;module?:string;back?:boolean;subtitle?:string;onBack?:()=>void}){
+ const {locale,isRTL}=useI18n(),ar=locale==='ar';
+ return <View style={[s.header,{flexDirection:isRTL?'row-reverse':'row'}]}>
+  <Pressable accessibilityRole="button" accessibilityLabel={back?(ar?'رجوع':'Retour'):(ar?'الرئيسية':'Accueil')} onPress={()=>onBack?onBack():back&&router.canGoBack()?router.back():router.navigate('/')} style={s.logo}><StitchIcon name={back?'arrow':'bank'}/></Pressable>
+  <View style={s.headerCopy}><View style={[s.titleRow,{flexDirection:isRTL?'row-reverse':'row'}]}><StitchText bold size={18} style={{flexShrink:1}}>{title??(ar?'الكرنة':'Alkarna')}</StitchText>{module?<Text style={s.module}>{module}</Text>:null}</View><View style={[s.localRow,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={s.dot}/><StitchText size={11} color={stitch.muted}>{subtitle??(ar?'محلي • يعمل دون اتصال':'Local • hors ligne')}</StitchText></View></View>
+  <Pressable accessibilityRole="button" accessibilityLabel={ar?'الإعدادات':'Paramètres'} onPress={()=>router.push('/more/settings')} style={s.avatar}><StitchIcon name="person" size={19}/></Pressable>
+ </View>;
+}
+export function StitchPanel({children,style}:{children:ReactNode;style?:StyleProp<ViewStyle>}){return <View style={[s.panel,style]}>{children}</View>}
+export function StitchSection({title,action,onPress}:{title:string;action?:string;onPress?:()=>void}){const {isRTL}=useI18n();return <View style={[s.section,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={[s.sectionTitle,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={s.rule}/><StitchText bold size={16}>{title}</StitchText></View>{action?<Pressable accessibilityRole="button" onPress={onPress} style={s.smallButton}><StitchText size={11} bold color={stitch.lightGold}>{action}</StitchText></Pressable>:null}</View>}
+export function StitchAction({title,description,button,icon,color=stitch.gold,onPress}:{title:string;description?:string;button:string;icon:StitchIconName;color?:string;onPress:()=>void}){
+ const {isRTL}=useI18n();return <StitchPanel style={s.action}><View style={[s.actionHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={[s.iconBox,{backgroundColor:color+'20'}]}><StitchIcon name={icon} color={color} size={27}/></View><StitchText bold size={18} style={{flexShrink:1}}>{title}</StitchText></View>{description?<StitchText size={12} color={stitch.muted}>{description}</StitchText>:null}<Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[s.actionButton,{backgroundColor:color},pressed&&s.pressed]}><StitchText bold color={color===stitch.gold?'#241A00':'#FFFFFF'}>{button}</StitchText><StitchIcon name="arrow" color={color===stitch.gold?'#241A00':'#FFFFFF'} size={18}/></Pressable></StitchPanel>;
+}
+const s=StyleSheet.create({
+ header:{height:64,alignItems:'center',gap:8,paddingHorizontal:16,borderBottomWidth:1,borderBottomColor:'rgba(212,175,55,.2)',backgroundColor:stitch.background},
+ logo:{width:36,height:36,borderRadius:6,borderWidth:1,borderColor:stitch.border,backgroundColor:'#19243A',alignItems:'center',justifyContent:'center'},headerCopy:{flex:1,gap:1},titleRow:{alignItems:'center',gap:5},module:{fontSize:10,color:stitch.gold,fontWeight:'600',backgroundColor:'#242119',borderWidth:1,borderColor:stitch.border,paddingHorizontal:5,paddingVertical:1},localRow:{alignItems:'center',gap:5},dot:{width:6,height:6,borderRadius:3,backgroundColor:stitch.green},avatar:{width:32,height:32,alignItems:'center',justifyContent:'center',backgroundColor:'#131C2E',borderWidth:1,borderColor:stitch.border,borderRadius:8},
+ panel:{backgroundColor:stitch.card,borderWidth:1,borderColor:stitch.border,borderRadius:12,padding:16,gap:10},section:{alignItems:'center',justifyContent:'space-between',minHeight:30},sectionTitle:{alignItems:'center',gap:6},rule:{height:14,width:5,borderRadius:3,backgroundColor:stitch.gold},smallButton:{paddingHorizontal:12,minHeight:32,justifyContent:'center',backgroundColor:'#131C2E',borderWidth:1,borderColor:stitch.border,borderRadius:6},
+ action:{gap:12,padding:16},actionHead:{alignItems:'center',gap:12},iconBox:{width:48,height:48,alignItems:'center',justifyContent:'center',borderRadius:8},actionButton:{minHeight:46,borderRadius:8,paddingHorizontal:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},pressed:{opacity:.78,transform:[{translateY:1}]},
+});

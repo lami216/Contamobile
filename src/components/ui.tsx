@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { actionColors, colors, control, layout, radius, spacing, touch, type as typography } from '@/theme';
 import { useI18n } from '@/i18n/provider';
+import { StitchHeader, StitchIcon } from '@/components/stitch';
 
 export function Screen({children,scroll=false,padded=true}:{children:ReactNode;scroll?:boolean;padded?:boolean}){
   const content=<View style={[styles.screenContent,padded&&styles.padded]}>{children}</View>;
@@ -23,7 +24,8 @@ export function Screen({children,scroll=false,padded=true}:{children:ReactNode;s
 
 export function AppText({children,variant='body',muted=false,style,numberOfLines}:{children:ReactNode;variant?:'display'|'title'|'heading'|'subheading'|'body'|'caption'|'amount'|'amountLarge';muted?:boolean;style?:StyleProp<TextStyle>;numberOfLines?:number}){
   const {isRTL}=useI18n();
-  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontSize:typography[variant],textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
+  const bold=['display','title','heading','subheading','amount','amountLarge'].includes(variant);
+  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontFamily:bold?'StitchArabicBold':'StitchArabic',fontSize:typography[variant],textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
 }
 
 export function Card({children,style,tone='default'}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning'}){
@@ -58,11 +60,7 @@ export function IconTile({children,tone='primary',size='md'}:{children:ReactNode
 
 export function PageHeader({title,subtitle,onBack,trailing}:{title:string;subtitle?:string;onBack?:()=>void;trailing?:ReactNode}){
   const {isRTL}=useI18n();
-  return <View style={[styles.pageHeader,{flexDirection:isRTL?'row-reverse':'row'}]}>
-    {onBack?<Pressable accessibilityRole="button" accessibilityLabel="back" onPress={onBack} style={({pressed})=>[styles.pageHeaderButton,pressed&&styles.pageHeaderButtonPressed]}><AppText variant="heading" style={styles.pageHeaderArrow}>{isRTL?'›':'‹'}</AppText></Pressable>:<View style={styles.pageHeaderSlot}/>}
-    <View style={styles.pageHeaderCopy}><AppText variant="heading" numberOfLines={1}>{title}</AppText>{subtitle?<AppText variant="caption" muted numberOfLines={1}>{subtitle}</AppText>:null}</View>
-    <View style={styles.pageHeaderSlot}>{trailing}</View>
-  </View>;
+  return <View style={{gap:10,marginHorizontal:-16}}><StitchHeader title={title} back={!!onBack} onBack={onBack} subtitle={subtitle}/>{trailing?<View style={{paddingHorizontal:16,alignItems:isRTL?'flex-start':'flex-end'}}>{trailing}</View>:null}</View>;
 }
 
 export function FormSection({title,subtitle,children,style}:{title?:string;subtitle?:string;children:ReactNode;style?:StyleProp<ViewStyle>}){
@@ -132,24 +130,24 @@ export function Button({title,onPress,variant='primary',disabled=false,loading=f
     pressed&&variant==='success'&&styles.buttonSuccessPressed,
     pressed&&variant!=='primary'&&variant!=='success'&&styles.buttonPressed,
     (disabled||loading)&&styles.disabled,
-  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextPrimary,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='warning'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
+  ]}>{loading?<ActivityIndicator color={spinner}/>:<Text style={[styles.buttonText,variant==='primary'&&styles.buttonTextGold,variant==='success'&&styles.buttonTextPrimary,variant==='danger'&&styles.buttonTextPrimary,variant==='warning'&&styles.buttonTextPrimary,variant==='ghost'&&styles.buttonTextGhost]}>{title}</Text>}</Pressable>;
 }
 
 export const Field=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>}>(({label,error,style,containerStyle,...props},ref)=>{
   const {isRTL}=useI18n();
-  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
+  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.input,{textAlign:isRTL?'right':'left'},style]} {...props}/>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 Field.displayName='Field';
 
 export const FormField=forwardRef<TextInput,TextInputProps & {label:string;error?:string;containerStyle?:StyleProp<ViewStyle>;leading?:ReactNode;trailing?:ReactNode}>(({label,error,style,containerStyle,leading,trailing,...props},ref)=>{
   const {isRTL}=useI18n();
-  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><View style={[styles.formInputShell,{flexDirection:isRTL?'row-reverse':'row'}]}>{leading?<View style={styles.formAdornment}>{leading}</View>:null}<TextInput ref={ref} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.formInput,{textAlign:isRTL?'right':'left'},style]} {...props}/>{trailing?<View style={styles.formAdornment}>{trailing}</View>:null}</View>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
+  return <View style={[styles.field,containerStyle]}><AppText variant="caption" style={styles.fieldLabel}>{label}</AppText><View style={[styles.formInputShell,{flexDirection:isRTL?'row-reverse':'row'}]}>{leading?<View style={styles.formAdornment}>{leading}</View>:null}<TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.formInput,{textAlign:isRTL?'right':'left'},style]} {...props}/>{trailing?<View style={styles.formAdornment}>{trailing}</View>:null}</View>{error?<Text style={[styles.error,{textAlign:isRTL?'right':'left'}]}>{error}</Text>:null}</View>;
 });
 FormField.displayName='FormField';
 
 export function SearchField({style,placeholder,...props}:TextInputProps){
   const {t,isRTL}=useI18n();
-  return <View style={[styles.search,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.searchGlyph}><View style={styles.searchCircle}/><View style={styles.searchHandle}/></View><TextInput accessibilityLabel={t('search')} placeholder={placeholder??t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left'},style]} {...props}/></View>;
+  return <View style={[styles.search,{flexDirection:isRTL?'row-reverse':'row'}]}><StitchIcon name="search" color={colors.textMuted}/><TextInput accessibilityLabel={t('search')} placeholder={placeholder??t('search')} placeholderTextColor={colors.textSoft} selectionColor={colors.primary} style={[styles.searchInput,{textAlign:isRTL?'right':'left'},style]} {...props}/></View>;
 }
 
 export function EmptyState({title,description,action}:{title:string;description?:string;action?:ReactNode}){
@@ -221,7 +219,7 @@ const styles=StyleSheet.create({
   screenContent:{flex:1,gap:control.sectionGap},
   padded:{paddingHorizontal:layout.pageGutter},
   scroll:{flexGrow:1,paddingBottom:spacing.xl},
-  text:{color:colors.text,fontWeight:'400'},
+  text:{color:colors.text,fontWeight:'400',fontFamily:'StitchArabic'},
   display:{fontWeight:'800',letterSpacing:-.65},
   title:{fontWeight:'800',letterSpacing:-.35},
   heading:{fontWeight:'700'},
@@ -288,7 +286,7 @@ const styles=StyleSheet.create({
   sectionHead:{minHeight:touch.min,justifyContent:'space-between',alignItems:'center',gap:spacing.sm},
   button:{minHeight:control.height,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:spacing.md,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'transparent'},
   buttonCompact:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm},
-  buttonPrimary:{backgroundColor:actionColors.sale,borderColor:colors.accent},
+  buttonPrimary:{backgroundColor:colors.accent,borderColor:colors.accent},
   buttonPrimaryPressed:{backgroundColor:colors.primaryPressed,borderColor:colors.primaryPressed,transform:[{scale:.99}]},
   buttonSecondary:{backgroundColor:colors.accentSoft,borderColor:colors.accent},
   buttonDanger:{backgroundColor:actionColors.spend,borderColor:colors.accent},
@@ -298,18 +296,19 @@ const styles=StyleSheet.create({
   buttonGhost:{backgroundColor:'transparent',borderColor:'transparent'},
   buttonPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
   disabled:{opacity:.45},
-  buttonText:{fontSize:typography.body,fontWeight:'700',color:colors.accent,textAlign:'center'},
+  buttonText:{fontFamily:'StitchArabicBold',fontSize:typography.body,fontWeight:'700',color:colors.accent,textAlign:'center'},
   buttonTextPrimary:{color:colors.onPrimary},
+  buttonTextGold:{color:'#201A08'},
   buttonTextDanger:{color:colors.negative},
   buttonTextGhost:{fontWeight:'600'},
   field:{gap:spacing.xs},
   fieldLabel:{color:colors.textMuted,fontWeight:'700'},
-  input:{minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
+  input:{fontFamily:'StitchArabic',minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
   formInputShell:{minHeight:control.height,alignItems:'center',gap:spacing.xs,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface},
-  formInput:{flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  formInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
   formAdornment:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'center'},
   search:{minHeight:control.height,alignItems:'center',gap:spacing.sm,borderRadius:radius.md,paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  searchInput:{flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  searchInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
   searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
   searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
   searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
@@ -318,7 +317,7 @@ const styles=StyleSheet.create({
   emptyMark:{width:42,height:42,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
   emptyMarkText:{color:colors.textSoft,lineHeight:24},
   emptyDescription:{textAlign:'center',maxWidth:280,lineHeight:18},
-  money:{fontSize:typography.amount,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
+  money:{fontFamily:'StitchArabicBold',fontSize:typography.amount,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
   moneyLarge:{fontSize:typography.amountLarge,letterSpacing:-.55},
   positive:{color:colors.positive},
   negative:{color:colors.negative},
@@ -374,8 +373,8 @@ const styles=StyleSheet.create({
   segment:{flex:1,minHeight:control.compactHeight,borderRadius:radius.sm,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.sm},
   segmentActive:{backgroundColor:colors.primary,borderWidth:1,borderColor:colors.primary},
   segmentPressed:{opacity:.72},
-  segmentText:{color:colors.textMuted,fontSize:typography.caption,fontWeight:'700',textAlign:'center'},
-  segmentTextActive:{color:colors.onPrimary,fontWeight:'800'},
+  segmentText:{fontFamily:'StitchArabic',color:colors.textMuted,fontSize:typography.caption,fontWeight:'700',textAlign:'center'},
+  segmentTextActive:{color:'#201A08',fontWeight:'800'},
   paymentMethodCard:{flexGrow:1,flexBasis:104,minWidth:96,minHeight:84,alignItems:'center',justifyContent:'center',gap:4,padding:spacing.xs,borderRadius:radius.md,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
   paymentMethodCardSelected:{backgroundColor:colors.primaryFaint,borderColor:colors.accent,borderWidth:2},
   paymentMethodCardPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},

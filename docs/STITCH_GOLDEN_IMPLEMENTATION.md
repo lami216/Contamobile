@@ -42,3 +42,22 @@ runtime logs. Emulator cold launch is a smoke check, not a substitute for
 seller workflow testing on the user's physical phone, large catalogs, font
 scaling, and French/Arabic switching. This is a native adaptation of the
 Stitch visual language; it is not a pixel-for-pixel HTML renderer.
+
+
+## Structural rebuild 0.2.0
+The first review applied theme tokens without reproducing the Stitch hierarchy.
+This rebuild replaces the dashboard and all four hubs, catalog and party cards,
+account and transfer cards, warehouse and user cards, login, stock overview,
+report selector, language cards, and receipt preview with native layouts derived
+from the exported references. Sale and purchase payment controls now sit inside
+the invoice scroll while preserving the existing validation and write handlers.
+Party cash and ledger forms use full-page native modals. Stock transfers use
+source/destination selectors with a visual bridge. Capital deposit/withdrawal
+uses an inline form. Accounting services and write semantics remain intact.
+
+IBM Plex Sans Arabic and Material Icons are pinned, verified, and embedded as
+Android font assets. No runtime font request is required. The release workflow
+creates labeled QA fixtures through real forms in a disposable emulator and
+captures every top-level screen plus product/party detail and a French screen.
+Fixtures and the QA harness are not embedded in the APK. Exact visual parity
+is assessed against these native screenshots, not inferred from TypeScript.

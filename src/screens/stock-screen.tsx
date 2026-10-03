@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect,router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { Warehouse } from '@/domain/types';
 import { listWarehouses, stockOverview, type StockOverviewItem } from '@/db/queries';
@@ -16,9 +16,9 @@ import {
   SearchField,
   SegmentedControl,
   SelectRow,
-  Surface,
 } from '@/components/ui';
-import { Sheet } from '@/components/mobile-interactions';
+import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
+import { Sheet, StickyActionBar } from '@/components/mobile-interactions';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, spacing } from '@/theme';
@@ -78,7 +78,7 @@ export function StockScreen(){
       ListHeaderComponent={<View style={styles.header}>
         <PageHeader title={t('stock')} subtitle={warehouses.length===1?selectedWarehouse?.name:undefined}/>
 
-        {warehouses.length>1?<GroupedList>
+        {warehouses.length>=1?<GroupedList>
           <SelectRow
             label={t('warehouse')}
             value={selectedWarehouse?.name??t('warehouse')}
@@ -100,28 +100,13 @@ export function StockScreen(){
           onChange={setFilter}
         />
 
-        <Surface padded={false} style={styles.summaryStrip}>
-          <View style={[styles.summaryRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-            <SummaryMetric label={t('stockInventoryValue')} value={<Money value={Math.round(summary.value)}/>}/>
-            <SummaryDivider/>
-            <SummaryMetric label={t('stockTotalUnits')} value={<AppText variant="subheading" style={styles.tabular}>{number(summary.quantity)}</AppText>}/>
-            <SummaryDivider/>
-            <SummaryMetric
-              label={t('lowStock')}
-              value={<AppText variant="subheading" style={[styles.tabular,summary.low>0&&styles.warning]}>{number(summary.low)}</AppText>}
-            />
-            <SummaryDivider/>
-            <SummaryMetric
-              label={t('stockOut')}
-              value={<AppText variant="subheading" style={[styles.tabular,summary.out>0&&styles.negative]}>{number(summary.out)}</AppText>}
-            />
-          </View>
-        </Surface>
+        <StitchPanel><View style={{flexDirection:isRTL?'row-reverse':'row',justifyContent:'space-between',alignItems:'center'}}><View style={{gap:6}}><AppText variant="caption" muted>{t('stockInventoryValue')}</AppText><StitchText bold size={28} color={stitch.lightGold}>{number(Math.round(summary.value))} MRU</StitchText></View><StitchIcon name="inventory" size={32}/></View><View style={{flexDirection:isRTL?'row-reverse':'row',gap:8,borderTopWidth:1,borderTopColor:colors.border,paddingTop:12}}><SummaryMetric label={t('stockTotalUnits')} value={<AppText variant="subheading">{number(summary.quantity)}</AppText>}/><SummaryDivider/><SummaryMetric label={t('lowStock')} value={<AppText variant="subheading" style={styles.warning}>{number(summary.low)}</AppText>}/><SummaryDivider/><SummaryMetric label={t('stockOut')} value={<AppText variant="subheading" style={styles.negative}>{number(summary.out)}</AppText>}/></View></StitchPanel>
       </View>}
       ListEmptyComponent={<EmptyState title={search?t('noResults'):filter==='out'?t('stockNoOut'):filter==='low'?t('stockNoLow'):t('noData')}/>}
       renderItem={({item,index})=><StockRow item={item} first={index===0} last={index===visible.length-1}/>}
     />
 
+    {auth.has('warehouses.adjust')?<StickyActionBar label={t('adjustment')} summary={selectedWarehouse?.name} onPress={()=>router.push('/inventory/adjustment')}/>:null}
     <Sheet visible={warehousePicker} title={t('warehouse')} onClose={()=>setWarehousePicker(false)}>
       <View style={styles.warehouseOptions}>
         {warehouses.map(warehouse=><Button
@@ -189,7 +174,7 @@ const styles=StyleSheet.create({
   tabular:{fontVariant:['tabular-nums']},
   warning:{color:colors.warning},
   negative:{color:colors.negative},
-  row:{minHeight:76,alignItems:'center',gap:spacing.sm,paddingHorizontal:spacing.sm,paddingVertical:spacing.xs,backgroundColor:colors.surface,borderLeftWidth:1,borderRightWidth:1,borderTopWidth:1,borderColor:colors.border},
+  row:{minHeight:110,alignItems:'center',gap:spacing.sm,padding:16,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:12,marginBottom:12},
   firstRow:{borderTopColor:colors.borderStrong,borderLeftColor:colors.borderStrong,borderRightColor:colors.borderStrong,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg},
   lastRow:{borderBottomWidth:1,borderBottomColor:colors.borderStrong,borderBottomLeftRadius:radius.lg,borderBottomRightRadius:radius.lg},
   body:{flex:1,minWidth:0,gap:3},
