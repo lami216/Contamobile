@@ -7,7 +7,7 @@ module.exports = function withGoldenSystemBars(config) {
     theme.item = theme.item || [];
     const values = {
       'android:windowLightNavigationBar': 'false',
-      'android:windowNavigationBarContrastEnforced': 'false',
+      'android:enforceNavigationBarContrast': 'false',
       'android:navigationBarColor': '#080C14',
     };
     for (const [name, value] of Object.entries(values)) {
@@ -18,3 +18,4 @@ module.exports = function withGoldenSystemBars(config) {
     return mod;
   });
 };
+

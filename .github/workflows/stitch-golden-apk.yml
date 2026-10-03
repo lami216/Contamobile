@@ -62,10 +62,13 @@ jobs:
           p.write_text(s)
           PY
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Build standalone APK
         run: |
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
+          ./android/gradlew -p android :app:processReleaseResources --no-daemon --stacktrace
+          ./android/gradlew -p android assembleRelease --no-daemon --stacktrace --build-cache -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
           mkdir -p release-output
           cp android/app/build/outputs/apk/release/app-release.apk release-output/contamobile-golden.apk
       - name: Verify signature and non-debug release manifest
@@ -113,3 +116,4 @@ jobs:
           path: release-output/
           if-no-files-found: error
           retention-days: 30
+
