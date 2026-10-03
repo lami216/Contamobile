@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
@@ -15,7 +16,7 @@ function TabGlyph({route,color,focused}:{route:string;color:ColorValue;focused:b
 }
 
 export default function TabsLayout(){
-  const {t}=useI18n(),auth=useAuth();
+  const {t}=useI18n(),auth=useAuth(),insets=useSafeAreaInsets();
   const canSales=['pos.view','pos.create','purchases.view','purchases.create','expenses.view','records.view'].some(cap=>auth.has(cap as Parameters<typeof auth.has>[0]));
   const canInventory=['products.view','warehouses.view','warehouses.inventory.view','warehouses.transfer','warehouses.adjust'].some(cap=>auth.has(cap as Parameters<typeof auth.has>[0]));
   const canParties=auth.has('customers.view')||auth.has('suppliers.view');
@@ -26,7 +27,7 @@ export default function TabsLayout(){
     tabBarActiveTintColor:colors.accent,
     tabBarInactiveTintColor:colors.textSoft,
     sceneStyle:{backgroundColor:colors.background},
-    tabBarStyle:styles.tabBar,
+    tabBarStyle:[styles.tabBar,{height:64+insets.bottom,paddingBottom:Math.max(insets.bottom,8)}],
     tabBarItemStyle:styles.tabItem,
     tabBarLabelStyle:styles.tabLabel,
     tabBarIcon:({color,focused})=><TabGlyph route={route.name} color={color} focused={focused}/>,

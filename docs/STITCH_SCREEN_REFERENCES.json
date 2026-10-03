@@ -1,0 +1,156 @@
+{
+  "project": "https://stitch.google.com/projects/7471049135508280556",
+  "screenCount": 30,
+  "screens": [
+    {
+      "file": "01-0eb71b38.html",
+      "title": "إيداع رأس مال / تمويل داخلي",
+      "stitchScreenId": "0eb71b3875544da781a489a54f47a8a0"
+    },
+    {
+      "file": "02-2675bb73.html",
+      "title": "مركز المبيعات",
+      "stitchScreenId": "2675bb738d3448c19ade459ac8dcba94"
+    },
+    {
+      "file": "03-2fac2e4e.html",
+      "title": "Document Reversal Details",
+      "stitchScreenId": "2fac2e4edef349c3baf51d944e4bef2a"
+    },
+    {
+      "file": "04-37579339.html",
+      "title": "Document Details",
+      "stitchScreenId": "3757933906934dea932af99a19225043"
+    },
+    {
+      "file": "05-38e687e0.html",
+      "title": "أحدث المعاملات",
+      "stitchScreenId": "38e687e04fac4c0db86238b498b9643d"
+    },
+    {
+      "file": "06-3a914227.html",
+      "title": "Product Details",
+      "stitchScreenId": "3a914227f6f24b4095897bcfd65e9a38"
+    },
+    {
+      "file": "07-4639fa71.html",
+      "title": "سجل التحويلات السابقة",
+      "stitchScreenId": "4639fa7141fc4cd7b528e94ba068f28e"
+    },
+    {
+      "file": "08-47a37456.html",
+      "title": "Expense Entry",
+      "stitchScreenId": "47a3745644b84c749b499ad9a1fae5fd"
+    },
+    {
+      "file": "09-4cefec07.html",
+      "title": "المزيد   الخدمات والإعدادات",
+      "stitchScreenId": "4cefec0712a049478f173e10a1b949ef"
+    },
+    {
+      "file": "10-506a516c.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "506a516c59034fc4ad3f52c3cfb3bff5"
+    },
+    {
+      "file": "11-540eb0d4.html",
+      "title": "تفاصيل كشف الحساب",
+      "stitchScreenId": "540eb0d4b56f426791892b92f1a7e18f"
+    },
+    {
+      "file": "12-6a2ac06b.html",
+      "title": "حسابات العملاء والزبائن",
+      "stitchScreenId": "6a2ac06b6d8d497aa044ae000b80a126"
+    },
+    {
+      "file": "13-6a960b01.html",
+      "title": "Branding Settings",
+      "stitchScreenId": "6a960b0151424ddba2970a1ecfc838ee"
+    },
+    {
+      "file": "14-706be8ba.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "706be8baa88d4fae86dad479de04cce2"
+    },
+    {
+      "file": "15-85fc68a1.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "85fc68a16c5f4576b4bcf540890b5232"
+    },
+    {
+      "file": "16-93f0a903.html",
+      "title": "Login",
+      "stitchScreenId": "93f0a9037de84e67a9ed3a879ed7c520"
+    },
+    {
+      "file": "17-a1f8d726.html",
+      "title": "Stock Inventory Audit",
+      "stitchScreenId": "a1f8d7269545462bb02f9f0805a83fcb"
+    },
+    {
+      "file": "18-aaba751c.html",
+      "title": "Purchase Invoice",
+      "stitchScreenId": "aaba751c44ec4f52a3ae174db5e4cc2f"
+    },
+    {
+      "file": "19-b9287086.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "b9287086416d44d6a8ac4db865a18603"
+    },
+    {
+      "file": "20-bc55cbd2.html",
+      "title": "سند قبض وسداد للطرف",
+      "stitchScreenId": "bc55cbd243434815b28a54eddeb4acbe"
+    },
+    {
+      "file": "21-c0e06d32.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "c0e06d3209574201a7b2df6d2aabe959"
+    },
+    {
+      "file": "22-c373f3e4.html",
+      "title": "New Transaction",
+      "stitchScreenId": "c373f3e4b5d4419f99628610bfa95bb0"
+    },
+    {
+      "file": "23-c9c7beef.html",
+      "title": "التقارير المالية والتحليل المحاسبي",
+      "stitchScreenId": "c9c7beefefec4fbebaedfcb0d17c7f05"
+    },
+    {
+      "file": "24-d0e72d2a.html",
+      "title": "الحسابات المالية والخزائن",
+      "stitchScreenId": "d0e72d2a14304ecab3b227182830f1e0"
+    },
+    {
+      "file": "25-da634bf5.html",
+      "title": "Warehouses Management",
+      "stitchScreenId": "da634bf514e24aaab86663e153e1a4ba"
+    },
+    {
+      "file": "26-e2dd04c3.html",
+      "title": "Generating Screen...",
+      "stitchScreenId": "e2dd04c388e94e3f927e8d4c27758583"
+    },
+    {
+      "file": "27-ec518033.html",
+      "title": "Products Catalog",
+      "stitchScreenId": "ec5180334a0942399e4199f2186f2ed2"
+    },
+    {
+      "file": "28-eca65b41.html",
+      "title": "تسوية ومقاصة أرصدة الأطراف",
+      "stitchScreenId": "eca65b415e63420b88b13e374866433a"
+    },
+    {
+      "file": "29-f08c8b0f.html",
+      "title": "User Management",
+      "stitchScreenId": "f08c8b0fd208461d9ef0870277a9fa4b"
+    },
+    {
+      "file": "30-f7a40516.html",
+      "title": "New Transaction",
+      "stitchScreenId": "f7a40516d9df416687614dda216146b9"
+    }
+  ]
+}
