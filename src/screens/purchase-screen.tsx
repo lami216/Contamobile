@@ -319,7 +319,7 @@ export function PurchaseScreen(){
         onBack={back}
       />:null}
 
-      {stage==='invoice'?<BottomActionBar
+      {stage==='invoice'?<BottomActionBar tone="purchase"
         label={t('posContinuePayment')}
         total={total}
         secondary={format(t('posProductsCount'),{count:lines.length})}
@@ -327,7 +327,7 @@ export function PurchaseScreen(){
         disabled={!lines.length}
       />:null}
 
-      {stage==='payment'?<BottomActionBar
+      {stage==='payment'?<BottomActionBar tone="purchase"
         label={t('completePurchase')}
         total={total}
         secondary={settlement==='credit'?t('purchasePaymentStatusCredit'):t('purchasePaymentStatusPaid')}

@@ -160,7 +160,7 @@ export function PartyDetailScreen(){
         {(canMove||canLedger)?<View style={styles.actionsPanel}>
           <View style={[styles.actionRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
             {canMove?<ActionSlot><Button title={t('receive')} onPress={()=>setAction('receive')}/></ActionSlot>:null}
-            {canMove?<ActionSlot><Button title={t('pay')} variant="secondary" onPress={()=>setAction('pay')}/></ActionSlot>:null}
+            {canMove?<ActionSlot><Button title={t('pay')} variant="danger" onPress={()=>setAction('pay')}/></ActionSlot>:null}
           </View>
           {(canLedger&&party.net!==0)||(canLedger&&party.receivable>0&&party.payable>0)?<View style={[styles.actionRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
             {canLedger&&party.net!==0?<ActionSlot><Button title={t('partySettlement')} variant="secondary" onPress={()=>setAction('settlement')}/></ActionSlot>:null}
@@ -280,7 +280,7 @@ function CashForm({direction,accounts,busy,onCancel,onSave}:{direction:'receive'
       </View>:<AlertCard title={t('partyNoPaymentMethod')} tone="warning"/>}
     </View>
     <FormField label={t('note')} value={note} onChangeText={setNote}/>
-    <Button title={direction==='receive'?t('receive'):t('pay')} loading={busy} disabled={!valid} onPress={()=>onSave(value,method,note)}/>
+    <Button title={direction==='receive'?t('receive'):t('pay')} variant={direction==='receive'?'success':'danger'} loading={busy} disabled={!valid} onPress={()=>onSave(value,method,note)}/>
     <Button title={t('cancel')} variant="ghost" disabled={busy} onPress={onCancel}/>
   </View>;
 }
