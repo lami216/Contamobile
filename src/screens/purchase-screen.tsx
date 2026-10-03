@@ -41,7 +41,7 @@ import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-int
 import { useI18n } from '@/i18n/provider';
 import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
-import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
+import { StitchPanel, StitchIcon, StitchText, StitchFormSection, stitch } from '@/components/stitch';
 import { colors, radius, spacing, touch } from '@/theme';
 
 type PurchaseLine={product:Product;quantity:number;unitPrice:number};
@@ -495,7 +495,7 @@ function PurchasePaymentStage({inline=false,
   onBack:()=>void;
 }){
   const {t,isRTL}=useI18n();
-  const body=<>      <FramedSection title={t('supplier')} padded={false}>
+  const body=<>      {!inline?<StitchFormSection title={t('supplier')} padded={false}>
         <SelectRow
           label={t('supplier')}
           value={supplier?.name??(needsSupplier?t('supplier'):t('purchaseDirect'))}
@@ -503,17 +503,17 @@ function PurchasePaymentStage({inline=false,
           leading={<SupplierTile warning={needsSupplier&&!supplier}/>}
           onPress={onChooseSupplier}
         />
-      </FramedSection>
+      </StitchFormSection>:null}
 
-      <FramedSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('purchaseCreditHint'):t('purchasePayNowHint')}>
+      <StitchFormSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('purchaseCreditHint'):t('purchasePayNowHint')}>
         <SegmentedControl
           value={settlement}
           options={[{value:'payNow',label:t('posPayNow')},{value:'credit',label:t('onCredit')}]}
           onChange={setSettlement}
         />
-      </FramedSection>
+      </StitchFormSection>
 
-      {settlement==='payNow'?<FramedSection title={t('posPaymentAccounts')}>
+      {settlement==='payNow'?<StitchFormSection title={t('posPaymentAccounts')}>
         {accounts.length?<View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
           {accounts.map(account=><PaymentMethodCard
             key={account.id}
@@ -524,19 +524,19 @@ function PurchasePaymentStage({inline=false,
             style={styles.paymentMethodCard}
           />)}
         </View>:<Surface tone="warning"><AppText variant="caption">{t('posNoPaymentAccounts')}</AppText></Surface>}
-      </FramedSection>:null}
+      </StitchFormSection>:null}
 
-      {settlement==='payNow'?<FramedSection title={t('purchasePaidAmount')}>
+      {settlement==='payNow'?<StitchFormSection title={t('purchasePaidAmount')}>
         <FormField
           label={t('purchasePaidAmount')}
-          value={tender}
+          value={tender.trim()===''?String(total):tender}
           onChangeText={setTender}
           keyboardType="number-pad"
           selectTextOnFocus
           placeholder="0"
           trailing={<AppText variant="subheading" muted>MRU</AppText>}
         />
-      </FramedSection>:null}
+      </StitchFormSection>:null}
 
       <View style={styles.summaryBlock}>
         <AppText variant="subheading">{t('purchasePaymentSummary')}</AppText>

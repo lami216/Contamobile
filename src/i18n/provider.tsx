@@ -14,7 +14,7 @@ export function I18nProvider({children}:{children:ReactNode}){
   const [locale,setLocaleState]=useState<Locale>('ar');
   useEffect(()=>{void SecureStore.getItemAsync(STORAGE_KEY).then(value=>{if(value==='ar'||value==='fr')setLocaleState(value)})},[]);
   useEffect(()=>{setActiveLocale(locale)},[locale]);
-  const setLocale=useCallback(async(next:Locale)=>{await SecureStore.setItemAsync(STORAGE_KEY,next);I18nManager.allowRTL(true);I18nManager.forceRTL(next==='ar');setActiveLocale(next);setLocaleState(next)},[]);
+  const setLocale=useCallback(async(next:Locale)=>{await SecureStore.setItemAsync(STORAGE_KEY,next);I18nManager.allowRTL(false);I18nManager.forceRTL(false);setActiveLocale(next);setLocaleState(next)},[]);
   const value=useMemo<I18nValue>(()=>{
     const tag=locale==='ar'?'ar-MR-u-nu-latn':'fr-MR-u-nu-latn';
     const fallback=messages[locale].error;

@@ -28,7 +28,7 @@ type PartyState='all'|'active'|'archived';
 const format=(template:string,values:Record<string,string|number>)=>Object.entries(values).reduce((output,[key,value])=>output.replaceAll('{'+key+'}',String(value)),template);
 
 export function PartiesScreen({type}:{type:PartyType}){
-  const db=useSQLiteContext(),{t,isRTL,number,errorMessage}=useI18n(),auth=useAuth();
+  const db=useSQLiteContext(),{t,isRTL,number,errorMessage,locale}=useI18n(),auth=useAuth();
   const params=useLocalSearchParams<{create?:string}>();
   const [summaries,setSummaries]=useState<Awaited<ReturnType<typeof listPartyFinancialSummaries>>>([]);
   const [items,setItems]=useState<Party[]>([]),[search,setSearch]=useState(''),[state,setState]=useState<PartyState>('active');
@@ -86,8 +86,13 @@ export function PartiesScreen({type}:{type:PartyType}){
           onBack={()=>router.back()}
         />
 
-        <StitchPanel><StitchText size={12} color={stitch.muted}>{type==='customer'?t('receivable'):t('payable')}</StitchText><Money value={items.reduce((total,p)=>total+(type==='customer'?p.receivable:p.payable),0)} large tone={type==='customer'?'positive':'negative'}/><StitchText size={11} color={stitch.muted}>{t('partyCount').replace('{count}',number(items.length))}</StitchText></StitchPanel>
-        {canCreate&&!showArchived?<Button title={type==='customer'?t('partyNewCustomer'):t('partyNewSupplier')} onPress={()=>setCreateOpen(true)}/>:null}
+        <View style={{gap:12}}><StitchText bold size={17}>{type==='customer'?(locale==='ar'?'سجل العملاء والحسابات':'Clients et comptes'):(locale==='ar'?'سجل الموردين والحسابات':'Fournisseurs et comptes')}</StitchText>{canCreate&&!showArchived?<Button title={type==='customer'?t('partyNewCustomer'):t('partyNewSupplier')} variant={type==='customer'?'success':'warning'} onPress={()=>setCreateOpen(true)}/>:null}</View>
+        <StitchPanel style={{backgroundColor:'#232833'}}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between'}}><StitchText size={12} color={stitch.muted}>{type==='customer'?t('receivable'):t('payable')}</StitchText><Badge label={t('partyCount').replace('{count}',number(items.length))} tone="warning"/></View><View style={{flexDirection:isRTL?'row-reverse':'row',flexWrap:'wrap',gap:8}}>{[
+          {label:type==='customer'?t('sales'):t('purchases'),value:summaries.reduce((total,s)=>total+(type==='customer'?s.customerTradeTotal:s.supplierTradeTotal),0),color:colors.text},
+          {label:type==='customer'?t('partyGrossProfit'):t('partyPurchaseInvoices'),value:summaries.reduce((total,s)=>total+(type==='customer'?s.customerGrossProfit:s.supplierInvoiceCount),0),color:stitch.green,count:type==='supplier'},
+          {label:type==='customer'?t('partyCashCustomer'):t('partyCashSupplier'),value:summaries.reduce((total,s)=>total+(type==='customer'?s.cashIn:s.cashOut),0),color:colors.text},
+          {label:t('partyBalance'),value:items.reduce((total,p)=>total+p.net,0),color:stitch.green}
+        ].map(metric=><View key={metric.label} style={{width:'48%',flexGrow:1,backgroundColor:'#080C14',padding:12,borderRadius:6,gap:8}}><AppText variant="caption" muted>{metric.label}</AppText><StitchText bold size={17} color={metric.color}>{number(metric.value)}{metric.count?'':' MRU'}</StitchText></View>)}</View></StitchPanel>
         <SearchField
           value={search}
           onChangeText={setSearch}
@@ -137,16 +142,16 @@ export function PartiesScreen({type}:{type:PartyType}){
 }
 
 function PartyRow({item,summary,canCash,canRestore,restoring,onRestore}:{item:Party;summary?:Awaited<ReturnType<typeof listPartyFinancialSummaries>>[number];first:boolean;last:boolean;canCash:boolean;canRestore:boolean;restoring:boolean;onRestore:()=>void}){
- const {t,isRTL,locale}=useI18n(),ar=locale==='ar',customer=item.partyType==='customer',row={flexDirection:isRTL?'row-reverse' as const:'row' as const};
+ const {t,isRTL,locale,number}=useI18n(),ar=locale==='ar',customer=item.partyType==='customer',row={flexDirection:isRTL?'row-reverse' as const:'row' as const};
  const total=customer?summary?.customerTradeTotal:summary?.supplierTradeTotal,paid=customer?summary?.cashIn:summary?.cashOut;
  return <View style={styles.stitchParty}><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={[styles.nameRow,row]}><View style={styles.stitchAvatar}><StitchIcon name={customer?'people':'purchase'} size={27} color={customer?stitch.green:stitch.amber}/></View><View style={styles.body}><AppText variant="subheading" numberOfLines={2}>{item.name}</AppText>{item.phone?<AppText variant="caption" muted>{item.phone}</AppText>:null}</View><Badge label={item.isArchived?t('partyAccountArchived'):item.net>0?t('partyReceivable'):item.net<0?t('partyPayable'):t('partySettled')} tone={item.net>0?'positive':item.net<0?'negative':'neutral'}/></Pressable>
- <View style={[styles.stitchFigures,row]}><View style={styles.stitchFigure}><AppText variant="caption" muted>{customer?t('sales'):t('purchases')}</AppText><Money value={total??0}/></View><View style={styles.stitchFigure}><AppText variant="caption" muted>{ar?'المسدد':'Réglé'}</AppText><Money value={paid??0} tone="positive"/></View><View style={styles.stitchFigure}><AppText variant="caption" muted>{t('partyBalance')}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/></View></View>
+ <View style={[styles.stitchFigures,{flexDirection:'column'}]}>{[{label:customer?t('partyTradeCustomer'):t('partyTradeSupplier'),value:total??0,color:colors.text},...(customer?[{label:t('partyGrossProfit'),value:summary?.customerGrossProfit??0,color:stitch.green}]:[]),{label:customer?t('partyCashCustomer'):t('partyCashSupplier'),value:paid??0,color:stitch.muted}].map(metric=><View key={metric.label} style={{flexDirection:isRTL?'row-reverse':'row',justifyContent:'space-between',gap:8}}><AppText variant="caption" muted>{metric.label}</AppText><StitchText bold size={13} color={metric.color}>{number(metric.value)} MRU</StitchText></View>)}<View style={{flexDirection:isRTL?'row-reverse':'row',justifyContent:'space-between',borderTopWidth:1,borderTopColor:colors.border,paddingTop:10,marginTop:4}}><AppText variant="subheading">{t('partyBalance')}</AppText><Money value={Math.abs(item.net)} tone={item.net>0?'positive':item.net<0?'negative':'normal'}/></View></View>
  <View style={[styles.stitchActions,row]}><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id}})} style={styles.stitchAction}><StitchIcon name="receipt" size={17}/><AppText variant="caption">{ar?'كشف حساب':'Relevé'}</AppText></Pressable>{canRestore?<Button compact title={t('restore')} loading={restoring} onPress={onRestore}/>:canCash?<Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/parties/[id]',params:{id:item.id,action:customer?'receive':'pay'}})} style={[styles.stitchAction,{backgroundColor:customer?stitch.green:stitch.red}]}><StitchIcon name={customer?'receive':'spend'} color="#FFFFFF" size={17}/><AppText variant="caption" style={{color:'#FFFFFF'}}>{customer?(ar?'سند قبض':'Encaisser'):(ar?'سند دفع':'Payer')}</AppText></Pressable>:null}</View></View>;
 }
 
 
 const styles=StyleSheet.create({
-  stitchParty:{padding:16,gap:12,borderRadius:12,borderWidth:1,borderColor:stitch.border,backgroundColor:stitch.card,marginBottom:12},stitchAvatar:{width:44,height:44,borderRadius:10,backgroundColor:'#19243A',alignItems:'center',justifyContent:'center'},stitchFigures:{backgroundColor:'#080C14',borderRadius:8,padding:10,gap:8},stitchFigure:{flex:1,minWidth:0,gap:4},stitchActions:{gap:8},stitchAction:{flex:1,minHeight:44,borderRadius:8,backgroundColor:'#1C2638',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},
+  stitchParty:{padding:16,gap:12,borderRadius:12,borderWidth:1,borderColor:stitch.border,backgroundColor:'#232833',marginBottom:12},stitchAvatar:{width:44,height:44,borderRadius:10,backgroundColor:'#19243A',alignItems:'center',justifyContent:'center'},stitchFigures:{backgroundColor:'#080C14',borderRadius:8,padding:10,gap:8},stitchFigure:{flex:1,minWidth:0,gap:4},stitchActions:{gap:8},stitchAction:{flex:1,minHeight:44,borderRadius:8,backgroundColor:'#1C2638',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6},
   list:{paddingHorizontal:spacing.md,paddingBottom:spacing.xxl,backgroundColor:colors.background},
   header:{gap:spacing.sm,marginBottom:spacing.sm},
   countRow:{minHeight:30,alignItems:'center'},

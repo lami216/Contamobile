@@ -1,23 +1,25 @@
 import { Tabs } from 'expo-router';
-import { StitchIcon, type StitchIconName } from '@/components/stitch';
+import { StitchIcon, StitchText, type StitchIconName } from '@/components/stitch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StyleSheet, View, type ColorValue } from 'react-native';
+import { Pressable, StyleSheet, View, type ColorValue } from 'react-native';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/auth/provider';
 import { colors, radius, type } from '@/theme';
 
 function TabGlyph({route,color,focused}:{route:string;color:ColorValue;focused:boolean}){
- const names:Record<string,StitchIconName>={index:'home',sales:'sale',inventory:'inventory',parties:'people',more:'settings'};
+ const names:Record<string,StitchIconName>={index:'home',sales:'pos',inventory:'inventory',parties:'people',more:'more'};
  return <View style={[styles.iconShell,focused&&styles.iconShellActive]}><StitchIcon name={names[route]??'more'} size={23} color={String(color)}/></View>;
 }
 
 export default function TabsLayout(){
-  const {t}=useI18n(),auth=useAuth(),insets=useSafeAreaInsets();
+  const {t,isRTL}=useI18n(),auth=useAuth(),insets=useSafeAreaInsets();
   const canSales=['pos.view','pos.create','purchases.view','purchases.create','expenses.view','records.view'].some(cap=>auth.has(cap as Parameters<typeof auth.has>[0]));
   const canInventory=['products.view','warehouses.view','warehouses.inventory.view','warehouses.transfer','warehouses.adjust'].some(cap=>auth.has(cap as Parameters<typeof auth.has>[0]));
   const canParties=auth.has('customers.view')||auth.has('suppliers.view');
   const canMore=auth.has('banks.view')||auth.has('reports.view')||auth.has('settings.view');
-  return <Tabs screenOptions={({route})=>({
+  const labels={index:t('home'),sales:t('sales'),inventory:t('inventory'),parties:t('parties'),more:t('more')};
+  const allowed={index:true,sales:canSales,inventory:canInventory,parties:canParties,more:canMore};
+  return <Tabs tabBar={({state,navigation})=><View accessibilityRole="tablist" style={{flexDirection:isRTL?'row-reverse':'row',paddingBottom:Math.max(insets.bottom,8),paddingTop:8,minHeight:64+insets.bottom,backgroundColor:colors.background,borderTopWidth:1,borderTopColor:colors.border}}>{state.routes.filter(route=>allowed[route.name as keyof typeof allowed]).map(route=>{const focused=state.routes[state.index]?.key===route.key;return <Pressable key={route.key} accessibilityRole="tab" accessibilityState={{selected:focused}} accessibilityLabel={labels[route.name as keyof typeof labels]} onPress={()=>{const event=navigation.emit({type:'tabPress',target:route.key,canPreventDefault:true});if(!focused&&!event.defaultPrevented)navigation.navigate(route.name)}} onLongPress={()=>navigation.emit({type:'tabLongPress',target:route.key})} style={{flex:1,minHeight:44,alignItems:'center',justifyContent:'center',gap:2}}>{focused?<View style={{position:'absolute',top:0,width:24,height:2,borderRadius:2,backgroundColor:colors.accent}}/>:null}<TabGlyph route={route.name} focused={focused} color={focused?colors.accent:colors.textSoft}/><StitchText size={11} bold={focused} color={focused?colors.accent:colors.textSoft}>{labels[route.name as keyof typeof labels]}</StitchText></Pressable>})}</View>} screenOptions={({route})=>({
     headerShown:false,
     tabBarHideOnKeyboard:true,
     tabBarActiveTintColor:colors.accent,

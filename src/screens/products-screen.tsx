@@ -12,7 +12,6 @@ import {
   Button,
   Chip,
   EmptyState,
-  FinancialSummary,
   FormField,
   FramedSection,
   Money,
@@ -263,7 +262,7 @@ function ProductRow({item,canRestore,onRestore,onPress}:{item:Product;first:bool
 
 
 function ProductDetail({product,warehouses,canEdit,onClose,onEdit}:{product:Product;warehouses:Warehouse[];canEdit:boolean;onClose:()=>void;onEdit:()=>void}){
-  const {t,number,isRTL}=useI18n(),totalStock=stockOf(product),expiry=expiryTone(product.expiryDate);
+  const {t,number,isRTL,locale}=useI18n(),totalStock=stockOf(product),expiry=expiryTone(product.expiryDate);
   const purchaseCost=Number(product.lastPurchaseCost??product.pieceCost??0);
   const status=product.isArchived
     ?<Badge label={t('productArchived')} tone="neutral"/>
@@ -291,11 +290,7 @@ function ProductDetail({product,warehouses,canEdit,onClose,onEdit}:{product:Prod
           </View>
         </FramedSection>
 
-        <FinancialSummary items={[
-          {label:t('purchaseLastCost'),value:purchaseCost},
-          {label:t('salePrice'),value:product.piecePrice??0,emphasize:true},
-          {label:t('wholesalePrice'),value:product.wholesalePrice??0},
-        ]}/>
+        <View style={{flexDirection:isRTL?'row-reverse':'row',flexWrap:'wrap',gap:12}}>{[{label:t('purchaseLastCost'),value:purchaseCost,color:stitch.gold},{label:t('salePrice'),value:product.piecePrice??0,color:stitch.green},{label:t('wholesalePrice'),value:product.wholesalePrice??0,color:stitch.amber},{label:locale==='ar'?'هامش الوحدة':'Marge unitaire',value:(product.piecePrice??0)-purchaseCost,color:stitch.green}].map(metric=><StitchPanel key={metric.label} style={{width:'48%',flexGrow:1,backgroundColor:'#080C14'}}><AppText variant="caption" muted>{metric.label}</AppText><StitchText bold size={21} color={metric.color}>{number(metric.value)} MRU</StitchText></StitchPanel>)}</View>
 
         <FramedSection title={t('productStockByWarehouse')} padded={false}>
           {warehouses.map((warehouse,index)=>{

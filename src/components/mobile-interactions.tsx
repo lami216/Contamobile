@@ -14,12 +14,12 @@ export function QuantityStepper({value,onDecrease,onIncrease,onEdit,compact=fals
 
 export function BottomActionBar({label,total,count,onPress,disabled=false,loading=false,secondary,tone='sale'}:{label:string;total:number;count?:number;onPress:()=>void;disabled?:boolean;loading?:boolean;secondary?:string;tone?:'sale'|'purchase'}){
   const insets=useSafeAreaInsets(),{isRTL,number}=useI18n();
-  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.bottomSummary}>{typeof count==='number'?<AppText variant="caption" muted>{number(count)} {secondary??''}</AppText>:secondary?<AppText variant="caption" muted>{secondary}</AppText>:null}<Money value={total} large/></View><Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,{backgroundColor:actionColors[tone]},pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color={colors.onPrimary}/>:<AppText variant="subheading" style={styles.checkoutText}>{label}</AppText>}</Pressable></View></View>;
+  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.bottomSummary}>{typeof count==='number'?<AppText variant="caption" muted>{number(count)} {secondary??''}</AppText>:secondary?<AppText variant="caption" muted>{secondary}</AppText>:null}<Money value={total} large/></View><Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,{backgroundColor:tone==='sale'?actionColors.receive:actionColors.purchase},pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color={colors.onPrimary}/>:<AppText variant="subheading" style={styles.checkoutText}>{label}</AppText>}</Pressable></View></View>;
 }
 
 export function StickyActionBar({label,onPress,disabled=false,loading=false,summary,secondaryAction}:{label:string;onPress:()=>void;disabled?:boolean;loading?:boolean;summary?:string;secondaryAction?:ReactNode}){
   const insets=useSafeAreaInsets(),{isRTL}=useI18n();
-  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}>{summary?<View style={styles.bottomSummary}><AppText variant="caption" muted>{summary}</AppText></View>:secondaryAction?<View style={styles.secondarySlot}>{secondaryAction}</View>:<View style={styles.bottomSummary}/>}<Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color={colors.onPrimary}/>:<AppText variant="subheading" style={styles.checkoutText}>{label}</AppText>}</Pressable></View></View>;
+  return <View style={[styles.bottomBar,{paddingBottom:Math.max(insets.bottom,spacing.sm)}]}><View style={[styles.bottomInner,{flexDirection:isRTL?'row-reverse':'row'}]}>{summary?<View style={styles.bottomSummary}><AppText variant="caption" muted>{summary}</AppText></View>:secondaryAction?<View style={styles.secondarySlot}>{secondaryAction}</View>:<View style={styles.bottomSummary}/>}<Pressable accessibilityRole="button" disabled={disabled||loading} onPress={onPress} style={({pressed})=>[styles.checkout,pressed&&styles.checkoutPressed,(disabled||loading)&&styles.disabled]}>{loading?<ActivityIndicator color="#201A08"/>:<AppText variant="subheading" style={styles.stickyText}>{label}</AppText>}</Pressable></View></View>;
 }
 
 export function Sheet({visible,title,onClose,children,footer,fixedHeight=false,scrollable=true,page=false}:{visible:boolean;title:string;onClose:()=>void;children:ReactNode;footer?:ReactNode;fixedHeight?:boolean;scrollable?:boolean;page?:boolean}){
@@ -59,9 +59,10 @@ const styles=StyleSheet.create({
   bottomInner:{alignItems:'center',gap:spacing.sm},
   bottomSummary:{flex:1,gap:spacing.xxs},
   secondarySlot:{flex:1},
-  checkout:{minHeight:48,minWidth:144,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:actionColors.sale,borderWidth:1,borderColor:colors.accent},
+  checkout:{minHeight:48,minWidth:144,borderRadius:radius.md,alignItems:'center',justifyContent:'center',paddingHorizontal:spacing.lg,backgroundColor:colors.accent,borderWidth:1,borderColor:colors.accent},
   checkoutPressed:{backgroundColor:colors.primaryPressed,transform:[{scale:.99}]},
   checkoutText:{color:colors.onPrimary},
+  stickyText:{color:'#201A08'},
   overlay:{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay},
   sheet:{maxHeight:'90%',backgroundColor:colors.surface,borderTopLeftRadius:radius.lg,borderTopRightRadius:radius.lg,paddingTop:spacing.xs,paddingHorizontal:spacing.md,borderTopWidth:1,borderLeftWidth:1,borderRightWidth:1,borderColor:colors.borderStrong,...elevation.floating},
   sheetFixed:{height:'78%',minHeight:520},

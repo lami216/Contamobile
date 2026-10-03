@@ -25,7 +25,7 @@ export function Screen({children,scroll=false,padded=true}:{children:ReactNode;s
 export function AppText({children,variant='body',muted=false,style,numberOfLines}:{children:ReactNode;variant?:'display'|'title'|'heading'|'subheading'|'body'|'caption'|'amount'|'amountLarge';muted?:boolean;style?:StyleProp<TextStyle>;numberOfLines?:number}){
   const {isRTL}=useI18n();
   const bold=['display','title','heading','subheading','amount','amountLarge'].includes(variant);
-  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontFamily:bold?'StitchArabicBold':'StitchArabic',fontSize:typography[variant],textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
+  return <Text numberOfLines={numberOfLines} style={[styles.text,{fontFamily:bold?'StitchArabicBold':'StitchArabic',fontSize:typography[variant],lineHeight:Math.round(typography[variant]*(typography[variant]>=24?1.25:1.4)),includeFontPadding:false,textAlign:isRTL?'right':'left'},variant==='display'&&styles.display,variant==='title'&&styles.title,variant==='heading'&&styles.heading,variant==='subheading'&&styles.subheading,variant==='amount'&&styles.amountWeight,variant==='amountLarge'&&styles.amountLargeWeight,muted&&styles.muted,style]}>{children}</Text>;
 }
 
 export function Card({children,style,tone='default'}:{children:ReactNode;style?:StyleProp<ViewStyle>;tone?:'default'|'muted'|'primary'|'warning'}){
@@ -86,12 +86,8 @@ export function AccountingRow({title,subtitle,meta,leading,value,trailing,onPres
 export function InvoiceLine({productName,context,status,quantityLabel,quantityControl,unitPriceLabel,unitPrice,lineTotalLabel,lineTotal,actions,last=false}:{productName:string;context?:string;status?:ReactNode;quantityLabel:string;quantityControl:ReactNode;unitPriceLabel:string;unitPrice:ReactNode;lineTotalLabel:string;lineTotal:ReactNode;actions?:ReactNode;last?:boolean}){
   const {isRTL}=useI18n();
   return <View style={[styles.invoiceLine,last&&styles.invoiceLineLast]}>
-    <View style={[styles.invoiceLineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.invoiceLineCopy}><View style={[styles.invoiceLineTitleRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.invoiceLineName}>{productName}</AppText>{status}</View>{context?<AppText variant="caption" muted numberOfLines={1}>{context}</AppText>:null}</View>{actions}</View>
-    <View style={[styles.invoiceFinancialRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-      <View style={[styles.invoiceValueCell,styles.invoiceQuantityCell]}><AppText variant="caption" muted>{quantityLabel}</AppText>{quantityControl}</View>
-      <View style={styles.invoiceValueCell}><AppText variant="caption" muted>{unitPriceLabel}</AppText>{unitPrice}</View>
-      <View style={[styles.invoiceValueCell,isRTL?styles.invoiceValueCellLeading:styles.invoiceValueCellTrailing]}><AppText variant="caption" muted>{lineTotalLabel}</AppText>{lineTotal}</View>
-    </View>
+    <View style={[styles.invoiceLineHead,{flexDirection:isRTL?'row-reverse':'row'}]}><View style={styles.invoiceLineCopy}><View style={[styles.invoiceLineTitleRow,{flexDirection:isRTL?'row-reverse':'row'}]}><AppText variant="subheading" numberOfLines={2} style={styles.invoiceLineName}>{productName}</AppText>{status}</View><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',gap:8}}><AppText variant="caption" muted>{unitPriceLabel}</AppText>{unitPrice}</View>{context?<AppText variant="caption" muted numberOfLines={1}>{context}</AppText>:null}</View>{actions}</View>
+    <View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between',gap:12}}><View accessibilityLabel={quantityLabel}>{quantityControl}</View><View accessibilityLabel={lineTotalLabel}>{lineTotal}</View></View>
   </View>;
 }
 
@@ -216,8 +212,8 @@ export function AlertCard({title,description,tone='warning',action}:{title:strin
 
 const styles=StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
-  screenContent:{flex:1,gap:control.sectionGap},
-  padded:{paddingHorizontal:layout.pageGutter},
+  screenContent:{flex:1},
+  padded:{paddingHorizontal:layout.pageGutter,gap:control.sectionGap},
   scroll:{flexGrow:1,paddingBottom:spacing.xl},
   text:{color:colors.text,fontWeight:'400',fontFamily:'StitchArabic'},
   display:{fontWeight:'800',letterSpacing:-.65},
@@ -263,8 +259,8 @@ const styles=StyleSheet.create({
   accountingCopy:{flex:1,minWidth:0,gap:2},
   accountingValue:{alignItems:'flex-end',justifyContent:'center',minWidth:72},
   accountingArrow:{color:colors.textSoft,fontSize:21,lineHeight:22},
-  invoiceLine:{gap:spacing.xs,paddingHorizontal:layout.densePadding,paddingVertical:spacing.xs,borderBottomWidth:1,borderBottomColor:colors.border},
-  invoiceLineLast:{borderBottomWidth:0},
+  invoiceLine:{gap:8,padding:12,borderWidth:1,borderColor:colors.border,borderRadius:8,backgroundColor:colors.surface,marginBottom:8},
+  invoiceLineLast:{borderBottomWidth:1},
   invoiceLineHead:{alignItems:'center',gap:spacing.xs},
   invoiceLineCopy:{flex:1,minWidth:0,gap:2},
   invoiceLineTitleRow:{alignItems:'center',gap:spacing.xs},
@@ -296,19 +292,19 @@ const styles=StyleSheet.create({
   buttonGhost:{backgroundColor:'transparent',borderColor:'transparent'},
   buttonPressed:{backgroundColor:colors.surfaceMuted,transform:[{scale:.99}]},
   disabled:{opacity:.45},
-  buttonText:{fontFamily:'StitchArabicBold',fontSize:typography.body,fontWeight:'700',color:colors.accent,textAlign:'center'},
+  buttonText:{fontFamily:'StitchArabicBold',fontSize:typography.body,lineHeight:20,includeFontPadding:false,fontWeight:'700',color:colors.accent,textAlign:'center'},
   buttonTextPrimary:{color:colors.onPrimary},
   buttonTextGold:{color:'#201A08'},
   buttonTextDanger:{color:colors.negative},
   buttonTextGhost:{fontWeight:'600'},
   field:{gap:spacing.xs},
   fieldLabel:{color:colors.textMuted,fontWeight:'700'},
-  input:{fontFamily:'StitchArabic',minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,fontWeight:'500'},
+  input:{fontFamily:'StitchArabic',minHeight:control.height,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,color:colors.text,fontSize:typography.body,lineHeight:20,includeFontPadding:false,fontWeight:'500'},
   formInputShell:{minHeight:control.height,alignItems:'center',gap:spacing.xs,borderWidth:1,borderColor:colors.borderStrong,borderRadius:radius.md,borderCurve:'continuous',paddingHorizontal:layout.densePadding,backgroundColor:colors.surface},
-  formInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  formInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,lineHeight:20,includeFontPadding:false,fontWeight:'500',paddingVertical:0},
   formAdornment:{minHeight:control.compactHeight,alignItems:'center',justifyContent:'center'},
   search:{minHeight:control.height,alignItems:'center',gap:spacing.sm,borderRadius:radius.md,paddingHorizontal:layout.densePadding,backgroundColor:colors.surface,borderWidth:1,borderColor:colors.borderStrong},
-  searchInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,fontWeight:'500',paddingVertical:0},
+  searchInput:{fontFamily:'StitchArabic',flex:1,minWidth:0,minHeight:control.height,color:colors.text,fontSize:typography.body,lineHeight:20,includeFontPadding:false,fontWeight:'500',paddingVertical:0},
   searchGlyph:{width:20,height:20,position:'relative',flexShrink:0},
   searchCircle:{position:'absolute',left:2,top:2,width:12,height:12,borderRadius:6,borderWidth:2,borderColor:colors.textMuted},
   searchHandle:{position:'absolute',right:1,bottom:3,width:7,height:2,borderRadius:1,backgroundColor:colors.textMuted,transform:[{rotate:'45deg'}]},
@@ -317,14 +313,14 @@ const styles=StyleSheet.create({
   emptyMark:{width:42,height:42,borderRadius:radius.md,alignItems:'center',justifyContent:'center',backgroundColor:colors.surfaceMuted,borderWidth:1,borderColor:colors.border},
   emptyMarkText:{color:colors.textSoft,lineHeight:24},
   emptyDescription:{textAlign:'center',maxWidth:280,lineHeight:18},
-  money:{fontFamily:'StitchArabicBold',fontSize:typography.amount,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
-  moneyLarge:{fontSize:typography.amountLarge,letterSpacing:-.55},
+  money:{fontFamily:'StitchArabicBold',fontSize:typography.amount,lineHeight:28,includeFontPadding:false,fontWeight:'800',color:colors.text,fontVariant:['tabular-nums']},
+  moneyLarge:{fontSize:typography.amountLarge,lineHeight:35,letterSpacing:-.55},
   positive:{color:colors.positive},
   negative:{color:colors.negative},
   chip:{minHeight:control.compactHeight,paddingHorizontal:spacing.sm,borderRadius:radius.md,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.borderStrong},
   chipActive:{backgroundColor:colors.accentSoft,borderColor:colors.accent},
   chipPressed:{backgroundColor:colors.surfaceMuted},
-  chipText:{color:colors.textMuted,fontWeight:'700',fontSize:typography.caption},
+  chipText:{fontFamily:'StitchArabicBold',color:colors.textMuted,fontWeight:'700',fontSize:typography.caption,lineHeight:17,includeFontPadding:false},
   chipTextActive:{color:colors.accent},
   row:{minHeight:control.rowMinHeight,alignItems:'center',gap:spacing.sm,paddingVertical:spacing.xs,paddingHorizontal:2,borderBottomWidth:1,borderBottomColor:colors.border},
   rowBody:{flex:1,gap:spacing.xxs},
@@ -335,7 +331,7 @@ const styles=StyleSheet.create({
   badgePositive:{backgroundColor:colors.positiveSoft},
   badgeNegative:{backgroundColor:colors.negativeSoft},
   badgeWarning:{backgroundColor:colors.warningSoft},
-  badgeText:{color:colors.textMuted,fontWeight:'700'},
+  badgeText:{fontFamily:'StitchArabicBold',color:colors.textMuted,fontWeight:'700'},
   badgeTextPrimary:{color:colors.primary},
   badgeTextPositive:{color:colors.positive},
   badgeTextNegative:{color:colors.negative},

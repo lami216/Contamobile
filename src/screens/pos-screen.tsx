@@ -42,7 +42,7 @@ import { BottomActionBar, QuantityStepper, Sheet } from '@/components/mobile-int
 import { useI18n } from '@/i18n/provider';
 import { CheckGlyph, PaymentGlyph, ReceiptGlyph, TrashGlyph } from '@/components/accounting-glyphs';
 import { useAuth } from '@/auth/provider';
-import { StitchPanel, StitchIcon, StitchText, stitch } from '@/components/stitch';
+import { StitchPanel, StitchIcon, StitchText, StitchSection, StitchFormSection, stitch } from '@/components/stitch';
 import { colors, radius, spacing, touch } from '@/theme';
 
 type SaleLine={product:Product;quantity:number;unitPrice:number;stock:number;priceOverridden:boolean};
@@ -326,6 +326,7 @@ export function PosScreen(){
         total={total}
         totalQuantity={totalQuantity}
         onChooseParty={()=>setPartyPicker(true)}
+        onClearParty={()=>setPartyId('')}
         onAddProduct={()=>setProductPicker(true)}
         onChangeQuantity={changeQuantity}
         onEditQuantity={openQuantity}
@@ -412,7 +413,7 @@ export function PosScreen(){
 }
 
 function InvoiceStage({children,
-  onBack,selectedWarehouse,selectedParty,lines,total,totalQuantity,onChooseParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
+  onBack,selectedWarehouse,selectedParty,lines,total,totalQuantity,onChooseParty,onClearParty,onAddProduct,onChangeQuantity,onEditQuantity,onEditPrice,
 }:{children?:import('react').ReactNode;
   onBack:()=>void;
   selectedWarehouse:Warehouse|null;
@@ -421,36 +422,19 @@ function InvoiceStage({children,
   total:number;
   totalQuantity:number;
   onChooseParty:()=>void;
+  onClearParty:()=>void;
   onAddProduct:()=>void;
   onChangeQuantity:(id:string,value:number)=>void;
   onEditQuantity:(line:SaleLine)=>void;
   onEditPrice:(line:SaleLine)=>void;
 }){
-  const {t,isRTL}=useI18n();
+  const {t,isRTL,locale}=useI18n();
   return <View style={styles.stage}>
     <View style={styles.headerPad}><PageHeader title={t('posNewSaleTitle')} subtitle={selectedWarehouse?.name} onBack={onBack}/></View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stageScroll,styles.stageScrollWithBar]}>
-      <StitchPanel style={{padding:12}}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between'}}><StitchIcon name="receipt" color={stitch.blue}/><StitchText size={12} color={stitch.lightGold}>{t('posNewSaleTitle')}</StitchText><Badge label={t('posNewSaleTitle')} tone="neutral"/></View></StitchPanel>
+      <StitchPanel style={{padding:12}}><View style={{flexDirection:isRTL?'row-reverse':'row',alignItems:'center',justifyContent:'space-between'}}><StitchText size={12} color={stitch.lightGold}>{t('posNewSaleTitle')}</StitchText><Badge label={locale==='ar'?'مسودة':'Brouillon'} tone="positive"/></View><View style={{flexDirection:isRTL?'row-reverse':'row',gap:8}}><View style={{flex:1}}><Button compact title={t('posCashCustomer')} variant={!selectedParty?'primary':'secondary'} onPress={onClearParty}/></View><View style={{flex:1}}><Button compact title={selectedParty?.name??t('posChooseCustomer')} variant={selectedParty?'primary':'secondary'} onPress={onChooseParty}/></View></View></StitchPanel>
       <Pressable accessibilityRole="button" accessibilityLabel={t('posAddProduct')} onPress={onAddProduct} style={styles.stitchSearch}><StitchIcon name="search" color={stitch.muted}/><AppText variant="caption" muted style={{flex:1}}>{t('posSearchPlaceholder')}</AppText><StitchIcon name="barcode"/></Pressable>
-      <View style={[styles.invoiceContextRow,{flexDirection:isRTL?'row-reverse':'row'}]}>
-        <Pressable accessibilityRole="button" onPress={onChooseParty} style={({pressed})=>[styles.contextCard,pressed&&styles.controlPressed]}>
-          <AppText variant="caption" muted>{t('customer')}</AppText>
-          <AppText variant="subheading" numberOfLines={1}>{selectedParty?.name??t('posCashCustomer')}</AppText>
-          <AppText variant="caption" muted numberOfLines={1}>{selectedParty?.phone??t('posCustomerOptional')}</AppText>
-        </Pressable>
-        <View style={[styles.contextCard,styles.contextCardMuted]}>
-          <AppText variant="caption" muted>{t('warehouse')}</AppText>
-          <AppText variant="subheading" numberOfLines={1}>{selectedWarehouse?.name??'—'}</AppText>
-          <Badge label={t('defaultWarehouse')} tone="primary"/>
-        </View>
-      </View>
-
-
-      <FramedSection
-        title={t('posInvoiceLines')}
-        action={<Button compact title={t('posAddProduct')} onPress={onAddProduct}/>}
-        padded={false}
-      >
+      <View style={{gap:8}}><StitchSection title={t('posInvoiceLines')+' ('+lines.length+')'} action={t('posAddProduct')} onPress={onAddProduct}/>
         {lines.length?lines.map((line,index)=><SaleInvoiceLine
           key={line.product.id}
           line={line}
@@ -461,7 +445,7 @@ function InvoiceStage({children,
           onEditPrice={()=>onEditPrice(line)}
           onRemove={()=>onChangeQuantity(line.product.id,0)}
         />):<EmptyState title={t('posNoLinesTitle')} description={t('posNoLinesDescription')} action={<Button compact title={t('posAddProduct')} variant="secondary" onPress={onAddProduct}/>}/>}
-      </FramedSection>
+      </View>
 
       {lines.length?<View style={styles.summaryBlock}>
         <AppText variant="subheading">{t('posInvoiceSummary')}</AppText>
@@ -497,7 +481,7 @@ function PaymentStage({inline=false,
   onBack:()=>void;
 }){
   const {t,isRTL}=useI18n();
-  const body=<>      <FramedSection title={t('customer')} padded={false}>
+  const body=<>      {!inline?<StitchFormSection title={t('customer')} padded={false}>
         <SelectRow
           label={t('customer')}
           value={selectedParty?.name??(needsParty?t('posChooseCustomer'):t('posCashCustomer'))}
@@ -505,17 +489,17 @@ function PaymentStage({inline=false,
           leading={<CustomerTile warning={needsParty&&!selectedParty}/>}
           onPress={onChooseParty}
         />
-      </FramedSection>
+      </StitchFormSection>:null}
 
-      <FramedSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('posCreditHint'):t('posPayNowHint')}>
+      <StitchFormSection title={t('posSettlementType')} subtitle={settlement==='credit'?t('posCreditHint'):t('posPayNowHint')}>
         <SegmentedControl
           value={settlement}
           options={[{value:'payNow',label:t('posPayNow')},{value:'credit',label:t('onCredit')}]}
           onChange={setSettlement}
         />
-      </FramedSection>
+      </StitchFormSection>
 
-      {settlement==='payNow'?<FramedSection title={t('posPaymentAccounts')}>
+      {settlement==='payNow'?<StitchFormSection title={t('posPaymentAccounts')}>
         {accounts.length?<View style={[styles.paymentMethods,{flexDirection:isRTL?'row-reverse':'row'}]}>
           {accounts.map(account=><PaymentMethodCard
             key={account.id}
@@ -526,19 +510,19 @@ function PaymentStage({inline=false,
             style={styles.paymentMethodCard}
           />)}
         </View>:<Surface tone="warning"><AppText variant="caption">{t('posNoPaymentAccounts')}</AppText></Surface>}
-      </FramedSection>:null}
+      </StitchFormSection>:null}
 
-      {settlement==='payNow'?<FramedSection title={t('posReceivedAmount')}>
+      {settlement==='payNow'?<StitchFormSection title={t('posReceivedAmount')}>
         <FormField
           label={t('posReceivedAmount')}
-          value={tender}
+          value={tender.trim()===''?String(total):tender}
           onChangeText={setTender}
           keyboardType="number-pad"
           selectTextOnFocus
           placeholder="0"
           trailing={<AppText variant="subheading" muted>MRU</AppText>}
         />
-      </FramedSection>:null}
+      </StitchFormSection>:null}
 
       <View style={styles.summaryBlock}>
         <AppText variant="subheading">{t('posPaymentSummary')}</AppText>
@@ -627,7 +611,7 @@ function SaleInvoiceLine({line,last,onDecrease,onIncrease,onEditQuantity,onEditP
   const meta=[format(t('posAvailable'),{count:number(line.stock)}),line.product.categoryName,line.product.sku?'#'+line.product.sku:null].filter(Boolean).join(' • ');
   return <InvoiceLineView
     productName={line.product.name}
-    context={meta}
+    context={line.stock<=5?meta:undefined}
     status={line.priceOverridden?<Badge label={t('posCustomPrice')} tone="primary"/>:undefined}
     quantityLabel={t('quantity')}
     quantityControl={<QuantityStepper compact value={line.quantity} onDecrease={onDecrease} onIncrease={onIncrease} onEdit={onEditQuantity}/>}
