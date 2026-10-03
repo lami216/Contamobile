@@ -6,9 +6,9 @@ module.exports = function withGoldenSystemBars(config) {
   config = withDangerousMod(config, ['android', (mod) => {
     const dest = path.join(mod.modRequest.platformProjectRoot, 'app/src/main/assets/fonts');
     fs.mkdirSync(dest, { recursive: true });
-    for (const name of ['StitchArabic.ttf', 'StitchArabicBold.ttf', 'StitchIcons.otf']) {
+    for (const name of ['StitchArabic.ttf', 'StitchArabicBold.ttf', 'StitchIcons.otf', 'OFL-IBM-Plex.txt', 'Apache-Material-Icons.txt']) {
       const src = path.join(mod.modRequest.projectRoot, 'assets/fonts', name);
-      if (!fs.existsSync(src)) throw new Error(`Required bundled Stitch font missing: ${name}`);
+      if (!fs.existsSync(src)) throw new Error(`Required bundled Stitch asset missing: ${name}`);
       fs.copyFileSync(src, path.join(dest, name));
     }
     // React Native selects _bold assets for any bold Text style.

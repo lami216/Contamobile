@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: golden-apk-final-${{ github.ref }}
+  group: golden-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
