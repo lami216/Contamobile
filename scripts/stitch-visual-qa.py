@@ -99,7 +99,7 @@ def customer():
 def deposit():
  route('more/accounts?tab=adjustments');field('المبلغ','10000',3);click('تأكيد',3);time.sleep(2);capture('account-deposit-posted')
 def sale():
- route('sales/pos');click('إضافة منتج');time.sleep(1);click('QA Rice');click('تم');time.sleep(1);capture('pos-filled');click('إتمام البيع',5);time.sleep(3);find('تم البيع بنجاح');capture('sale-posted')
+ route('sales/pos');click('إضافة منتج');time.sleep(1);find('QA Rice');click('إضافة');click('تم');time.sleep(1);find('QA Rice');capture('pos-filled');click('إتمام البيع',5);time.sleep(3);find('تم البيع بنجاح');capture('sale-posted')
 
 scenario('create-product',product)
 scenario('create-customer',customer)
