@@ -50,11 +50,16 @@ def find(text,editable=False,scrolls=0):
    labels=[n for n in tree.iter('node') if n.get('package')==package and n.get('class','').endswith('TextView') and n.get('text')==last_field and bounds(n)[3]>bounds(n)[1] and bounds(n)[3]<bottom]
    if bottom<2190 and labels:
     tap(labels[0]);time.sleep(.7);tree=ui();bottom=visible_bottom(tree)
+    # Keyboard dismissal enlarges the viewport: check the newly visible controls
+    # before swiping, otherwise a long fling can pass a button that just appeared.
+    try:return find(text,editable=editable)
+    except ValueError:pass
    area=scroll_area(tree)
    if area is None:break
    x1,y1,x2,y2=bounds(area);x=x1+20;y2=min(y2,bottom-15)
    if y2-y1<160:break
-   adb('shell','input','swipe',str(x),str(y2-65),str(x),str(y1+65),'450');time.sleep(.7)
+   start=y2-65;end=max(y1+65,start-600)
+   adb('shell','input','swipe',str(x),str(start),str(x),str(end),'550');time.sleep(.7)
  raise ValueError('UI element missing: '+text+'; visible fields: '+str([(n.get('class'),n.get('text'),n.get('content-desc')) for n in ui().iter('node') if n.get('class','').endswith('EditText')]))
 def click(text,scrolls=0):tap(find(text,scrolls=scrolls))
 def field(label,value,scrolls=0):
