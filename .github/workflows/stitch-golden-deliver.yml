@@ -5,7 +5,7 @@ on:
     branches: [feat/stitch-golden-android]
     paths: [.github/workflows/stitch-golden-deliver.yml]
 permissions:
-  contents: write
+  contents: read
   actions: read
 jobs:
   deliver:
@@ -22,16 +22,6 @@ jobs:
           mkdir install
           cp verified-build/contamobile-golden.apk install/contamobile-golden.apk
           echo 'e60e924b990ddfbdcff46256e65dd0d1c86d9452ca8f57aa1755e44d1302ac84  install/contamobile-golden.apk' | sha256sum --check
-      - name: Publish direct APK download
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          if gh release view golden-0.2.3 >/dev/null 2>&1; then
-            gh release upload golden-0.2.3 install/contamobile-golden.apk --clobber
-          else
-            gh release create golden-0.2.3 install/contamobile-golden.apk --target e3a876b74e012a6b38bea684693449515bbb72a2 --title 'Contamobile Android 0.2.3' --notes 'Standalone Android Release APK.' --prerelease
-          fi
       - name: Upload APK only
         uses: actions/upload-artifact@v4
         with:
@@ -39,5 +29,3 @@ jobs:
           path: install/contamobile-golden.apk
           compression-level: 0
           if-no-files-found: error
-      - name: Show direct installation download
-        run: echo '[Download contamobile-golden.apk](https://github.com/lami216/Contamobile/releases/download/golden-0.2.3/contamobile-golden.apk)' >> "$GITHUB_STEP_SUMMARY"
