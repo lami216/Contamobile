@@ -1,5 +1,8 @@
-name: Recheck Golden Android 0.2.2
+name: Recheck Golden Android 0.2.3
 on:
+  push:
+    branches: [feat/stitch-golden-android]
+    paths: [scripts/stitch-visual-qa.py, .github/workflows/stitch-golden-verify.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,13 +16,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Wait for the exact 0.2.2 APK artifact
+      - name: Wait for the exact 0.2.3 APK artifact
         env:
           GOLDEN_ARTIFACT_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           import urllib.request,json,os,time
-          url='https://api.github.com/repos/lami216/Contamobile/actions/runs/37159532003/artifacts'
+          url='https://api.github.com/repos/lami216/Contamobile/actions/runs/37163455163/artifacts'
           for attempt in range(60):
             request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GOLDEN_ARTIFACT_TOKEN'],'Accept':'application/vnd.github+json'})
             with urllib.request.urlopen(request,timeout=30) as response:data=json.load(response)
@@ -32,7 +35,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: contamobile-golden-release
-          run-id: 37159532003
+          run-id: 37163455163
           github-token: ${{ github.token }}
           path: release-output
       - name: Prepare fresh visual verification
@@ -75,7 +78,7 @@ jobs:
           for index,start in enumerate(range(0,len(data),4*1024*1024)):
             payload=data[start:start+4*1024*1024];name=f'part-{index:02d}.bin';(out/name).write_bytes(payload)
             parts.append({'file':name,'bytes':len(payload),'sha256':hashlib.sha256(payload).hexdigest()})
-          (out/'manifest.json').write_text(json.dumps({'sourceCommit':'a29e6ddc8ca9ecb3ec6ca0b74733f3aa4a3ec2a9','version':'0.2.2','bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'parts':parts},indent=2))
+          (out/'manifest.json').write_text(json.dumps({'sourceCommit':'e3a876b74e012a6b38bea684693449515bbb72a2','version':'0.2.3','bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'parts':parts},indent=2))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
