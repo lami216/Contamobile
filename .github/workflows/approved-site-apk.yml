@@ -49,14 +49,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: |
-            adb shell svc wifi disable
-            adb shell svc data disable
-            trap 'adb pull /sdcard/Android/data/mr.alkarna.mobile.approved/files approved-output/screenshots || true; adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > approved-output/runtime-errors.txt; cat approved-android/app/build/outputs/androidTest-results/connected/release/*.xml 2>/dev/null || true' EXIT
-            gradle -p approved-android :app:connectedReleaseAndroidTest --no-daemon --stacktrace
-            adb pull /sdcard/Android/data/mr.alkarna.mobile.approved/files approved-output/screenshots
-            adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > approved-output/runtime-errors.txt
-            test ! -s approved-output/runtime-errors.txt || cat approved-output/runtime-errors.txt
+          script: bash scripts/test-approved-android.sh
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

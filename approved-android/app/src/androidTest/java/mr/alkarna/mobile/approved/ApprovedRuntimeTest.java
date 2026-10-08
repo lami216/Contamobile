@@ -54,10 +54,10 @@ public class ApprovedRuntimeTest {
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         for(String format:new String[]{"excel","pdf"}){
-            js("act('site:export-"+format+"');true");
+            until("!busy");js("act('site:export-"+format+"');true");
             var save=device.findObject(new UiSelector().resourceId("android:id/button1"));
             assertTrue("Native save picker for "+format,save.waitForExists(20000));
-            save.click();until("!document.querySelector('.busy')");
+            save.click();until("!busy");
         }
         js("window.print();true");Thread.sleep(1500);capture("android-print-dialog");device.pressBack();
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
