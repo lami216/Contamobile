@@ -27,6 +27,9 @@ public class ApprovedRuntimeTest {
         fail("Timed out: "+condition+"; DOM="+js("document.body.innerText"));
     }
     private void capture(String name) throws Exception {
+        until("!document.querySelector('[data-busy-disabled]')");
+        js("window.__qaFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__qaFrameReady=true));true");
+        until("window.__qaFrameReady===true");
         var ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
@@ -53,13 +56,14 @@ public class ApprovedRuntimeTest {
         js("act('go:operations');true");until("view==='operations'");capture("invoice-register");
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
         for(String format:new String[]{"excel","pdf"}){
             until("!document.querySelector('[data-busy-disabled]')");js("window.__qaExportDone=false;act('site:export-"+format+"').finally(()=>window.__qaExportDone=true);true");
             var save=device.findObject(new UiSelector().resourceId("android:id/button1"));
             assertTrue("Native save picker for "+format,save.waitForExists(20000));
-            save.click();until("window.__qaExportDone===true");
+            save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
         }
-        js("window.print();true");Thread.sleep(1500);capture("android-print-dialog");device.pressBack();
+        js("act('site:export-print');true");until("!!document.querySelector('#print-root .export-report')");device.waitForIdle();Thread.sleep(2000);capture("android-print-dialog");device.pressBack();
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='ReviewTest2026!';act('site:login');true");
