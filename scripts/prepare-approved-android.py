@@ -3,7 +3,7 @@ import hashlib,json,shutil
 repo=Path(__file__).resolve().parent.parent
 source=repo/'approved-runtime';target=repo/'approved-android/app/src/main/assets/approved';target.mkdir(parents=True,exist_ok=True)
 for name,digest in json.loads((source/'reference-sha256.json').read_text()).items():
-    assert hashlib.sha256((source/name).read_bytes()).hexdigest()==digest, 'Reference changed: '+name
+    assert hashlib.sha256((source/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==digest, 'Reference changed: '+name
     shutil.copyfile(source/name,target/name)
 for name in ['native-adapter.js','native.css']:shutil.copyfile(source/name,target/name)
 fonts=target/'assets';fonts.mkdir(exist_ok=True)
