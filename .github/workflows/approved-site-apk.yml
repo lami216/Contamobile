@@ -2,7 +2,7 @@ name: Approved seller app APK
 on:
   push:
     branches: [feat/approved-seller-app]
-    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
+    paths: ['approved-android/**', 'approved-runtime/**', 'assets/fonts/**', 'assets/icon.png', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
   workflow_dispatch:
 permissions:
   contents: read
