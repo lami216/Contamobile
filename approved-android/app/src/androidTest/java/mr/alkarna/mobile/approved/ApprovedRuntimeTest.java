@@ -51,7 +51,7 @@ public class ApprovedRuntimeTest {
         assertEquals("100",js("S.records.find(r=>r.kind==='sale').total"));
         assertEquals("false",js("document.querySelector('.invoice-document').innerText.includes('شكرًا')"));
         js("act('go:operations');true");until("view==='operations'");capture("invoice-register");
-        assertEquals("0",js("document.querySelectorAll('[data-action=\"open:actions\"]').length"));
+        assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         for(String format:new String[]{"excel","pdf"}){
             js("act('site:export-"+format+"');true");

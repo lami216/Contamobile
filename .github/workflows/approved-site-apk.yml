@@ -2,7 +2,7 @@ name: Approved seller app APK
 on:
   push:
     branches: [feat/approved-seller-app]
-    paths: ['approved-android/**', 'approved-runtime/**', 'assets/fonts/**', 'assets/icon.png', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
+    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +52,7 @@ jobs:
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
+            trap 'adb pull /sdcard/Android/data/mr.alkarna.mobile.approved/files approved-output/screenshots || true; adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > approved-output/runtime-errors.txt; cat approved-android/app/build/outputs/androidTest-results/connected/release/*.xml 2>/dev/null || true' EXIT
             gradle -p approved-android :app:connectedReleaseAndroidTest --no-daemon --stacktrace
             adb pull /sdcard/Android/data/mr.alkarna.mobile.approved/files approved-output/screenshots
             adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > approved-output/runtime-errors.txt
