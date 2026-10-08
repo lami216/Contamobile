@@ -27,9 +27,11 @@ public class ApprovedRuntimeTest {
         fail("Timed out: "+condition+"; DOM="+js("document.body.innerText"));
     }
     private void capture(String name) throws Exception {
-        until("!document.querySelector('[data-busy-disabled]')");
-        js("window.__qaFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__qaFrameReady=true));true");
-        until("window.__qaFrameReady===true");
+        if(!name.equals("android-print-dialog")){
+            until("!document.querySelector('[data-busy-disabled]')");
+            js("window.__qaFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__qaFrameReady=true));true");
+            until("window.__qaFrameReady===true");
+        }
         var ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
