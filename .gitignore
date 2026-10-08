@@ -9,3 +9,9 @@ web-build/
 coverage/
 android/
 ios/
+
+approved-android/.gradle/
+approved-android/**/build/
+approved-android/app/src/main/assets/
+approved-android/app/src/main/res/drawable/app_icon.png
+approved-android/local.properties

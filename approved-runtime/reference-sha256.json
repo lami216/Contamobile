@@ -1,0 +1,18 @@
+{
+  "index.html": "7f5d2fb888f3e9dfbeba9c00c4ab3c2e427da77805449babbe2b03f9041a8766",
+  "engine.js": "3bec21cb28431a4e16bd97bdb6db85db0692e864fc8b63e4ddb8d56ecf2bbd71",
+  "theme.css": "8872140a17ad119fe8ec84467df6b362dbfae657b77ca41aba12d00d176c764f",
+  "site.css": "75d3762cc18ac4f179ae5f454c87dd677264c876fbfade03330f4ab97101ffb3",
+  "pos.css": "c771c9d35c136a23a6193761194f82ac5310c5381cd6c306116adaea45ecd960",
+  "app.js": "d86359ffcc574134a036fd3dee683a91185652e8cfb1fdde3098bf01bf88ca39",
+  "database.js": "333e6c67753100770b5564031bae667ed816df6b8d97a11e717ff063330446e2",
+  "product-names.js": "baf5c53393c49ebc75e657b935bc80efad0a7bc4d725213ee5c58803686de94a",
+  "barcode-camera.js": "66cb4e50c4e746b514302e5b9163411eeb9f74a729d3e4c0afce024773abedb3",
+  "invoice-view.js": "c1b0a439cc009b5289d6f3c69f22fbdd2eb7be3ed95c6da3de9eb348ec975b80",
+  "record-export.js": "b2890e14fd06d5bfd01ee7f5bcedbdcca46b2f55ee27b7963386d4edeefe30bd",
+  "report-output.js": "48435de27eab39d29ae95e3db7f523eee7003381ad9a4e368fe7bd37ef6c4df2",
+  "xlsx-format.js": "a23d93a271a2acd236c4363a3ac452257f3483db5a6c894b6acd3e92932e04f4",
+  "demo-data.js": "9d1b5683683ccefce3356b5bf09ff5cbb5b0be3bd8a7c61ca74cdaeaf07c5007",
+  "permissions.js": "7adf83b119abe439104d5e671ac196ada4437c0dbed777eb5eaac8536bfd9476",
+  "language.js": "eee84317ce08c1729915bb41fd88aa2a6a070de8d73496750dc5dcbb4922b9d1"
+}

@@ -1,0 +1,72 @@
+name: Approved seller app APK
+on:
+  push:
+    branches: [feat/approved-seller-app]
+    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: approved-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install pinned Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Package pinned approved site
+        run: python3 scripts/prepare-approved-android.py
+      - name: Build installable non-debug APK and device tests
+        run: |
+          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace
+          mkdir -p approved-output
+          cp approved-android/app/build/outputs/apk/release/app-release.apk approved-output/alkarna-approved.apk
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose approved-output/alkarna-approved.apk > approved-output/signature.txt
+          sha256sum approved-output/alkarna-approved.apk > approved-output/SHA256SUMS.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Offline Android seller workflow and cold persistence
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb shell svc wifi disable
+            adb shell svc data disable
+            gradle -p approved-android :app:connectedReleaseAndroidTest --no-daemon --stacktrace
+            adb pull /sdcard/Android/data/mr.alkarna.mobile.approved/files approved-output/screenshots
+            adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > approved-output/runtime-errors.txt
+            test ! -s approved-output/runtime-errors.txt || cat approved-output/runtime-errors.txt
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-approved-apk
+          path: approved-output/alkarna-approved.apk
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload device proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-approved-proof
+          path: |
+            approved-output/*.txt
+            approved-output/screenshots
+            approved-android/app/build/reports/androidTests
+          if-no-files-found: warn
