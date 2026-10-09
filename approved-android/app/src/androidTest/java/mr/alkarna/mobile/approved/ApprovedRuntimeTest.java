@@ -56,6 +56,7 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('.pos-cart-table')");capture("sale-cart");
         assertEquals("false",js("document.body.innerText.includes('سعر الجملة')"));
         js("act('pos:checkout');true");until("modal==='payment'");
+        capture("payment-review");
         String paidTop=js("document.querySelector('.sheet').getBoundingClientRect().top");
         action("pos:settlement:note");assertEquals(paidTop,js("document.querySelector('.sheet').getBoundingClientRect().top"));
         action("pos:settlement:paid");assertEquals(paidTop,js("document.querySelector('.sheet').getBoundingClientRect().top"));
