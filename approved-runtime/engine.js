@@ -442,7 +442,7 @@ function documentSourceDestination(r){
  if(r.kind==='transfer')return {view:'accounts',id:0,tab:'transfers'};
  return {view:'operations',id:0};
 }
-function sourceDestinationMatches(target){return target&&view===target.view&&selected===target.id&&(!target.tab||accountsTab===target.tab)}
+function sourceDestinationMatches(target){return target&&view===target.view&&(!target.id||selected===target.id)&&(!target.tab||accountsTab===target.tab)}
 function locatedSourceMatches(){const r=S.records.find(r=>r.id===sourceRecordFocus);return r&&sourceDestinationMatches(documentSourceDestination(r))}
 function documentSourceView(r){return documentSourceDestination(r).view}
 function invoiceIsAtSource(r){return invoiceSourceContext===r.id}
