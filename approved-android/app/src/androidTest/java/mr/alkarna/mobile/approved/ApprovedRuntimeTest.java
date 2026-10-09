@@ -6,7 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import android.graphics.Bitmap;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.json.JSONTokener;
+import org.json.JSONObject;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiSelector;
 import static org.junit.Assert.*;
@@ -26,6 +26,10 @@ public class ApprovedRuntimeTest {
         while(System.currentTimeMillis()<end){if("true".equals(js(condition)))return;Thread.sleep(150);}
         fail("Timed out: "+condition+"; DOM="+js("document.body.innerText"));
     }
+    private void action(String name) throws Exception {
+        js("window.__qaActionDone=false;act("+JSONObject.quote(name)+").finally(()=>window.__qaActionDone=true);true");
+        until("window.__qaActionDone===true");
+    }
     private void capture(String name) throws Exception {
         if(!name.equals("android-print-dialog")){
             until("!document.querySelector('[data-busy-disabled]')");
@@ -39,7 +43,7 @@ public class ApprovedRuntimeTest {
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
-        js("(()=>{const values={name:'QA owner',shop:'QA store',username:'qa',password:'ReviewTest2026!',seed:'empty'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
+        js("(()=>{const values={name:'QA owner',shop:'QA store',username:'qa',password:'1234',seed:'empty'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
         js("act('go:inventory');act('open:product');true");
         until("!!document.querySelector('.product-editor-sheet')");capture("product-editor");
@@ -55,7 +59,21 @@ public class ApprovedRuntimeTest {
         capture("seller-invoice");assertEquals("9",js("S.products[0].qty"));
         assertEquals("100",js("S.records.find(r=>r.kind==='sale').total"));
         assertEquals("false",js("document.querySelector('.invoice-document').innerText.includes('شكرًا')"));
-        js("act('go:operations');true");until("view==='operations'");capture("invoice-register");
+        action("go:parties");action("partytype:supplier");action("open:party");
+        js("document.querySelector('#sheet-form [name=name]').value='مورد اختبار';true");action("save-party");
+        String supplierId=js("S.parties.find(p=>p.name==='مورد اختبار').id");
+        action("new:purchase");action("pos:add:"+js("S.products[0].id"));action("pos:party");action("pos:party-pick:"+supplierId);
+        action("pos:checkout");action("post-sale");
+        String purchaseId=js("S.records.find(r=>r.kind==='purchase').id");
+        action("source-location:"+purchaseId);
+        assertEquals("true",js("view==='ledger'&&modal===null&&editingId===null&&cart.length===0&&selected==="+supplierId));
+        until("!!document.querySelector('tr.source-record-focus')");capture("supplier-source");
+        assertEquals("0",js("document.querySelectorAll('[data-action=\"new:purchase\"],[data-action=\"new:sale\"]').length"));
+        action("invoice:"+purchaseId);
+        assertEquals("true",js("!!document.querySelector('[data-action=\"source:"+purchaseId+"\"]')"));
+        action("source:"+purchaseId);assertEquals(purchaseId,js("editingId"));
+        action("pos:clear");action("pos:confirm-clear");
+        action("go:operations");capture("invoice-register");
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
@@ -68,9 +86,9 @@ public class ApprovedRuntimeTest {
         js("act('site:export-print');true");until("!!document.querySelector('#print-root .export-report')");device.waitForIdle();Thread.sleep(2000);capture("android-print-dialog");device.pressBack();
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
-        js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='ReviewTest2026!';act('site:login');true");
+        js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
-        assertEquals("9",js("S.products[0].qty"));assertEquals("2",js("S.records.length"));capture("cold-relaunch");
+        assertEquals("10",js("S.products[0].qty"));assertEquals("3",js("S.records.length"));capture("cold-relaunch");
         activity.close();
     }
 }

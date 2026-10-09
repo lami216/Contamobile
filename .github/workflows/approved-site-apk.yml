@@ -28,6 +28,8 @@ jobs:
           gradle-version: '8.13'
       - name: Install pinned Android platform
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Verify source navigation regression
+        run: node scripts/verify-approved-source-navigation.mjs
       - name: Package pinned approved site
         run: python3 scripts/prepare-approved-android.py
       - name: Build installable non-debug APK and device tests
