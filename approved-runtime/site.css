@@ -159,3 +159,7 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 .site-shell .sheet>.primary{flex:none}
 .site-shell .sheet-update{animation:none!important}
 .site-shell .bounded-register-scroll{height:330px;min-height:330px;overflow-anchor:none}
+
+.register-table tbody tr.source-record-focus>td{background:color-mix(in srgb,var(--accent,#79adf0) 18%,var(--surface,#122033));box-shadow:inset 0 2px 0 var(--accent,#79adf0),inset 0 -2px 0 var(--accent,#79adf0);animation:source-record-pulse 1.3s ease-out 2}
+@keyframes source-record-pulse{50%{background:color-mix(in srgb,var(--accent,#79adf0) 32%,var(--surface,#122033))}}
+@media(prefers-reduced-motion:reduce){.register-table tbody tr.source-record-focus>td{animation:none}}

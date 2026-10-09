@@ -429,17 +429,53 @@ act=function(action){
 };
 
 
-// A document source is its original entry workflow, as in offline-conta.
-let invoiceSourceContext=null;
-function documentSourceView(r){return {sale:'sale',purchase:'purchase',expense:'expenses',receive:'ledger',pay:'ledger',stocktransfer:'transfer',adjustment:'adjustment',deposit:'account',withdraw:'account',transfer:'account'}[r?.kind]||'operations'}
+// Source locates a document in its register; only the explicit Edit action opens an editor.
+let invoiceSourceContext=null,sourceRecordFocus=null,sourceRecordView=null,sourceRecordOwner=null,sourceRecordPagingPending=false,sourceRecordDomPending=false;
+function documentSourceDestination(r){
+ const party=S.parties.find(p=>p.id===r?.party);
+ if(party&&['sale','purchase','receive','pay'].includes(r.kind))return {view:'ledger',id:party.id};
+ if(r.kind==='expense')return {view:'expenses',id:0};
+ if(r.kind==='stocktransfer')return {view:'transfer',id:0};
+ if(r.kind==='adjustment')return {view:'adjustment',id:0};
+ if(['deposit','withdraw','transfer','receive','pay'].includes(r.kind)&&r.account)return {view:'account',id:r.account};
+ return {view:'operations',id:0};
+}
+function documentSourceView(r){return documentSourceDestination(r).view}
 function invoiceIsAtSource(r){return invoiceSourceContext===r.id}
-function locateDocumentSource(id){const r=S.records.find(r=>r.id===Number(id));if(!r)return toast('المستند غير موجود');return sourceDocument(r.id)}
+function locateDocumentSource(id){
+ const r=S.records.find(r=>r.id===Number(id));if(!r)return toast('المستند غير موجود');
+ const target=documentSourceDestination(r),party=S.parties.find(p=>p.id===r.party);
+ sourceRecordFocus=r.id;sourceRecordView=target.view;sourceRecordOwner=target.id;sourceRecordPagingPending=true;sourceRecordDomPending=true;
+ if(party)partyType=party.type;
+ period='all';filter='all';search='';modal=null;
+ return go(target.view,target.id);
+}
+const sourceNavigationRows=rows;
+rows=function(list,desc){
+ if(sourceRecordFocus&&view===sourceRecordView&&selected===sourceRecordOwner){
+  const target=S.records.find(r=>r.id===sourceRecordFocus);
+  if(target?.voided&&!list.some(r=>r.id===target.id))list=[target,...list];
+  if(sourceRecordPagingPending&&list.some(r=>r.id===sourceRecordFocus)){
+   const label=view==='transfer'?'سجل التحويلات':view==='adjustment'?'سجل التصحيحات':'سجل المستندات',sort=listWindowSorts.get(listWindowSortKey(label));
+   const value=r=>sort?.label==='التاريخ'?(r.date||'')+' '+(r.time||''):sort?.label==='النوع'?documentLabels[r.kind]:sort?.label==='المبلغ'?r.total:sort?.label==='من'?r.from:sort?.label==='إلى'?r.toWarehouse:sort?.label==='الكمية'?(r.lines||[]).reduce((n,l)=>n+Number(l.qty),0):r.title;
+   const ordered=sort?list.map((r,i)=>({r,i,v:value(r)})).sort((a,b)=>compareValues19(a.v,b.v,sort.direction)||a.i-b.i).map(x=>x.r):list;
+   listWindowPages.set(listWindowKey(label),Math.floor(ordered.findIndex(r=>r.id===sourceRecordFocus)/LIST_PAGE_SIZE)+1);sourceRecordPagingPending=false;
+  }
+ }
+ return sourceNavigationRows(list,desc);
+};
+function focusLocatedRecord(phone){
+ if(!sourceRecordFocus||view!==sourceRecordView||selected!==sourceRecordOwner)return;
+ const row=phone.querySelector('tr[data-action="invoice:'+sourceRecordFocus+'"]');if(!row)return;
+ row.classList.add('source-record-focus');row.setAttribute('aria-current','true');
+ if(sourceRecordDomPending){sourceRecordDomPending=false;row.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})}
+}
 const sourceNavigationCommit=commitRecord;
 commitRecord=function(r){const prior=invoiceSourceContext;invoiceSourceContext=r.id;const saved=sourceNavigationCommit(r);if(!saved)invoiceSourceContext=prior;return saved};
 const sourceNavigationAct=act;
 act=function(action){
  if(action.startsWith('source-location:'))return locateDocumentSource(action.split(':')[1]);
- if(action.startsWith('invoice:')){const r=S.records.find(r=>r.id===Number(action.split(':')[1]));invoiceSourceContext=r&&view===documentSourceView(r)?r.id:null}
+ if(action.startsWith('invoice:')){const r=S.records.find(r=>r.id===Number(action.split(':')[1])),target=r&&documentSourceDestination(r);invoiceSourceContext=target&&view===target.view&&selected===target.id?r.id:null}
  return sourceNavigationAct(action)
 };
 
