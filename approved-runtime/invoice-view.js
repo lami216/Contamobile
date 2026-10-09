@@ -1,6 +1,6 @@
 // Document details deliberately use their own markup. Register decorators
 // and report metric styles must not turn this document into a list of cards.
-export function invoiceDocument(state,record,{esc,money,icon,labels}) {
+export function invoiceDocument(state,record,{esc,money,icon,labels,atSource=false}) {
   const r=record,noncash=['stocktransfer','adjustment','offset'].includes(r.kind);
   const outgoing=['purchase','expense','pay','withdraw'].includes(r.kind);
   const account=state.accounts.find(a=>a.id===r.account);
@@ -21,7 +21,7 @@ export function invoiceDocument(state,record,{esc,money,icon,labels}) {
       ${r.note?`<div class="document-note"><strong>ملاحظات</strong><p>${esc(r.note)}</p></div>`:''}
       <footer class="document-total"><div><span>${noncash?'قيمة العملية':'الإجمالي'}</span><small>${r.voided?'أُلغي أثر هذا المستند':esc(paymentNote)}</small></div>${money(r.total,'document-total-amount',outgoing?'negative':'positive')}</footer>
     </article>
-    <div class="document-actions" role="group" aria-label="إجراءات المستند"><button class="document-print" data-action="site:print">${icon('print')}طباعة / حفظ PDF</button>${r.kind!=='offset'?`<button data-action="source-location:${r.id}">${icon('arrow')}الانتقال إلى المصدر</button>${!r.voided?`<button data-action="source:${r.id}">${icon('edit')}${['sale','purchase','expense'].includes(r.kind)?'تعديل الفاتورة':'تعديل العملية'}</button>`:''}`: ""}${!r.voided?`<button class="document-delete" data-action="void:${r.id}">${icon('trash')}حذف العملية</button>`:''}</div>
+    <div class="document-actions" role="group" aria-label="إجراءات المستند"><button class="document-print" data-action="site:print">${icon('print')}طباعة / حفظ PDF</button>${r.kind!=='offset'?`${!atSource&&!r.voided?`<button data-action="source-location:${r.id}">${icon('arrow')}الانتقال إلى المصدر</button>`:''}${atSource&&!r.voided?`<button data-action="source:${r.id}">${icon('edit')}${['sale','purchase','expense'].includes(r.kind)?'تعديل الفاتورة':'تعديل العملية'}</button>`:''}`: ""}${!r.voided?`<button class="document-delete" data-action="void:${r.id}">${icon('trash')}حذف العملية</button>`:''}</div>
     <button class="document-history" data-action="explain:document:${r.id}">${icon('activity')}سجل التعديلات <span>${r.revision||0}</span></button>
     ${r.voided?'<p class="document-void-note">أُلغي أثر العملية مع الاحتفاظ بالمستند وسجل تعديلاته.</p>':''}
   </div>`;

@@ -364,7 +364,7 @@ rows=function(list,desc){
 const registerMovementBefore=movementTable13;
 movementTable13=function(list,resource){if(resource!=='stock')return registerMovementBefore(list,resource);const headers=['الرقم','التاريخ','العملية','المنتج','المخزن','التغيير'];return table13(headers,list.map((x,i)=>{const split=x.label.lastIndexOf(' · '),product=split>=0?x.label.slice(0,split):x.label,warehouse=split>=0?x.label.slice(split+3):x.r.warehouse||'—';return `<tr data-action="invoice:${x.r.id}"><td>${i+1}</td><td>${recordDate13(x.r)}</td><td>${documentLabels[x.r.kind]}</td><td>${esc(product)}</td><td>${esc(warehouse)}</td><td class="${x.delta>0?'positive':'negative'}">${x.delta>0?'+':''}${x.delta}</td></tr>`}).join('')||'<tr><td colspan="6">لا توجد حركات مخزون</td></tr>','سجل حركة المخزون').replace('register-table-shell','register-table-shell compact-stock-register')};
 
-let listWindowPending=null;
+let listWindowPending=null,listWindowResetScroll=null;
 const LIST_PAGE_SIZE=50,listWindows=new Map(),listWindowPages=new Map(),listWindowSorts=new Map();
 function listWindowSortKey(label){return JSON.stringify([view,selected,view==='reports'?reportType:'',view==='accounts'?accountsTab:'',label])}
 function listWindowKey(label){return JSON.stringify([view,selected,view==='reports'?reportType:'',view==='accounts'?accountsTab:'',partyType,filter,period,dateFrom,dateTo,search,auditScope,inventoryTab,label])}
@@ -398,7 +398,7 @@ rows=function(list,desc){if(list.length<7)return listRowsBefore(list,desc);const
 parties=function(...args){return boundedTableHtml(listPartiesBefore(...args))};
 movementTable13=function(...args){return boundedTableHtml(listMovementBefore(...args))};
 sheet=function(){if(modal!=='browse-picker')return listSheetBefore();const p=browseOptions();return `<div class="overlay"><section class="sheet browse-picker modern-picker" role="dialog" aria-modal="true" aria-label="${esc(p.title)}"><div class="sheet-head"><h2>${esc(p.title)}</h2><button class="icon-btn" data-action="close" aria-label="إغلاق">${icon('close')}</button></div><div class="sheet-body picker-tile-grid" role="group" aria-label="خيارات ${esc(p.title)}">${Object.entries(p.options).map(([id,label])=>`<button class="browse-option picker-tile" aria-pressed="${String(p.value)===id}" data-action="browse-pick:${id}"><span>${esc(label)}</span><span class="picker-radio" aria-hidden="true">${String(p.value)===id?icon('check'):''}</span></button>`).join('')}</div></section></div>`};
-act=function(action){if(action.startsWith('list-page:')){const key=decodeURIComponent(action.split(':').slice(2).join(':')),info=listWindows.get(key);if(info){listWindowPages.set(key,Math.max(1,Math.min(info.pages,info.page+(action.split(':')[1]==='next'?1:-1))));return render()}return}if(action.startsWith('table-sort:')){const [,index,column]=action.split(':'),table=document.querySelectorAll('main table.register-table')[Number(index)],key=table?.dataset.windowKey,info=listWindows.get(key);if(info){const col=Number(column),old=listWindowSorts.get(info.sortKey),direction=old?.displayColumn===col&&old.direction==='asc'?'desc':'asc',label=table.tHead.rows[0].cells[col].textContent.replace(/[↑↓]/g,'').trim();listWindowSorts.set(info.sortKey,{column:col-(table.tHead.rows[0].cells.length-info.rawHeaderCount),displayColumn:col,label,direction});tableSorts19.set(tableSortKey19(Number(index)),{column:col,direction});listWindowPages.set(key,1);return render()}}return listActBefore(action)};
+act=function(action){if(action.startsWith('list-page:')){const key=decodeURIComponent(action.split(':').slice(2).join(':')),info=listWindows.get(key);if(info){listWindowPages.set(key,Math.max(1,Math.min(info.pages,info.page+(action.split(':')[1]==='next'?1:-1))));listWindowResetScroll=key;return render()}return}if(action.startsWith('table-sort:')){const [,index,column]=action.split(':'),table=document.querySelectorAll('main table.register-table')[Number(index)],key=table?.dataset.windowKey,info=listWindows.get(key);if(info){const col=Number(column),old=listWindowSorts.get(info.sortKey),direction=old?.displayColumn===col&&old.direction==='asc'?'desc':'asc',label=table.tHead.rows[0].cells[col].textContent.replace(/[↑↓]/g,'').trim();listWindowSorts.set(info.sortKey,{column:col-(table.tHead.rows[0].cells.length-info.rawHeaderCount),displayColumn:col,label,direction});tableSorts19.set(tableSortKey19(Number(index)),{column:col,direction});listWindowPages.set(key,1);return render()}}return listActBefore(action)};
 function decorateListWindows(){document.querySelectorAll('main .panel,main .report-numeric-grid,main .financial-account-list').forEach(group=>{const items=Array.from(group.children).filter(e=>e.matches('.row,.financial-account-row,.movement-record,.invoice-register-row'));if(items.length>=7&&!items.some(e=>e.dataset.action?.startsWith('go:')))group.classList.add('bounded-data-list')});document.querySelectorAll('main table[data-window-key]').forEach(table=>{const info=listWindows.get(table.dataset.windowKey);if(!info)return;table.querySelectorAll('tbody td.row-ordinal').forEach((td,i)=>td.textContent=String(info.start+i+1));const shell=table.closest('.register-table-shell'),target=shell?.parentElement.id==='results'?shell.parentElement:shell,heading=target?.previousElementSibling,count=heading?.querySelector('.section-count');if(count){count.textContent=count.textContent.replace(/^\d+/,String(info.total));count.setAttribute('aria-label','عدد السجلات المطابقة: '+info.total)}})}
 
 const productEditorSheet=sheet,productEditorAct=act;
@@ -429,39 +429,19 @@ act=function(action){
 };
 
 
-// Source navigation never enters an editor. Editing remains a separate action.
-let sourceRecordFocus=null,sourceRecordView=null,sourceRecordOwner=null,sourceRecordPagingPending=false,sourceRecordDomPending=false;
-function locateDocumentSource(id){
- const r=S.records.find(r=>r.id===Number(id));if(!r)return toast('المستند غير موجود');
- const party=S.parties.find(p=>p.id===r.party),account=S.accounts.find(a=>a.id===r.account),product=S.products.find(p=>p.id===r.lines?.[0]?.product);
- const target=party?'ledger':account?'account':product?'product':null;
- if(!target){sourceKey='document:'+r.id;modal='sourceinfo';return render()}
- editingId=null;modal=null;sourceRecordFocus=r.id;sourceRecordView=target;sourceRecordOwner=(party||account||product).id;sourceRecordPagingPending=true;sourceRecordDomPending=true;
- if(party)partyType=party.type;
- return go(target,(party||account||product).id);
-}
-const sourceNavigationRows=rows;
-rows=function(list,desc){
- if(sourceRecordFocus&&view===sourceRecordView&&selected===sourceRecordOwner){
-  const target=S.records.find(r=>r.id===sourceRecordFocus);
-  if(target?.voided&&!list.some(r=>r.id===target.id))list=[target,...list];
-  if(sourceRecordPagingPending&&list.some(r=>r.id===sourceRecordFocus)){
-   const label='سجل المستندات',sort=listWindowSorts.get(listWindowSortKey(label));
-   const value=r=>sort?.label==='التاريخ'?(r.date||'')+' '+(r.time||''):sort?.label==='النوع'?documentLabels[r.kind]:sort?.label==='المبلغ'?r.total:r.title;
-   const ordered=sort?list.map((r,i)=>({r,i,v:value(r)})).sort((a,b)=>compareValues19(a.v,b.v,sort.direction)||a.i-b.i).map(x=>x.r):list;
-   listWindowPages.set(listWindowKey(label),Math.floor(ordered.findIndex(r=>r.id===sourceRecordFocus)/LIST_PAGE_SIZE)+1);sourceRecordPagingPending=false;
-  }
- }
- return sourceNavigationRows(list,desc);
-};
-function focusLocatedRecord(phone){
- if(!sourceRecordFocus||view!==sourceRecordView||selected!==sourceRecordOwner)return;
- const row=phone.querySelector('tr[data-action="invoice:'+sourceRecordFocus+'"]');if(!row)return;
- row.classList.add('source-record-focus');row.setAttribute('aria-current','true');
- if(sourceRecordDomPending){sourceRecordDomPending=false;row.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})}
-}
+// A document source is its original entry workflow, as in offline-conta.
+let invoiceSourceContext=null;
+function documentSourceView(r){return {sale:'sale',purchase:'purchase',expense:'expenses',receive:'ledger',pay:'ledger',stocktransfer:'transfer',adjustment:'adjustment',deposit:'account',withdraw:'account',transfer:'account'}[r?.kind]||'operations'}
+function invoiceIsAtSource(r){return invoiceSourceContext===r.id}
+function locateDocumentSource(id){const r=S.records.find(r=>r.id===Number(id));if(!r)return toast('المستند غير موجود');return sourceDocument(r.id)}
+const sourceNavigationCommit=commitRecord;
+commitRecord=function(r){const prior=invoiceSourceContext;invoiceSourceContext=r.id;const saved=sourceNavigationCommit(r);if(!saved)invoiceSourceContext=prior;return saved};
 const sourceNavigationAct=act;
-act=function(action){if(action.startsWith('source-location:'))return locateDocumentSource(action.split(':')[1]);return sourceNavigationAct(action)};
+act=function(action){
+ if(action.startsWith('source-location:'))return locateDocumentSource(action.split(':')[1]);
+ if(action.startsWith('invoice:')){const r=S.records.find(r=>r.id===Number(action.split(':')[1]));invoiceSourceContext=r&&view===documentSourceView(r)?r.id:null}
+ return sourceNavigationAct(action)
+};
 
  document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b){e.preventDefault();act(b.dataset.action)}const review=e.target.closest('.review [data-view]');if(review){editingId=null;go(review.dataset.view)}});document.addEventListener('submit',e=>e.preventDefault());document.addEventListener('input',e=>{if(e.target.id!=='search')return;search=e.target.value;if(['sale','purchase'].includes(view)){const list=S.products.filter(p=>!p.archived).filter(p=>searchMatches(p.name+' '+p.sku,search));let existing=$('#live-products');if(!existing){existing=document.createElement('div');existing.id='live-products';$('#content').append(existing)}existing.innerHTML=list.length?`<div class="panel">${list.map(p=>productRow(p,true)).join('')}</div>`:empty('لا توجد نتائج','جرّب اسمًا أو رمزًا مختلفًا.');decorateLists28();return}const pos=e.target.selectionStart;const y=$('#content').scrollTop;render();const el=$('#search');el.focus();el.setSelectionRange(pos,pos);$('#content').scrollTop=y});$('#state-select').addEventListener('change',e=>reset(e.target.value==='empty'));$('#reset').addEventListener('click',()=>reset($('#state-select').value==='empty'));$('#size-select').addEventListener('change',e=>{$('#phone').style.width=e.target.value+'px'});document.addEventListener('keydown',e=>{if(e.key==='Escape'){modal=null;render()}});reset();
 

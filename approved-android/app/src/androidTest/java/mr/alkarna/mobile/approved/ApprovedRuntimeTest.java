@@ -36,6 +36,7 @@ public class ApprovedRuntimeTest {
             js("window.__qaFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__qaFrameReady=true));true");
             until("window.__qaFrameReady===true");
         }
+        Thread.sleep(400);
         var ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
@@ -55,6 +56,9 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('.pos-cart-table')");capture("sale-cart");
         assertEquals("false",js("document.body.innerText.includes('سعر الجملة')"));
         js("act('pos:checkout');true");until("modal==='payment'");
+        String paidTop=js("document.querySelector('.sheet').getBoundingClientRect().top");
+        action("pos:settlement:note");assertEquals(paidTop,js("document.querySelector('.sheet').getBoundingClientRect().top"));
+        action("pos:settlement:paid");assertEquals(paidTop,js("document.querySelector('.sheet').getBoundingClientRect().top"));
         js("act('post-sale');true");until("view==='invoice'&&S.records.some(r=>r.kind==='sale')&&!document.querySelector('.busy')");
         capture("seller-invoice");assertEquals("9",js("S.products[0].qty"));
         assertEquals("100",js("S.records.find(r=>r.kind==='sale').total"));
@@ -66,13 +70,11 @@ public class ApprovedRuntimeTest {
         action("pos:checkout");action("post-sale");
         String purchaseId=js("S.records.find(r=>r.kind==='purchase').id");
         action("source-location:"+purchaseId);
-        assertEquals("true",js("view==='ledger'&&modal===null&&editingId===null&&cart.length===0&&selected==="+supplierId));
-        until("!!document.querySelector('tr.source-record-focus')");capture("supplier-source");
-        assertEquals("0",js("document.querySelectorAll('[data-action=\"new:purchase\"],[data-action=\"new:sale\"]').length"));
-        action("invoice:"+purchaseId);
-        assertEquals("true",js("!!document.querySelector('[data-action=\"source:"+purchaseId+"\"]')"));
-        action("source:"+purchaseId);assertEquals(purchaseId,js("editingId"));
+        assertEquals("true",js("view==='purchase'&&modal===null&&editingId==="+purchaseId+"&&cart.length===1"));
+        capture("purchase-source");
         action("pos:clear");action("pos:confirm-clear");
+        action("go:operations");action("invoice:"+purchaseId);
+        assertEquals("true",js("!!document.querySelector('[data-action=\"source-location:"+purchaseId+"\"]')&&!document.querySelector('[data-action=\"source:"+purchaseId+"\"]')"));
         action("go:operations");capture("invoice-register");
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
@@ -92,3 +94,4 @@ public class ApprovedRuntimeTest {
         activity.close();
     }
 }
+
