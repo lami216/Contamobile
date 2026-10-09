@@ -72,14 +72,34 @@ public class ApprovedRuntimeTest {
         String purchaseId=js("S.records.find(r=>r.kind==='purchase').id");
         String recordCount=js("S.records.length");
         action("source-location:"+purchaseId);
-        assertEquals("true",js("view==='ledger'&&selected==="+supplierId+"&&modal===null&&editingId===null&&cart.length===0"));
-        until("!!document.querySelector('tr.source-record-focus')");capture("supplier-source-highlight");
+        assertEquals("true",js("view==='purchase-source'&&selected===0&&modal===null&&editingId===null&&cart.length===0"));
+        until("!!document.querySelector('tr.source-record-focus')");capture("purchase-source-highlight");
         assertEquals(recordCount,js("S.records.length"));
         action("invoice:"+purchaseId);
         assertEquals("true",js("view==='invoice'&&modal===null&&editingId===null&&!!document.querySelector('[data-action=\"source:"+purchaseId+"\"]')&&!document.querySelector('[data-action=\"source-location:"+purchaseId+"\"]')"));
         capture("invoice-at-source");
         action("source:"+purchaseId);assertEquals(purchaseId,js("editingId"));
         action("pos:clear");action("pos:confirm-clear");
+        action("open:pay");
+        assertEquals("cash",js("view"));
+        js("(()=>{const values={direction:'pay',partyType:'supplier',party:"+supplierId+",account:S.accounts[0].id,amount:'5',note:'payment'};for(const [key,value] of Object.entries(values))document.querySelector('#sheet-form [name='+key+']').value=value;return true})()");
+        action("post-party");String paymentId=js("S.records.find(r=>r.kind==='pay').id");
+        action("source-location:"+paymentId);
+        assertEquals("true",js("view==='cash'&&selected===0&&modal===null&&editingId===null&&cart.length===0"));
+        until("!!document.querySelector('tr.source-record-focus')");capture("payment-source-highlight");
+        action("invoice:"+paymentId);assertEquals("true",js("!!document.querySelector('[data-action=\"source:"+paymentId+"\"]')&&!document.querySelector('[data-action=\"source-location:"+paymentId+"\"]')"));
+        action("source:"+paymentId);assertEquals("true",js("view==='cash'&&modal==='partyCash'&&editingId==="+paymentId));action("close");
+        action("account:"+js("S.accounts[0].id"));
+        assertEquals("false",js("!!document.querySelector('[data-action=\"open:deposit\"]')"));
+        action("go:accounts");action("accounts-tab:adjustments");action("open:deposit");
+        assertEquals("true",js("view==='accounts'&&accountsTab==='adjustments'&&selected===0&&document.querySelector('#sheet-form [name=account]').value===''"));
+        capture("deposit-account-choice");
+        js("document.querySelector('#sheet-form [name=account]').value=S.accounts[0].id;document.querySelector('#sheet-form [name=amount]').value='10';true");action("post-cash");String depositId=js("S.records.find(r=>r.kind==='deposit').id");
+        action("go:operations");action("invoice:"+depositId);action("source-location:"+depositId);
+        assertEquals("true",js("view==='accounts'&&accountsTab==='adjustments'&&selected===0&&modal===null&&editingId===null"));
+        until("!!document.querySelector('tr.source-record-focus')");capture("deposit-source-highlight");
+        action("invoice:"+depositId);action("source:"+depositId);
+        assertEquals("true",js("view==='accounts'&&accountsTab==='adjustments'&&modal==='deposit'&&editingId==="+depositId+"&&document.querySelector('#sheet-form [name=account]').value===String(S.accounts[0].id)"));action("close");
         action("go:operations");capture("invoice-register");
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
@@ -95,7 +115,7 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
-        assertEquals("10",js("S.products[0].qty"));assertEquals("3",js("S.records.length"));capture("cold-relaunch");
+        assertEquals("10",js("S.products[0].qty"));assertEquals("5",js("S.records.length"));capture("cold-relaunch");
         activity.close();
     }
 }

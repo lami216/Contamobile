@@ -332,7 +332,7 @@ act=function(action){const [a,b]=action.split(':');if(a==='open'&&['receive','pa
 document.addEventListener('change',e=>{if(['cash-direction','cash-party-type'].includes(e.target.id))act('cash:change')});
 // The same two-column form rhythm fits short financial dialogs.
 const cashCompactSheet=sheet;
-sheet=function(){if(!['expense','deposit','withdraw','cashtransfer'].includes(modal))return cashCompactSheet();const old=S.records.find(r=>r.id===editingId),accounts=S.accounts.filter(a=>!a.archived),account=old?.account||accounts[0]?.id,title={expense:old?'تعديل فاتورة المصروف':'مصروف جديد',deposit:'إيداع في الحسابات',withdraw:'سحب من الحسابات',cashtransfer:'تحويل بين الحسابات'}[modal],accountField=field(modal==='cashtransfer'?'من حساب':'وسيلة الدفع',`<select name="account">${cashOptions(accounts,account)}</select>`),amountField=field('المبلغ',input('amount','number',old?.total||''));return posModal(title,`<div class="cash-form">${modal==='expense'?field('البيان',input('name','text',old?.title||'')):''}${modal==='cashtransfer'?`<div class="pair">${accountField}${field('إلى حساب',`<select name="to">${cashOptions(accounts,old?.to||accounts[1]?.id)}</select>`)}</div>${amountField}`:`<div class="pair">${accountField}${amountField}</div>`}${field('الملاحظة · اختياري',input('note','text',old?.note||''))}</div>`,'post-cash',old?'حفظ تعديل الحركة':'تأكيد').replace('sheet pos-sheet','sheet pos-sheet cash-sheet')};
+sheet=function(){if(!['expense','deposit','withdraw','cashtransfer'].includes(modal))return cashCompactSheet();const old=S.records.find(r=>r.id===editingId),accounts=S.accounts.filter(a=>!a.archived||a.id===old?.account||a.id===old?.to),account=old?.account||(modal==='expense'?accounts[0]?.id:''),title={expense:old?'تعديل فاتورة المصروف':'مصروف جديد',deposit:'إيداع في الحسابات',withdraw:'سحب من الحسابات',cashtransfer:'تحويل بين الحسابات'}[modal],accountField=field(modal==='cashtransfer'?'من حساب':'وسيلة الدفع',`<select name="account">${cashOptions(accounts,account,modal==='expense'?'':'اختر الحساب')}</select>`),amountField=field('المبلغ',input('amount','number',old?.total||''));return posModal(title,`<div class="cash-form">${modal==='expense'?field('البيان',input('name','text',old?.title||'')):''}${modal==='cashtransfer'?`<div class="pair">${accountField}${field('إلى حساب',`<select name="to">${cashOptions(accounts,old?.to||'','اختر الحساب')}</select>`)}</div>${amountField}`:`<div class="pair">${accountField}${amountField}</div>`}${field('الملاحظة · اختياري',input('note','text',old?.note||''))}</div>`,'post-cash',old?'حفظ تعديل الحركة':'تأكيد').replace('sheet pos-sheet','sheet pos-sheet cash-sheet')};
 
 const cashBaseFooter=footer;footer=function(){return view==='ledger'?`<div class="sticky">${primary(cashBadge()+'دفع-استلام','open:partyCash')}</div>`:cashBaseFooter()};
 
@@ -432,27 +432,31 @@ act=function(action){
 // Source locates a document in its register; only the explicit Edit action opens an editor.
 let invoiceSourceContext=null,sourceRecordFocus=null,sourceRecordView=null,sourceRecordOwner=null,sourceRecordPagingPending=false,sourceRecordDomPending=false;
 function documentSourceDestination(r){
- const party=S.parties.find(p=>p.id===r?.party);
- if(party&&['sale','purchase','receive','pay'].includes(r.kind))return {view:'ledger',id:party.id};
+ if(r.kind==='sale')return {view:'sale-source',id:0};
+ if(r.kind==='purchase')return {view:'purchase-source',id:0};
+ if(['receive','pay'].includes(r.kind))return {view:'cash',id:0};
  if(r.kind==='expense')return {view:'expenses',id:0};
  if(r.kind==='stocktransfer')return {view:'transfer',id:0};
  if(r.kind==='adjustment')return {view:'adjustment',id:0};
- if(['deposit','withdraw','transfer','receive','pay'].includes(r.kind)&&r.account)return {view:'account',id:r.account};
+ if(['deposit','withdraw'].includes(r.kind))return {view:'accounts',id:0,tab:'adjustments'};
+ if(r.kind==='transfer')return {view:'accounts',id:0,tab:'transfers'};
  return {view:'operations',id:0};
 }
+function sourceDestinationMatches(target){return target&&view===target.view&&selected===target.id&&(!target.tab||accountsTab===target.tab)}
+function locatedSourceMatches(){const r=S.records.find(r=>r.id===sourceRecordFocus);return r&&sourceDestinationMatches(documentSourceDestination(r))}
 function documentSourceView(r){return documentSourceDestination(r).view}
 function invoiceIsAtSource(r){return invoiceSourceContext===r.id}
 function locateDocumentSource(id){
  const r=S.records.find(r=>r.id===Number(id));if(!r)return toast('المستند غير موجود');
- const target=documentSourceDestination(r),party=S.parties.find(p=>p.id===r.party);
+ const target=documentSourceDestination(r);
  sourceRecordFocus=r.id;sourceRecordView=target.view;sourceRecordOwner=target.id;sourceRecordPagingPending=true;sourceRecordDomPending=true;
- if(party)partyType=party.type;
+ if(target.tab)accountsTab=target.tab;
  period='all';filter='all';search='';modal=null;
  return go(target.view,target.id);
 }
 const sourceNavigationRows=rows;
 rows=function(list,desc){
- if(sourceRecordFocus&&view===sourceRecordView&&selected===sourceRecordOwner){
+ if(sourceRecordFocus&&locatedSourceMatches()){
   const target=S.records.find(r=>r.id===sourceRecordFocus);
   if(target?.voided&&!list.some(r=>r.id===target.id))list=[target,...list];
   if(sourceRecordPagingPending&&list.some(r=>r.id===sourceRecordFocus)){
@@ -465,17 +469,58 @@ rows=function(list,desc){
  return sourceNavigationRows(list,desc);
 };
 function focusLocatedRecord(phone){
- if(!sourceRecordFocus||view!==sourceRecordView||selected!==sourceRecordOwner)return;
+ if(!sourceRecordFocus||!locatedSourceMatches())return;
  const row=phone.querySelector('tr[data-action="invoice:'+sourceRecordFocus+'"]');if(!row)return;
  row.classList.add('source-record-focus');row.setAttribute('aria-current','true');
  if(sourceRecordDomPending){sourceRecordDomPending=false;row.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})}
 }
 const sourceNavigationCommit=commitRecord;
 commitRecord=function(r){const prior=invoiceSourceContext;invoiceSourceContext=r.id;const saved=sourceNavigationCommit(r);if(!saved)invoiceSourceContext=prior;return saved};
+// Workspaces contain the source register; drafts only open after an explicit action.
+titles['sale-source']='نقطة البيع';titles['purchase-source']='فواتير الشراء';titles.cash='دفع-استلام';
+sectionThemes['sale-source']=sectionThemes.sale;sectionThemes['purchase-source']=sectionThemes.purchase;sectionThemes.cash=sectionThemes.parties;
+const sourceWorkspaceUtility=utility,sourceWorkspaceFooter=footer,sourceWorkspaceAccount=accountDetail,sourceWorkspaceEdit=sourceDocument;
+function workflowSourceRegister(kinds,title,action,label){
+ const list=liveRecords().filter(r=>kinds.includes(r.kind)&&inPeriod(r)&&(!search||searchMatches(r.title+' '+r.id+' '+(r.number||''),search)));
+ return `<div class="source-workspace-tools">${primary(label,action)}</div>${searchField(kinds.includes('sale')||kinds.includes('purchase')?'الطرف أو رقم الفاتورة':'الطرف أو رقم العملية')}${section(title)}${rows(list)}`;
+}
+utility=function(){
+ if(view==='sale-source')return workflowSourceRegister(['sale'],'سجل فواتير البيع','new:sale','فاتورة بيع');
+ if(view==='purchase-source')return workflowSourceRegister(['purchase'],'سجل فواتير الشراء','new:purchase','فاتورة شراء');
+ if(view==='cash')return workflowSourceRegister(['receive','pay'],'سجل الدفع والاستلام','open:receive','تسجيل دفع أو استلام');
+ return sourceWorkspaceUtility();
+};
+footer=function(){if(['sale-source','purchase-source','cash'].includes(view))return `<nav class="nav" aria-label="التنقل الرئيسي">${navItems.map(([id,n,t])=>`<button style="${themeStyle(id)}" data-action="go:${id}" class="${id==='operations'?'active':''}">${icon(n)}<span>${t}</span></button>`).join('')}</nav>`;return sourceWorkspaceFooter()};
+accountDetail=function(){return sourceWorkspaceAccount().replace(/<div class="actions">[\s\S]*?<\/div>/,'')};
+sourceDocument=function(id){
+ const r=S.records.find(r=>r.id===Number(id));if(!r||r.voided)return sourceWorkspaceEdit(id);
+ if(['receive','pay'].includes(r.kind)){
+  editingId=r.id;cashDirection=r.kind;cashPartyType=S.parties.find(p=>p.id===r.party)?.type||'customer';cashDraft={party:r.party,account:r.account,amount:r.total,note:r.note||''};
+  view='cash';selected=0;activeTab='operations';modal='partyCash';return render();
+ }
+ if(['deposit','withdraw','transfer'].includes(r.kind)){
+  editingId=r.id;accountsTab=r.kind==='transfer'?'transfers':'adjustments';view='accounts';selected=0;activeTab='more';modal=r.kind==='transfer'?'cashtransfer':r.kind;return render();
+ }
+ return sourceWorkspaceEdit(id);
+};
 const sourceNavigationAct=act;
 act=function(action){
+ if(action==='post-cash'){
+  const f=form(),old=S.records.find(r=>r.id===editingId);
+  if(!f.account||!S.accounts.some(a=>a.id===Number(f.account)&&(!a.archived||a.id===old?.account)))return error('اختر الحساب');
+  if(modal==='cashtransfer'&&(!f.to||!S.accounts.some(a=>a.id===Number(f.to)&&(!a.archived||a.id===old?.to))))return error('اختر الحساب المستلم');
+ }
+ if(['open:deposit','open:withdraw','open:cashtransfer'].includes(action)){
+  accountsTab=action==='open:cashtransfer'?'transfers':'adjustments';go('accounts',0);return sourceNavigationAct(action);
+ }
+ if(['open:receive','open:pay','open:partyCash'].includes(action)){
+  const p=action==='open:partyCash'?S.parties.find(p=>p.id===selected):null;
+  go('cash',0);sourceNavigationAct(action==='open:partyCash'?'open:receive':action);
+  if(p){cashPartyType=p.type;cashDirection=p.type==='supplier'?'pay':'receive';cashDraft.party=p.id;render()}
+  return;
+ }
  if(action.startsWith('source-location:'))return locateDocumentSource(action.split(':')[1]);
- if(action.startsWith('invoice:')){const r=S.records.find(r=>r.id===Number(action.split(':')[1])),target=r&&documentSourceDestination(r);invoiceSourceContext=target&&view===target.view&&selected===target.id?r.id:null}
+ if(action.startsWith('invoice:')){const r=S.records.find(r=>r.id===Number(action.split(':')[1])),target=r&&documentSourceDestination(r);invoiceSourceContext=sourceDestinationMatches(target)?r.id:null}
  return sourceNavigationAct(action)
 };
 
