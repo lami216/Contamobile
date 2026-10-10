@@ -165,3 +165,47 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 @media(prefers-reduced-motion:reduce){.register-table tbody tr.source-record-focus>td{animation:none}}
 
 .source-workspace-tools{margin-bottom:14px}.source-workspace-tools .primary{width:100%}
+
+/* Gold is an edge token, never an amount, label, icon or filled surface. */
+.phone{--gold-border:#9a804e;--gold-strong:#c3a166;--accent:#8fb9ee;--amber:#f2a09c;--list-bg:#080d14;--list-head:#111c2a}
+.phone[data-appearance=light]{--gold-border:#ac915b;--gold-strong:#8b703b;--accent:#285f9d;--amber:#a33442;--list-bg:#fff;--list-head:#edf1f6}
+.phone .accent,.phone .amber{color:var(--ink)!important}
+.phone :is(.primary,.home-start-sale){background:var(--raised)!important;color:var(--ink)!important;border:1px solid var(--gold-strong)!important;box-shadow:none}
+.phone :is(.text-btn,.secondary,.management-actions button,.data-toolbar button,.list-page-controls button,.pos-note-button,.pos-more,.pos-new-product,.pos-resume,.pos-next-invoice,.export-download-link){border:1px solid var(--gold-border);border-radius:8px;color:var(--ink)}
+.phone .text-btn{padding:7px 11px;min-height:40px;background:var(--surface)}
+.phone :is(.section-title h2,.brand-mark,.catalog-icon,.avatar){color:var(--ink)}
+.phone .nav button[data-action="go:home"],.phone .nav button[data-action="go:more"]{color:var(--ink)!important}
+.phone .nav button[data-action="go:home"] svg,.phone .nav button[data-action="go:more"] svg{color:var(--ink)!important}
+.phone .nav button.active{background:var(--raised)!important;border-color:var(--gold-strong)!important}
+.phone .nav button.active:before{display:none!important}
+.phone .content :is(.metric-card,.stats>div,.compact-record-summary>div,.report-numeric-grid>.row,.financial-account-row):has(.accent){--tile-bg:var(--surface);--tile-border:var(--gold-border)}
+.phone .content .ledger-balance:has(.accent){background:var(--surface)!important;border-color:var(--gold-border)!important}
+.phone :is(.register-table-shell,.invoice-register,.panel:not(.summary),.pos-cart-table-shell,.document-lines-frame,.financial-account-list,.pos-choice-list,.pos-product-results){border-color:var(--gold-strong)!important}
+.phone .register-scroll{border-inline-end:2px solid var(--gold-border)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table){border-collapse:collapse;background:var(--list-bg)}
+.phone :is(.register-table,.document-lines,.pos-cart-table) th{background:var(--list-head)!important;color:var(--ink);border-color:var(--gold-border)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) td{background:var(--list-bg)!important;border-color:var(--gold-border)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) tbody tr:nth-child(n){background:var(--list-bg)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) tbody tr:hover td{background:var(--list-bg)!important}
+.phone .register-table td,.phone .document-lines td,.phone .pos-cart-table td{border-inline-end:1.5px solid var(--gold-border);border-bottom:1.5px solid var(--gold-border)}
+.phone :is(.row,.financial-account-row,.catalog-item,.pos-choice-list>button,.pos-product-hit,.invoice-record){background:var(--list-bg)!important;border-color:var(--gold-border)!important}
+.phone .register-table tbody tr.source-record-focus>td{background:var(--list-bg)!important;box-shadow:inset 0 2px 0 var(--gold-strong),inset 0 -2px 0 var(--gold-strong);animation:source-edge-pulse31 1s ease-out 2}
+@keyframes source-edge-pulse31{50%{box-shadow:inset 0 3px 0 var(--gold-strong),inset 0 -3px 0 var(--gold-strong)}}
+.report-metrics-31{gap:8px}.report-metrics-31 .metric-card{min-height:54px;text-align:start;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px}
+.report-metrics-31 .metric-card strong{font-size:12px;line-height:1.5;flex:1;min-width:0}.report-metrics-31 .metric-card .amount{font-size:19px;flex:none;white-space:nowrap}.report-metrics-31 .metric-count{font:700 20px system-ui}
+.report-context-note{font-size:12px;line-height:1.8;color:var(--muted);margin:10px 0 14px}
+.report-trace-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px}.report-trace-heading h3{font-size:17px}.report-trace-heading small{font-size:11px;color:var(--muted)}
+.report-trace-total{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:10px 12px;border:1px solid var(--gold-border);border-radius:9px;background:var(--surface);margin:10px 0;font-size:13px}
+.report-trace-component{display:flex;align-items:center;gap:9px;min-height:48px;width:100%;text-align:start;padding:9px 12px;border:1px solid var(--gold-border);border-radius:9px;background:var(--list-bg);margin:7px 0;font-size:13px}
+.report-trace-component>span:first-child{flex:1;min-width:0}.report-trace-component svg{width:16px;height:16px;color:var(--muted)}.report-trace-component:hover{border-color:var(--gold-strong)}
+.report-reconciliation{padding:12px;border:1px solid var(--gold-border);border-radius:11px;margin:12px 0 16px;background:var(--surface)}.report-reconciliation h4{font-size:14px}
+.report-source-table{margin:12px 0}.report-source-table table{table-layout:fixed;width:100%}.report-source-table th:first-child{width:42px;white-space:nowrap}.report-source-table :is(th,td):last-child{width:30%}.report-source-table td{overflow-wrap:anywhere}.report-source-table td small{display:block;font-size:10px;line-height:1.5;color:var(--muted);margin-top:4px}.report-source-table .amount{font-size:13px;white-space:nowrap}
+.report-trace-alert{font-size:12px;line-height:1.8;padding:10px;border:1px solid var(--red);border-radius:9px;color:var(--ink)}.report-trace-alert p{margin:6px 0}.report-ledger-link{width:100%;justify-content:space-between;margin:12px 0}
+.phone .register-table td .amount{display:inline-flex;flex-wrap:nowrap!important;white-space:nowrap!important;gap:2px;font-size:clamp(10px,2.8vw,12px);line-height:1.3}
+.phone .register-table td .amount>span{white-space:nowrap!important;word-break:normal;overflow-wrap:normal}
+.phone .register-table td .amount .currency{font-size:7px;white-space:nowrap!important;word-break:normal}
+.phone .register-table td{padding-inline:4px}
+.phone .sheet{background:var(--bg)!important}
+.phone :is(.attention,.badge.warn){color:var(--ink)!important;background:var(--surface)!important;border-color:var(--gold-border)!important}
+@media(max-width:380px){.report-metrics-31 .metric-card{padding:8px;gap:6px}.report-metrics-31 .metric-card strong{font-size:11px}.report-metrics-31 .metric-card .amount{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.phone .register-table tbody tr.source-record-focus>td{animation:none}}
