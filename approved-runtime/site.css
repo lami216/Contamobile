@@ -207,5 +207,7 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 .phone .register-table td{padding-inline:4px}
 .phone .sheet{background:var(--bg)!important}
 .phone :is(.attention,.badge.warn){color:var(--ink)!important;background:var(--surface)!important;border-color:var(--gold-border)!important}
+.phone .column-sort>span{color:var(--muted)!important}
+.phone .nav button.active,.phone .nav button.active svg{color:var(--section-ink)!important}
 @media(max-width:380px){.report-metrics-31 .metric-card{padding:8px;gap:6px}.report-metrics-31 .metric-card strong{font-size:11px}.report-metrics-31 .metric-card .amount{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.phone .register-table tbody tr.source-record-focus>td{animation:none}}
