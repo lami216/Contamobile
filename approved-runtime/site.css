@@ -211,3 +211,15 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 .phone .nav button.active,.phone .nav button.active svg{color:var(--section-ink)!important}
 @media(max-width:380px){.report-metrics-31 .metric-card{padding:8px;gap:6px}.report-metrics-31 .metric-card strong{font-size:11px}.report-metrics-31 .metric-card .amount{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.phone .register-table tbody tr.source-record-focus>td{animation:none}}
+
+/* One edge palette across screens, sheets, controls and complete table frames. */
+.site-shell #phone.phone,.site-shell #phone.phone *,.site-shell #phone.phone *::before,.site-shell #phone.phone *::after{border-color:var(--gold-border)!important}
+.phone{--line:var(--gold-border);--grid-edge:var(--gold-border);--grid-outer:var(--gold-border);--document-grid-edge:var(--gold-border);--document-grid-outer:var(--gold-border)}
+.phone :is(button,input,select,textarea,summary[role=button],.export-download-link){border:1px solid var(--gold-border)!important}
+.phone button{border-radius:8px}
+.phone .nav button{border-radius:16px}
+.phone :is(.register-table-shell,.invoice-register,.pos-cart-table-shell,.document-lines-frame,.financial-account-list,.pos-choice-list,.pos-product-results){border:2px solid var(--gold-border)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table){border:1.5px solid var(--gold-border)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td){border-color:var(--gold-border)!important}
+.phone :is(.invoice-document,.panel,.metric-card,.stats>div,.summary-group,.ledger-balance,.inventory-browser,.report-reconciliation,.report-trace-total){border-color:var(--gold-border)!important}
+.phone :is(input,select,textarea):focus-visible,.phone button:focus-visible{outline:2px solid var(--section-ink,var(--accent));outline-offset:2px}

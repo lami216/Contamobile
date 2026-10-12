@@ -431,6 +431,7 @@ act=function(action){
 
 // Source locates a document in its register; only the explicit Edit action opens an editor.
 let invoiceSourceContext=null,sourceRecordFocus=null,sourceRecordView=null,sourceRecordOwner=null,sourceRecordPagingPending=false,sourceRecordDomPending=false;
+function clearLocatedRecordFocus(){sourceRecordFocus=null;sourceRecordView=null;sourceRecordOwner=null;sourceRecordPagingPending=false;sourceRecordDomPending=false}
 function documentSourceDestination(r){
  if(r.kind==='sale')return {view:'sale-source',id:0};
  if(r.kind==='purchase')return {view:'purchase-source',id:0};
@@ -469,7 +470,8 @@ rows=function(list,desc){
  return sourceNavigationRows(list,desc);
 };
 function focusLocatedRecord(phone){
- if(!sourceRecordFocus||!locatedSourceMatches())return;
+ if(!sourceRecordFocus)return;
+ if(!locatedSourceMatches()){clearLocatedRecordFocus();return}
  const row=phone.querySelector('tr[data-action="invoice:'+sourceRecordFocus+'"]');if(!row)return;
  row.classList.add('source-record-focus');row.setAttribute('aria-current','true');
  if(sourceRecordDomPending){sourceRecordDomPending=false;row.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})}
@@ -505,6 +507,7 @@ sourceDocument=function(id){
 };
 const sourceNavigationAct=act;
 act=function(action){
+ if(/^(invoice:|go:|back$|accounts-tab:|resource:)/.test(action))clearLocatedRecordFocus();
  if(action==='post-cash'){
   const f=form(),old=S.records.find(r=>r.id===editingId);
   if(!f.account||!S.accounts.some(a=>a.id===Number(f.account)&&(!a.archived||a.id===old?.account)))return error('اختر الحساب');

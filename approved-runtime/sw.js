@@ -1,4 +1,4 @@
-const CACHE='alkarna-web-3-report-sources';
+const CACHE='alkarna-web-4-unified-edges';
 const FILES=['./','./index.html','./engine.js','./app.js','./invoice-view.js','./record-export.js','./report-output.js','./xlsx-format.js','./demo-data.js','./database.js','./product-names.js','./barcode-camera.js','./permissions.js','./language.js','./theme.css','./site.css','./pos.css','./manifest.webmanifest','./assets/StitchArabic.ttf','./assets/StitchArabicBold.ttf'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('alkarna-web-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

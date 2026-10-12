@@ -27,9 +27,16 @@ const payment={...S.records[0],id:900,kind:'pay',party:supplier.id,account:5,tot
 const deposit={...payment,id:901,kind:'deposit',party:null};S.records.push(deposit);act('source-location:901');assert.equal(accountsTab,'adjustments');accountsTab='transfers';let painted=0;focusLocatedRecord({querySelector(){painted++;return row}});assert.equal(painted,0);act('invoice:901');assert(!invoiceIsAtSource(deposit));act('source-location:901');act('invoice:901');act('source:901');assert.equal(view,'accounts');assert.equal(accountsTab,'adjustments');assert.equal(editingId,901);assert.equal(modal,'deposit');assert(sheet().includes('value="5" selected'));
 reset();act('open:deposit');const cashBefore=JSON.stringify(S);inputForm={account:'',amount:'100'};act('post-cash');assert(lastError);assert.equal(JSON.stringify(S),cashBefore);
 reset();act('new:sale');act('pos:add:1');const draft=JSON.stringify(cart);act('source-location:104');assert.equal(view,'sale-source');assert.equal(JSON.stringify(cart),draft);assert.equal(modal,null);
+reset();cart=[];const focusId=S.records.find(r=>r.kind==='sale').id;
+act('source-location:'+focusId);assert.equal(sourceRecordFocus,focusId);
+act('invoice:'+focusId);assert.equal(sourceRecordFocus,null);assert(invoiceIsAtSource(S.records.find(r=>r.id===focusId)));act('back');assert.equal(sourceRecordFocus,null);
+act('source-location:'+focusId);act('go:inventory');act('back');assert.equal(sourceRecordFocus,null);
+act('source-location:'+focusId);view='home';focusLocatedRecord({querySelector(){throw Error('must not paint outside source')}});assert.equal(sourceRecordFocus,null);view='sale-source';assert.equal(sourceRecordFocus,null);
+act('source-location:'+focusId);assert.equal(sourceRecordFocus,focusId);
 
 `,c);
 const state=vm.runInContext('S',c),record=state.records[0];
 const render=atSource=>invoiceDocument(state,record,{esc:x=>String(x??''),money:x=>String(x),icon:()=>'',labels:{purchase:'فاتورة شراء'},atSource});
 assert(render(false).includes(`source-location:${record.id}`));assert(!render(false).includes(`data-action="source:${record.id}"`));assert(!render(true).includes(`source-location:${record.id}`));assert(render(true).includes(`data-action="source:${record.id}"`));
 console.log('PASS locate and highlight without opening/editing, distant/cancelled rows, workflow sources instead of owners/accounts, tab scoping, centralized cash/deposit, required account choice, preserved drafts, row opens detail and Edit alone opens editor');
+
