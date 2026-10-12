@@ -223,3 +223,5 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 .phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td){border-color:var(--gold-border)!important}
 .phone :is(.invoice-document,.panel,.metric-card,.stats>div,.summary-group,.ledger-balance,.inventory-browser,.report-reconciliation,.report-trace-total){border-color:var(--gold-border)!important}
 .phone :is(input,select,textarea):focus-visible,.phone button:focus-visible{outline:2px solid var(--section-ink,var(--accent));outline-offset:2px}
+/* Cell labels belong to the table grid rather than a second frame inside it. */
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(.column-sort,.home-invoice-party){border-width:0!important;border-radius:0}
