@@ -94,3 +94,7 @@ Legacy `return` records remain read-only historical data. They are not offered a
 4. Visually inspect Arabic and French A4, thermal 80 mm and thermal 58 mm output on Android, including logo and one real share/print target.
 5. Run the final Arabic/French copy, RTL/LTR, small-screen and large-font sweep.
 6. Only after the above, implement the mobile activation/licensing system and its offline activation-file workflow.
+
+## Approved runtime party summaries — 2026-10-18
+
+The approved Android runtime and standalone preview now share the desktop customer/supplier historical trade, cash and gross-profit/purchase-count summaries, separate current debt directions and bounded metric source lists. Aggregate scope is every active account of the selected type across all time; search does not change the totals. See PARTY_SUMMARIES.md for the source trace, sign mapping and evidence.

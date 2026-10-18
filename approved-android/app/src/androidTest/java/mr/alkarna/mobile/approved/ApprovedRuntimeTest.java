@@ -98,6 +98,16 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("view==='cash'"));
         js("(()=>{const values={direction:'pay',partyType:'supplier',party:"+supplierId+",account:S.accounts[0].id,amount:'5',note:'payment'};for(const [key,value] of Object.entries(values))document.querySelector('#sheet-form [name='+key+']').value=value;return true})()");
         action("post-party");String paymentId=js("S.records.find(r=>r.kind==='pay').id");
+        action("go:parties");action("partytype:supplier");
+        assertEquals("6",js("document.querySelectorAll('.party-stat').length"));
+        assertEquals("40",js("document.querySelector('[data-metric=trade]').dataset.value"));
+        assertEquals("45",js("document.querySelector('[data-metric=cashOut]').dataset.value"));
+        assertEquals("1",js("document.querySelector('[data-metric=invoiceCount]').dataset.value"));capture("supplier-directory-summary");
+        action("ledger:"+supplierId);
+        assertEquals("5",js("document.querySelector('[data-metric=receivable]').dataset.value"));
+        assertEquals("0",js("document.querySelector('[data-metric=payable]').dataset.value"));capture("supplier-account-summary");
+        action("site:party-metric:supplier:"+supplierId+":cashOut");
+        assertEquals("true",js("!!document.querySelector('.party-metric-source')&&document.querySelectorAll('.party-metric-source tbody tr').length===2"));capture("supplier-cash-sources");action("close");
         action("source-location:"+paymentId);
         assertEquals("true",js("view==='cash'&&selected===0&&modal===null&&editingId===null&&cart.length===0"));
         until("!!document.querySelector('tr.source-record-focus')");capture("payment-source-highlight");

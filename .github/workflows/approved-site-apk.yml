@@ -32,6 +32,8 @@ jobs:
         run: node scripts/verify-approved-source-navigation.mjs
       - name: Verify report sources and reconciliation
         run: node scripts/verify-report-sources.mjs
+      - name: Verify customer and supplier historical totals
+        run: node scripts/verify-party-summaries.mjs
       - name: Package pinned approved site
         run: python3 scripts/prepare-approved-android.py
       - name: Prepare independent desktop license contract fixtures
