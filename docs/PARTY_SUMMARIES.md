@@ -10,6 +10,8 @@ Rules: aggregate only active parties of the selected category; searching and his
 
 Inputs/storage: read the existing parties, records, stored profit, balances and opening balances. No writes, migrations, backup changes or recalculation of stored balances. No change to invoice accounting, activation, user sessions or source navigation. Summary permissions follow `customers.view` / `suppliers.view` as desktop bootstrap does; source lists expose party-attributed amounts, not raw bank movement data. Invoice detail retains its existing permission gate.
 
+Import correction: future official desktop imports normalize `receivable - payable` into the mobile party sign, including a customer credit balance and supplier advance/refund balance. The previous converter discarded those reverse directions. Existing user data is not rewritten; the change only preserves financial meaning when an import is explicitly confirmed. Simultaneous positive receivable/payable values retain the existing unsupported-import guard.
+
 Edge cases: zero/empty data, no search matches, archived parties, reverse customer/supplier balances, cash vs credit, later receipt/payment in either party direction, cancelled and reversal entries, missing historical profit, negative profit, cent rounding, long names, 100-million amounts and large histories. Source lists keep the existing 50-row pages and bounded scroll.
 
 Validation: compare accounting fixtures against the fetched desktop pure functions; test Arabic/French, light/dark, narrow and wide layouts, metric sources, live cash changes, reload persistence, role restrictions and large histories. Verified results are recorded with the delivery evidence.

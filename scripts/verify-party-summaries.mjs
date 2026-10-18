@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {validateState} from '../approved-runtime/database.js';
 import {partyFinancialSummary,partyMetricContributions,partyNetBalance,historicalPartyProfit} from '../approved-runtime/party-metrics.js';
 const parties=[{id:1,type:'customer',balance:600},{id:2,type:'customer',balance:-75},{id:3,type:'supplier',balance:400},{id:4,type:'supplier',balance:-60},{id:5,type:'customer',balance:999,archived:true}];
 const record=(kind,party,total,extra={})=>({id:Math.random(),kind,party,total,paid:0,lines:[],date:'2020-01-01',...extra});
@@ -23,3 +26,9 @@ const large={parties:[parties[0]],records:Array.from({length:10000},(_,id)=>reco
 const start=performance.now();const summary=partyFinancialSummary(large,'customer');assert.equal(summary.values.trade,1000000);assert.equal(summary.values.cashIn,500000);assert.equal(summary.values.profit,100000);
 console.log('PASS desktop party totals: cash/credit, both party directions, historic profit, returns, void/reversal exclusions, active/archive scope, independent debt directions, cent rounding, immutable state and source reconciliation');
 console.log('CHECK 10,000 party records summarized in '+Math.round(performance.now()-start)+' ms');
+const converter=fs.readFileSync(new URL('../approved-runtime/app.js',import.meta.url),'utf8').match(/^function desktopToState.*$/m)?.[0];assert(converter);
+const convert=vm.runInNewContext(converter+';desktopToState',{validateState});
+const imported=convert({collections:{products:[],paymentAccounts:[],warehouses:[{id:'w',name:'الرئيسي'}],documents:[],financialMovements:[],parties:[{id:'a',name:'عميل مدين',partyType:'customer',receivable:100,payable:0},{id:'b',name:'عميل دائن',partyType:'customer',receivable:0,payable:50},{id:'c',name:'مورد دائن',partyType:'supplier',receivable:0,payable:200},{id:'d',name:'مورد مدين',type:'supplier',receivable:60,payable:0}]}});
+assert.deepEqual(Array.from(imported.parties,p=>p.balance),[100,-50,200,-60]);
+assert.equal(partyFinancialSummary(imported,'customer').values.payable,50);assert.equal(partyFinancialSummary(imported,'supplier').values.receivable,60);
+console.log('PASS official desktop import preserves both customer/supplier debt directions');
