@@ -41,6 +41,7 @@ jobs:
           gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace
           mkdir -p approved-output
           cp approved-android/app/build/outputs/apk/release/app-release.apk approved-output/alkarna-approved.apk
+          python3 scripts/verify-activation-package.py approved-output/alkarna-approved.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose approved-output/alkarna-approved.apk > approved-output/signature.txt
           sha256sum approved-output/alkarna-approved.apk > approved-output/SHA256SUMS.txt
       - name: Enable KVM

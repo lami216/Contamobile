@@ -1,6 +1,9 @@
 package mr.alkarna.mobile.approved;
 
 import org.json.JSONObject;
+import android.util.JsonReader;
+import android.util.JsonToken;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.*;
@@ -48,10 +51,22 @@ final class LicenseVerifier {
         StringBuilder out=new StringBuilder("{");for(String field:fields){if(out.length()>1)out.append(',');out.append(quote(field)).append(':');Object value=p.get(field);out.append(value==JSONObject.NULL?"null":value instanceof Number?Long.toString(((Number)value).longValue()):quote((String)value));}return out.append('}').toString();
     }
     static byte[] der(byte[] raw){byte[][] parts=new byte[2][];int length=0;for(int n=0;n<2;n++){int start=n*32,end=start+32;while(start<end-1&&raw[start]==0)start++;boolean pad=(raw[start]&128)!=0;byte[] value=new byte[end-start+(pad?1:0)];System.arraycopy(raw,start,value,pad?1:0,end-start);parts[n]=value;length+=2+value.length;}byte[] result=new byte[length+2];result[0]=0x30;result[1]=(byte)length;int offset=2;for(byte[] part:parts){result[offset++]=2;result[offset++]=(byte)part.length;System.arraycopy(part,0,result,offset,part.length);offset+=part.length;}return result;}
+    private static Object readJson(JsonReader reader,int depth) throws Exception {
+        if(depth>32)throw invalid();JsonToken token=reader.peek();
+        switch(token){
+            case BEGIN_OBJECT:JSONObject object=new JSONObject();reader.beginObject();while(reader.hasNext())object.put(reader.nextName(),readJson(reader,depth+1));reader.endObject();return object;
+            case BEGIN_ARRAY:org.json.JSONArray array=new org.json.JSONArray();reader.beginArray();while(reader.hasNext())array.put(readJson(reader,depth+1));reader.endArray();return array;
+            case STRING:return reader.nextString();
+            case NUMBER:String raw=reader.nextString();try{if(!raw.contains(".")&&!raw.contains("e")&&!raw.contains("E"))return Long.parseLong(raw);}catch(NumberFormatException ignored){}double number=Double.parseDouble(raw);if(!Double.isFinite(number))throw invalid();return number;
+            case BOOLEAN:return reader.nextBoolean();
+            case NULL:reader.nextNull();return JSONObject.NULL;
+            default:throw invalid();
+        }
+    }
     static JSONObject verify(String content,String device) throws Exception {
         if(content==null||content.getBytes(StandardCharsets.UTF_8).length>MAX_BYTES)throw new Rejected("LICENSE_TOO_LARGE","ملف الترخيص أكبر من 64 كيلوبايت");
         try {
-            JSONObject doc=new JSONObject(content);Object versionValue=doc.get("version");int version=doc.getInt("version");
+            JSONObject doc;try(JsonReader reader=new JsonReader(new StringReader(content))){reader.setLenient(false);Object parsed=readJson(reader,0);if(!(parsed instanceof JSONObject)||reader.peek()!=JsonToken.END_DOCUMENT)throw invalid();doc=(JSONObject)parsed;}Object versionValue=doc.get("version");int version=doc.getInt("version");
             if(!(versionValue instanceof Number)||((Number)versionValue).doubleValue()!=version||!(version==1||version==2)||!"alkarna-license".equals(doc.opt("schema"))||!"ECDSA_P256_SHA256".equals(doc.opt("algorithm")))throw invalid();
             String keyId=doc.getString("keyId");if(!keyId.equals("alkarna-license-v"+version)||!PUBLIC_KEYS.containsKey(keyId))throw invalid();
             JSONObject p=doc.getJSONObject("payload");

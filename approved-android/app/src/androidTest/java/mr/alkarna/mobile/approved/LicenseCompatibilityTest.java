@@ -43,6 +43,11 @@ public class LicenseCompatibilityTest {
         try{LicenseVerifier.verify(" ".repeat(65537),device);fail("Oversize accepted");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_TOO_LARGE",e.code);}
         keys().clear();keys().putAll(original);rejects(document("v2"),device,"LICENSE_INVALID");
     }
+    @Test public void rejectsLenientJsonAndTrailingContent() throws Exception {
+        String text=document("v2").toString(),device=fixtures.getString("device");
+        for(String candidate:new String[]{text+" garbage","/*comment*/"+text,text.replace("\"schema\":","schema:"),text.replace("\"schema\":","'schema':")}){try{LicenseVerifier.verify(candidate,device);fail("Lenient JSON accepted");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_INVALID",e.code);}}
+        assertNotNull(LicenseVerifier.verify(" \n"+text+"\t ",device));
+    }
     private JSONObject active(long now,long duration) throws Exception{return new JSONObject().put("licenseId","clock").put("remainingMs",duration).put("lastWallClockMs",now).put("expired",false).put("clockRollbackDetected",false);}
     @Test public void countsOpenClosedTimeAndDoesNotDoubleCount() throws Exception {
         long wall=2000000000000L;JSONObject a=active(wall,10800000);LicenseClock clock=new LicenseClock();
