@@ -49,10 +49,14 @@ parties=function(){
  return `<div class="tabs">${[['customer','العملاء'],['supplier','الموردون']].filter(([id])=>availableTypes.includes(id)).map(([id,title])=>`<button class="${partyType===id?'active':''}" data-action="partytype:${id}">${title}</button>`).join('')}</div>${partySummaryMarkup(summary,true)}${searchField('ابحث بالاسم أو الهاتف')}<div id="results">${directory}</div>${partySummaryMarkup(summary)}`;
 };
 const accountLedgerBeforeSummary=ledger;
+function partyAccountHistory(party){
+ const records=liveRecords().filter(r=>r.party===party.id);if(!records.length)return section('حركات الحساب')+empty('لا توجد حركات في الفترة','ستظهر الفواتير والحركات هنا بعد تسجيلها.');
+ return `<div class="party-account-history">${reportSourceTable31('حركات الحساب',['التاريخ','النوع','المبلغ'],records,r=>({action:'invoice:'+r.id,cells:[`<span class="party-movement-date" dir="ltr">${esc(r.date||'')} <small>${esc(r.time||'')}</small></span>`,esc(documentLabels[r.kind]||r.kind),money(r.total,'xs',['purchase','pay','expense','withdraw'].includes(r.kind)?'negative':['sale','receive'].includes(r.kind)?'positive':'')]}))}</div>`;
+}
 ledger=function(){
  const p=S.parties.find(p=>p.id===selected);if(!p)return accountLedgerBeforeSummary();
  const summary=partyFinancialSummary(S,p.type,p.id);
- return `<div class="party-account-heading"><div><small class="party-account-type">${p.type==='customer'?'حساب العميل':'حساب المورد'}</small><h2>${esc(p.name)}</h2><small dir="ltr">${esc(p.phone||'—')}</small></div><button type="button" class="icon-btn" data-action="open:partyedit" aria-label="تعديل الحساب">${icon('edit')}</button></div><div class="party-account-metrics">${partySummaryMarkup(summary,true,true)}${partySummaryMarkup(summary,false,true)}</div>${section('حركات الحساب')}${rows(liveRecords().filter(r=>r.party===p.id),'لا توجد حركات في الفترة')}`;
+ return `<div class="party-account-heading"><div><small class="party-account-type">${p.type==='customer'?'حساب العميل':'حساب المورد'}</small><h2>${esc(p.name)}</h2><small dir="ltr">${esc(p.phone||'—')}</small></div><button type="button" class="icon-btn" data-action="open:partyedit" aria-label="تعديل الحساب">${icon('edit')}</button></div><div class="party-account-metrics">${partySummaryMarkup(summary,true,true)}${partySummaryMarkup(summary,false,true)}</div>${partyAccountHistory(p)}`;
 };
 function partyMetricSourceMarkup(){
  const selection=partyMetricSelection,summary=partyFinancialSummary(S,selection.type,selection.id),key=selection.key,label=partyMetricLabel(summary,key),value=summary.values[key],count=key==='invoiceCount',people=new Map(summary.parties.map(p=>[p.id,p]));

@@ -14,6 +14,8 @@ Import correction: future official desktop imports normalize `receivable - payab
 
 Edge cases: zero/empty data, no search matches, archived parties, reverse customer/supplier balances, cash vs credit, later receipt/payment in either party direction, cancelled and reversal entries, missing historical profit, negative profit, cent rounding, long names, 100-million amounts and large histories. Source lists keep the existing 50-row pages and bounded scroll.
 
+Account history uses four columns (number, date, document type, amount). Repeating the already-selected account name in every row was redundant and squeezed large monetary values on narrow screens. Document detail still preserves the full title, name, note and existing source/edit behavior. The directory and general invoice register retain their own columns.
+
 Validation: compare accounting fixtures against the fetched desktop pure functions; test Arabic/French, light/dark, narrow and wide layouts, metric sources, live cash changes, reload persistence, role restrictions and large histories. Verified results are recorded with the delivery evidence.
 
 Local results: 80 aggregate comparisons against the unchanged fetched desktop functions over 10,000 mixed records passed. Sixteen narrow-screen captures cover both party types at directory/account scope in both languages and appearances; 13 source checks, all-time search scope and 100-million amounts passed. The 10,000-record aggregate completed in 9 ms in the local domain check.

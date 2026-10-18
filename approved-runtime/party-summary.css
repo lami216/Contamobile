@@ -29,5 +29,14 @@
 .phone .party-account-metrics .party-summary{margin-block:0 12px}
 .phone .party-metric-source .report-trace-total{border-color:var(--edge-strong)}
 .phone .party-metric-source .report-context-note{margin:8px 0 12px}
+.phone .party-account-history .register-table th:nth-child(1){width:9%}
+.phone .party-account-history .register-table th:nth-child(2){width:30%}
+.phone .party-account-history .register-table th:nth-child(3){width:29%}
+.phone .party-account-history .register-table th:nth-child(4){width:32%}
+.phone .party-account-history .register-table td{padding-inline:5px}
+.phone .party-account-history .amount.money-wide{font-size:clamp(8px,2.4vw,10px)}
+.phone .party-account-history .amount .currency{font-size:8px}
+.phone .party-account-history .party-movement-date{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;direction:ltr;font-size:clamp(7px,2.2vw,9px)}
+.phone .party-account-history .party-movement-date small{display:inline;margin:0;font-size:inherit}
 @media(hover:hover){.phone .party-stat:hover{background:color-mix(in srgb,var(--section-ink) 8%,var(--surface))}}
 @media(min-width:660px){.phone .party-history-summary .party-summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.phone .party-history-summary .party-stat:nth-child(n+2){border-inline-start:1px solid var(--edge)}.phone .party-history-summary .party-stat:nth-child(n){border-top:0}}
