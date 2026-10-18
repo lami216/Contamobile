@@ -8,6 +8,8 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.print.PrintAttributes;
 import android.print.PrintManager;
 import android.util.Base64;
@@ -30,6 +32,10 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> chooser;
     private String scannerRequest;
     private Export pendingExport;
+    private DeviceLicense licensing;
+    private boolean activationPage;
+    private final Handler licenseTimer=new Handler(Looper.getMainLooper());
+    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
     private static final int PICK_FILE=21, SAVE_FILE=22, SCAN=23, CAMERA=24;
     private static final long MAX_FILE=64L*1024*1024;
@@ -42,6 +48,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
+        try{licensing=new DeviceLicense(this);}catch(Exception e){Log.e("AlKarna","Activation storage unavailable");}
         root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(8,14,25));
         web=new WebView(this);web.setId(View.generateViewId());root.addView(web,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
         if(Build.VERSION.SDK_INT>=30){
@@ -58,6 +65,9 @@ public final class MainActivity extends Activity {
         final WebViewAssetLoader assets=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                String path=request.getUrl().getPath();
+                boolean activationAsset=path!=null&&(path.matches("/assets/approved/activation\\.(html|css|js)")||path.startsWith("/assets/approved/assets/"));
+                if(!activationAsset&&!licenseAllowed())return new WebResourceResponse("text/plain","UTF-8",403,"Activation required",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
                 WebResourceResponse response=assets.shouldInterceptRequest(request.getUrl());
                 return response!=null?response:new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
             }
@@ -67,7 +77,7 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(chooser!=null)chooser.onReceiveValue(null);chooser=callback;
-                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(activationPage?"*/*":"application/json").addCategory(Intent.CATEGORY_OPENABLE);
                 try{startActivityForResult(intent,PICK_FILE);}catch(Exception e){chooser.onReceiveValue(null);chooser=null;}
                 return true;
             }
@@ -77,20 +87,35 @@ public final class MainActivity extends Activity {
             @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
         });
         web.addJavascriptInterface(new NativeHost(),"NativeHost");
-        web.loadUrl(ORIGIN+"/assets/approved/index.html");
+        if(licenseAllowed())openApp();else showActivation();
+        licenseTimer.postDelayed(licensePulse,1000);
     }
     public WebView getWebView(){return web;}
+    private boolean licenseAllowed(){return licensing!=null&&licensing.status().optBoolean("valid");}
+    private void showActivation(){if(activationPage)return;activationPage=true;web.evaluateJavascript("typeof savePosDraft==='function'&&savePosDraft()",ignored->web.loadUrl(ORIGIN+"/assets/approved/activation.html"));}
+    private void openApp(){if(!licenseAllowed())return;activationPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
+    private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
     private void result(String id,JSONObject value){runOnUiThread(()->web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null));}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
     private void error(String id,String message){result(id,value("error",message));}
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
     public final class NativeHost {
+        @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
+        @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
+        @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
+        @JavascriptInterface public void activationContinue(){runOnUiThread(()->openApp());}
+        @JavascriptInterface public void copyDeviceCode(){runOnUiThread(()->{if(trusted()&&licensing!=null)((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("AlKarna device",licensing.deviceCode()));});}
+        @JavascriptInterface public void installActivation(String id,String content){
+            try{if(licensing==null)throw new IOException();JSONObject status=licensing.install(content);result(id,status);}
+            catch(Exception e){error(id,e instanceof LicenseVerifier.Rejected?e.getMessage():"تعذّر حفظ ملف التفعيل");}
+        }
         @JavascriptInterface public void theme(String appearance){runOnUiThread(()->{
             if(!trusted())return;boolean light="light".equals(appearance);root.setBackgroundColor(Color.parseColor(light?"#f1f4f8":"#080e19"));
             getWindow().getDecorView().setSystemUiVisibility(light?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
         });}
         @JavascriptInterface public void beginExport(String id,String name,String mime){
             try{
+                if(!licenseAllowed())throw new IOException();
                 if(!id.matches("[a-f0-9-]{36}")||exports.size()>2)throw new IOException();
                 if(!name.matches("[A-Za-z0-9_.-]{1,140}")||!(name.endsWith(".json")||name.endsWith(".pdf")||name.endsWith(".xlsx")))throw new IOException();
                 mime=name.endsWith(".json")?"application/json":name.endsWith(".pdf")?"application/pdf":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -99,26 +124,26 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void appendExport(String id,String chunk){
             Export item=exports.get(id);if(item==null)return;
-            try{byte[] bytes=Base64.decode(chunk,Base64.NO_WRAP);if(bytes.length>65536||item.size+bytes.length>MAX_FILE)throw new IOException();item.output.write(bytes);item.size+=bytes.length;}
+            try{if(!licenseAllowed())throw new IOException();byte[] bytes=Base64.decode(chunk,Base64.NO_WRAP);if(bytes.length>65536||item.size+bytes.length>MAX_FILE)throw new IOException();item.output.write(bytes);item.size+=bytes.length;}
             catch(Exception e){exports.remove(id);item.cleanup();error(id,"تعذّر كتابة الملف");}
         }
         @JavascriptInterface public void finishExport(String id){
             Export item=exports.get(id);if(item==null){error(id,"تعذّر تجهيز الملف");return;}
             try{item.output.getFD().sync();item.output.close();}catch(Exception e){exports.remove(id);item.cleanup();error(id,"تعذّر كتابة الملف");return;}
             runOnUiThread(()->{
-                if(!trusted()||pendingExport!=null){exports.remove(id);item.cleanup();error(id,"انتظر اكتمال حفظ الملف الحالي");return;}
+                if(!trusted()||!licenseAllowed()||pendingExport!=null){exports.remove(id);item.cleanup();error(id,"انتظر اكتمال حفظ الملف الحالي");return;}
                 pendingExport=item;
                 try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(item.mime).putExtra(Intent.EXTRA_TITLE,item.name),SAVE_FILE);}
                 catch(Exception e){pendingExport=null;exports.remove(id);item.cleanup();error(id,"لا توجد خدمة لحفظ الملفات على هذا الجهاز");}
             });
         }
         @JavascriptInterface public void printDocument(){runOnUiThread(()->{
-            if(!trusted())return;
+            if(!trusted()||!licenseAllowed())return;
             try{((PrintManager)getSystemService(PRINT_SERVICE)).print("الكرنه",web.createPrintDocumentAdapter("الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
             catch(Exception e){Toast.makeText(MainActivity.this,"تعذّر فتح الطباعة",Toast.LENGTH_LONG).show();}
         });}
         @JavascriptInterface public void scanBarcode(String id){runOnUiThread(()->{
-            if(!trusted())return;if(scannerRequest!=null){error(id,"قارئ الباركود مفتوح بالفعل");return;}
+            if(!trusted()||!licenseAllowed())return;if(scannerRequest!=null){error(id,"قارئ الباركود مفتوح بالفعل");return;}
             scannerRequest=id;
             if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA);else startScanner();
         });}
@@ -140,6 +165,8 @@ public final class MainActivity extends Activity {
             }).start();
         }
     }
-    @Override public void onBackPressed(){web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
-    @Override protected void onDestroy(){for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
+    @Override protected void onPause(){if(licensing!=null)licensing.checkpoint();super.onPause();}
+    @Override protected void onResume(){super.onResume();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
+    @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
+    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

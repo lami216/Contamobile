@@ -43,6 +43,15 @@ public class ApprovedRuntimeTest {
     }
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
         activity=ActivityScenario.launch(MainActivity.class);
+        until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
+        capture("activation-required");
+        String device=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
+        assertTrue(device.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
+        assertEquals("false",js("NativeHost.licenseAllowed()"));
+        String license=TestLicenseIssuer.issue(device,"perpetual",0);
+        js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
+        until("!document.querySelector('#continue').hidden");capture("activation-valid");
+        js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         js("(()=>{const values={name:'QA owner',shop:'QA store',username:'qa',password:'1234',seed:'empty'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");

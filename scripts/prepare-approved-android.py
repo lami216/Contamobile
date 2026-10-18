@@ -5,7 +5,7 @@ source=repo/'approved-runtime';target=repo/'approved-android/app/src/main/assets
 for name,digest in json.loads((source/'reference-sha256.json').read_text()).items():
     assert hashlib.sha256((source/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==digest, 'Reference changed: '+name
     shutil.copyfile(source/name,target/name)
-for name in ['native-adapter.js','native.css']:shutil.copyfile(source/name,target/name)
+for name in ['native-adapter.js','native.css','activation.html','activation.css','activation.js']:shutil.copyfile(source/name,target/name)
 fonts=target/'assets';fonts.mkdir(exist_ok=True)
 for name in ['StitchArabic.ttf','StitchArabicBold.ttf','OFL-IBM-Plex.txt']:shutil.copyfile(repo/'assets/fonts'/name,fonts/name)
 s=(target/'index.html').read_text(encoding='utf-8').replace('</head>','<link rel="stylesheet" href="native.css"></head>').replace('<script src="engine.js">','<script src="native-adapter.js"></script><script src="engine.js">')

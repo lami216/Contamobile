@@ -11,7 +11,7 @@ export function invoiceDocument(state,record,{esc,money,icon,labels,atSource=fal
   const paymentNote=noncash?'عملية غير نقدية':r.due?'كامل المبلغ ملاحظة على الحساب':r.kind==='transfer'?'تحويل بين الحسابات':(['receive','deposit'].includes(r.kind)?'قبض مسجل':['pay','withdraw','expense'].includes(r.kind)?'صرف مسجل':'دفع كامل')+' · '+(account?.name||'');
   const datum=(name,value)=>value!==undefined&&value!==null&&value!==''?`<div class="document-datum"><dt>${esc(name)}</dt><dd>${esc(value)}</dd></div>`:'';
   const lineHeading=r.kind==='adjustment'?'تفاصيل التصحيح':r.kind==='stocktransfer'?'البضاعة المحوّلة':'بنود الفاتورة';
-  const lineBody=(r.lines||[]).map((line,i)=>`<tr><td class="document-line-name"><span class="document-line-number">${i+1}</span><strong>${esc(line.name)}</strong></td><td>${esc(line.qty)}</td><td>${money(line.price,'xs')}</td><td>${money(line.qty*line.price,'xs')}</td></tr>`).join('');
+  const lineBody=(r.lines||[]).map((line,i)=>`<tr><td class="document-line-name"><span class="document-product-label"><span class="document-line-number">${i+1}</span><strong>${esc(line.name)}</strong></span></td><td>${esc(line.qty)}</td><td>${money(line.price,'xs')}</td><td>${money(line.qty*line.price,'xs')}</td></tr>`).join('');
   return `<div class="document-page">
     <article class="invoice-document" aria-label="${esc(label)}">
       <header class="document-heading"><div><p class="document-shop">${esc(state.branding||'الكرنه')}</p><h2>${esc(label)}</h2></div><span class="document-status ${r.voided?'is-void':''}">${r.voided?'ملغاة':noncash?'حركة مسجلة':r.due?'على الحساب':['sale','purchase','expense'].includes(r.kind)?'مدفوعة':'مسجلة'}</span></header>

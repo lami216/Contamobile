@@ -34,6 +34,8 @@ jobs:
         run: node scripts/verify-report-sources.mjs
       - name: Package pinned approved site
         run: python3 scripts/prepare-approved-android.py
+      - name: Prepare independent desktop license contract fixtures
+        run: node scripts/prepare-license-fixtures.mjs
       - name: Build installable non-debug APK and device tests
         run: |
           gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace

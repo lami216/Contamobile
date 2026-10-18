@@ -189,8 +189,8 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 .phone :is(.register-table,.document-lines,.pos-cart-table) tbody tr:hover td{background:var(--list-bg)!important}
 .phone .register-table td,.phone .document-lines td,.phone .pos-cart-table td{border-inline-end:1.5px solid var(--gold-border);border-bottom:1.5px solid var(--gold-border)}
 .phone :is(.row,.financial-account-row,.catalog-item,.pos-choice-list>button,.pos-product-hit,.invoice-record){background:var(--list-bg)!important;border-color:var(--gold-border)!important}
-.phone .register-table tbody tr.source-record-focus>td{background:var(--list-bg)!important;box-shadow:inset 0 2px 0 var(--gold-strong),inset 0 -2px 0 var(--gold-strong);animation:source-edge-pulse31 1s ease-out 2}
-@keyframes source-edge-pulse31{50%{box-shadow:inset 0 3px 0 var(--gold-strong),inset 0 -3px 0 var(--gold-strong)}}
+
+
 .report-metrics-31{gap:8px}.report-metrics-31 .metric-card{min-height:54px;text-align:start;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px}
 .report-metrics-31 .metric-card strong{font-size:12px;line-height:1.5;flex:1;min-width:0}.report-metrics-31 .metric-card .amount{font-size:19px;flex:none;white-space:nowrap}.report-metrics-31 .metric-count{font:700 20px system-ui}
 .report-context-note{font-size:12px;line-height:1.8;color:var(--muted);margin:10px 0 14px}
@@ -212,16 +212,74 @@ html,body{height:100%;margin:0}.site-shell{width:100%;max-width:720px;margin:aut
 @media(max-width:380px){.report-metrics-31 .metric-card{padding:8px;gap:6px}.report-metrics-31 .metric-card strong{font-size:11px}.report-metrics-31 .metric-card .amount{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.phone .register-table tbody tr.source-record-focus>td{animation:none}}
 
-/* One edge palette across screens, sheets, controls and complete table frames. */
-.site-shell #phone.phone,.site-shell #phone.phone *,.site-shell #phone.phone *::before,.site-shell #phone.phone *::after{border-color:var(--gold-border)!important}
-.phone{--line:var(--gold-border);--grid-edge:var(--gold-border);--grid-outer:var(--gold-border);--document-grid-edge:var(--gold-border);--document-grid-outer:var(--gold-border)}
-.phone :is(button,input,select,textarea,summary[role=button],.export-download-link){border:1px solid var(--gold-border)!important}
-.phone button{border-radius:8px}
-.phone .nav button{border-radius:16px}
-.phone :is(.register-table-shell,.invoice-register,.pos-cart-table-shell,.document-lines-frame,.financial-account-list,.pos-choice-list,.pos-product-results){border:2px solid var(--gold-border)!important}
-.phone :is(.register-table,.document-lines,.pos-cart-table){border:1.5px solid var(--gold-border)!important}
-.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td){border-color:var(--gold-border)!important}
-.phone :is(.invoice-document,.panel,.metric-card,.stats>div,.summary-group,.ledger-balance,.inventory-browser,.report-reconciliation,.report-trace-total){border-color:var(--gold-border)!important}
-.phone :is(input,select,textarea):focus-visible,.phone button:focus-visible{outline:2px solid var(--section-ink,var(--accent));outline-offset:2px}
-/* Cell labels belong to the table grid rather than a second frame inside it. */
-.phone :is(.register-table,.document-lines,.pos-cart-table) :is(.column-sort,.home-invoice-party){border-width:0!important;border-radius:0}
+
+/* Edges express structure; the brand is reserved for primary actions. */
+.phone{--edge:#34475d;--edge-soft:#29394d;--edge-strong:#50677f;--line:var(--edge-soft);--gold-border:var(--edge);--gold-strong:var(--edge-strong);--brand-edge:#a58a55;--focus-ring:#8bb8ee;--source-fill:#19354c;--source-peak:#254c68;--list-head:#172638}
+.phone[data-appearance=light]{--edge:#b5c2d1;--edge-soft:#d6dee7;--edge-strong:#8fa2b8;--line:var(--edge-soft);--gold-border:var(--edge);--gold-strong:var(--edge-strong);--brand-edge:#9b804c;--focus-ring:#356eac;--source-fill:#deedf9;--source-peak:#c6e1f6;--list-head:#e9eff6}
+.phone :is(.primary,.home-start-sale){border-color:var(--brand-edge)!important}
+.phone :is(.register-table-shell,.invoice-register,.pos-cart-table-shell,.document-lines-frame,.financial-account-list,.pos-choice-list,.pos-product-results){border:1.5px solid var(--edge-strong)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table){border:0;box-shadow:none}
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td){border-inline-end:1px solid var(--edge)!important;border-bottom:1px solid var(--edge)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) th{border-bottom-width:2px!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td):last-child{border-inline-end:0!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) tbody tr:last-child td{border-bottom:0!important}
+.phone .register-scroll{border-inline-end:1px solid var(--edge)!important}
+.phone :is(.column-sort,.home-invoice-party,.document-history){border:0!important;box-shadow:none;background:transparent}
+.phone .nav{border-color:var(--edge)}
+.phone .nav button{border-color:transparent!important}
+.phone .nav button.active{border-color:color-mix(in srgb,var(--section-ink) 42%,var(--edge-soft))!important}
+.phone .app-head{border-bottom-color:var(--edge)}
+.phone .app-head [data-action=back]{border-color:transparent!important;background:transparent}
+.phone .section-title h2{border-color:var(--edge)}
+.phone .invoice-document{border-color:var(--edge-soft)}
+.phone .document-reference,.phone .document-total{border-color:var(--edge-soft)}
+.phone .document-history{padding-inline:4px}
+.phone :is(.search,.pos-search){border:1px solid var(--edge);box-shadow:none;transition:border-color .15s ease}
+.phone :is(.search,.pos-search):focus-within{border-color:var(--focus-ring)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--focus-ring) 35%,transparent)}
+.phone :is(.search,.pos-search) input,.phone :is(.search,.pos-search) input:focus,.phone :is(.search,.pos-search) input:focus-visible{border:0!important;outline:0!important;box-shadow:none!important;background:transparent}
+.phone .search input{min-width:0}
+.phone :is(.search,.pos-search) button{border:0!important;box-shadow:none}
+.phone button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.phone .field :is(input,select,textarea):focus-visible{outline:0;border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+.phone .document-lines td{vertical-align:middle}
+.document-product-label{display:flex;align-items:center;gap:7px;min-width:0}
+.document-product-label .document-line-number{display:inline;flex:none;margin:0;font-size:10px;color:var(--muted)}
+.document-product-label strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.6}
+.phone .register-table tbody tr.source-record-focus>td{background:var(--source-fill)!important;box-shadow:none;animation:source-surface-pulse 1.2s ease-in-out 2}
+@keyframes source-surface-pulse{50%{box-shadow:inset 0 0 0 100vmax #8fb9ee18}}
+@media(prefers-reduced-motion:reduce){.phone .register-table tbody tr.source-record-focus>td{animation:none}}
+
+/* A restrained warm frame for records; neutral dividers preserve legibility. */
+.phone{--list-frame:#8e7c58;--list-rule:#43556b;--action-frame:#a68b56}
+.phone[data-appearance=light]{--list-frame:#a18b60;--list-rule:#a7b8cb;--action-frame:#9b7f48}
+.site-shell #phone :is(.register-table-shell,.invoice-register,.document-lines-frame,.financial-account-list,.pos-choice-list,.pos-product-results,.pos-cart){border:2px solid var(--list-frame)!important;border-radius:11px;overflow:hidden}
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td){border-inline-end-width:2px!important;border-bottom-width:2px!important;border-color:var(--list-rule)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) th{border-bottom:2px solid var(--edge-strong)!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) :is(th,td):last-child{border-inline-end:0!important}
+.phone :is(.register-table,.document-lines,.pos-cart-table) tbody tr:last-child td{border-bottom:0!important}
+.phone .register-scroll{border-inline-end:2px solid var(--list-rule)!important}
+.site-shell #phone .panel:has(>.row),.site-shell #phone .compact-catalog{border:2px solid var(--list-frame)!important}
+.site-shell #phone .panel:has(>.row[data-action^="go:"]){border-color:var(--edge-strong)!important}
+.phone :is(.row,.financial-account-row,.catalog-item,.pos-choice-list>button,.pos-product-hit,.invoice-record)+:is(.row,.financial-account-row,.catalog-item,.pos-choice-list>button,.pos-product-hit,.invoice-record){border-top:2px solid var(--list-rule)!important}
+.phone .row{border-bottom-color:var(--list-rule)!important}
+.phone .primary,.phone .primary-sale>.primary{border-width:2px!important;border-color:var(--action-frame)!important}
+.phone .actions>.secondary,.phone .document-actions>button:not(.document-delete),.phone .pos-heading>button,.phone .section-title>.text-btn{border:1.5px solid var(--action-frame)!important}
+.phone .document-actions>.document-delete{border:1.5px solid color-mix(in srgb,var(--red) 45%,var(--edge))}
+.site-shell #phone .pos-cart>.pos-cart-table-frame{border:0!important;border-radius:0}
+.phone .pos-cart-heading .section-count{display:inline-block;font-size:10px;font-weight:400;color:var(--muted);margin-inline-start:8px}
+.phone .pos-clear{align-self:flex-end;min-height:32px;padding:3px 8px;font-size:11px;color:var(--muted)}
+.phone .pos-cart .register-table-shell{margin:0}
+.phone .pos-cart-table :is(.pos-table-name,.pos-table-value,.pos-table-remove){border:0!important;background:transparent;box-shadow:none}
+.phone .modern-picker .picker-tile{border:1px solid var(--edge)!important}
+.phone .modern-picker .picker-tile[aria-pressed=true]{border-color:var(--action-frame)!important;border-width:1.5px!important}
+.phone .register-table td .amount.money-wide{font-size:clamp(8px,2.2vw,10px)}
+.phone .document-lines .amount.money-wide{font-size:9px;gap:2px}
+.phone .document-lines .amount.money-wide .currency{font-size:7px}
+.phone .modern-picker .picker-tile-grid{align-content:start;grid-auto-rows:minmax(48px,auto)}
+.phone .product-barcode-input:focus-within{border-color:var(--focus-ring);box-shadow:0 0 0 1px color-mix(in srgb,var(--focus-ring) 35%,transparent)}
+.phone .product-barcode-input input:focus-visible{border:0!important;outline:0!important;box-shadow:none!important}
+.backup-file-picker{position:relative;display:flex;flex-direction:column;justify-content:center;gap:6px;min-height:82px;padding:14px;border:1.5px solid var(--edge-strong);border-radius:10px;background:var(--surface);cursor:pointer}
+.backup-file-heading{font-size:14px;font-weight:700;color:var(--section-ink,var(--ink))}
+.backup-file-picker small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.backup-file-picker input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.backup-file-picker:focus-within{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}

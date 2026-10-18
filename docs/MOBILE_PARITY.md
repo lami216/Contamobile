@@ -44,7 +44,7 @@ Legend:
 | Arabic / French | Settings → Language | 🟡 | RTL/LTR architecture and primary operational surfaces are bilingual; final full-app copy/device sweep remains |
 | Android application identity | Expo config | ✅ | `mr.alkarna.mobile`, project icon, adaptive icon and Android-first configuration |
 | Android build profiles | `eas.json` | ✅ | preview APK and production AAB profiles configured |
-| Mobile activation / licensing | Settings / startup gate | ⬜ | intentionally deferred until core parity/release checks are closed; mobile licensing stays independent of desktop device licensing |
+| Mobile activation / licensing | Approved Android startup / Settings | 🟡 | Native offline gate implements desktop V1/V2 signed-file contract and public keys; actual issuer executable acceptance remains pending. See OFFLINE_ACTIVATION.md. |
 
 ## 2026-09 source refresh
 
