@@ -5,7 +5,7 @@ Reviewed the approved runtime and its standalone preview. The application layout
 ## Boundary system
 
 - Primary seller actions (sale, purchase, receipt/payment, expense) share a warm gold outline.
-- Registers, document item tables, cart tables and data lists have a 2px muted gold exterior and 1.5px neutral interior dividers. Table headers retain a 2px separator.
+- Registers, document item tables, cart tables and data lists have a 2px muted gold exterior and 2px neutral interior dividers. Header, body and column separators now share the same 2px thickness.
 - Navigation, text inside table cells, the document history link and composite search inputs do not gain independent gold boxes.
 - Selected picker options receive a restrained gold edge; inactive choices use neutral edges.
 - Destructive controls keep their semantic red treatment; text and amounts do not become gold.

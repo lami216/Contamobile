@@ -5,6 +5,8 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.platform.app.InstrumentationRegistry;
 import android.graphics.Bitmap;
 import org.junit.Test;
+import org.junit.Before;
+import org.junit.After;
 import org.junit.runner.RunWith;
 import org.json.JSONObject;
 import androidx.test.uiautomator.UiDevice;
@@ -16,6 +18,9 @@ import java.io.*;
 @RunWith(AndroidJUnit4.class)
 public class ApprovedRuntimeTest {
     private ActivityScenario<MainActivity> activity;
+    private java.util.Map<String,java.security.PublicKey> originalLicenseKeys;
+    @Before public void preserveVerificationKeys() throws Exception {originalLicenseKeys=new java.util.HashMap<>(LicenseCompatibilityTest.keys());}
+    @After public void restoreVerificationKeys() throws Exception {if(activity!=null)activity.close();LicenseCompatibilityTest.keys().clear();LicenseCompatibilityTest.keys().putAll(originalLicenseKeys);}
     private String js(String script) throws Exception {
         var answer=new ArrayBlockingQueue<String>(1);
         activity.onActivity(a->a.getWebView().evaluateJavascript(script,v->answer.offer(v==null?"null":v)));
@@ -45,10 +50,10 @@ public class ApprovedRuntimeTest {
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
-        String device=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
-        assertTrue(device.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
+        String activationDevice=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
+        assertTrue(activationDevice.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
         assertEquals("false",js("NativeHost.licenseAllowed()"));
-        String license=TestLicenseIssuer.issue(device,"perpetual",0);
+        String license=TestLicenseIssuer.issue(activationDevice,"perpetual",0);
         js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
         until("!document.querySelector('#continue').hidden");capture("activation-valid");
         js("document.querySelector('#continue').click();true");
