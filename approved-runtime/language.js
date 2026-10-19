@@ -10,4 +10,6 @@ Object.assign(translations,{"الأرصدة الحالية": "Soldes actuels", "
 
 Object.assign(translations,{"كشف الحساب": "Relevé du compte", "حركات الحساب": "Mouvements du compte", "دفع-استلام": "Paiement / reçu", "لا توجد حركات في الفترة": "Aucun mouvement sur la période", "ستظهر الفواتير والحركات هنا بعد تسجيلها.": "Les factures et mouvements apparaîtront ici après enregistrement."});
 
+Object.assign(translations,{'حساب المستخدم':'Compte utilisateur','مالك':'Propriétaire','مدير':'Responsable','محاسب':'Comptable','بيع فقط':'Ventes uniquement','ترخيص الجهاز':'Licence de l’appareil'});
+
 Object.assign(translations,{"المساعدة والتفعيل": "Aide et activation", "واتساب أو اتصال · 49823328": "WhatsApp ou appel · 49823328", "كود الجهاز وحالة التفعيل": "Code de l’appareil et activation", "معك لتشغيل محلك": "À vos côtés pour votre magasin", "للتفعيل أو المساعدة، تواصل معنا على الرقم": "Pour l’activation ou l’assistance, contactez-nous au", "تواصل مع الدعم": "Contacter l’assistance", "اتصال هاتفي": "Appel téléphonique", "واتساب": "WhatsApp", "لتفعيل الهاتف، أرسل كود جهازك عبر واتساب لتحصل على ملف التفعيل.": "Pour activer le téléphone, envoyez son code par WhatsApp afin de recevoir le fichier de licence."});
