@@ -6,7 +6,7 @@
 .phone[dir=ltr] :is(.end,.document-total>div:last-child){text-align:end}
 .phone[dir=ltr] [data-action=back] svg,.phone[dir=ltr] .document-history>svg,.phone[dir=ltr] .catalog-item>svg:last-child,.phone[dir=ltr] .row>svg:last-child,.phone[dir=ltr] .document-actions [data-action^="source-location:"] svg{transform:scaleX(-1)}
 .phone[dir=ltr] .catalog-open svg,.phone[dir=ltr] .pos-checkout-bar .primary svg,.phone[dir=ltr] [data-action=low]>svg:last-child,.phone[dir=ltr] .pos-party-choice>svg:last-child{transform:scaleX(-1)}
-.phone[dir=ltr] :is(.browse-caret svg){transform:rotate(90deg)}
+.phone[dir=ltr] :is(.browse-caret svg){transform:rotate(-90deg)}
 .phone[dir=ltr] .document-lines col:nth-child(1){width:38%!important}.phone[dir=ltr] .document-lines col:nth-child(2){width:17%!important}.phone[dir=ltr] .document-lines col:nth-child(3){width:23%!important}.phone[dir=ltr] .document-lines col:nth-child(4){width:22%!important}
 .phone[dir=ltr] :is(.amount,.table-date,.table-number,.pos-line-price,.pos-line-quantity){direction:ltr}
 .phone[dir=ltr] .app-head h1{font-size:clamp(18px,4.5vw,24px);line-height:1.3}.phone[dir=ltr] .nav button{font-size:10px;line-height:1.4}.phone[dir=ltr] :is(.section-title h2,.browse-copy strong){line-height:1.45}.phone[dir=ltr] .pos-cart-table th{font-size:10px}.phone[dir=ltr] .document-lines th{font-size:10px;white-space:normal;overflow-wrap:normal}
