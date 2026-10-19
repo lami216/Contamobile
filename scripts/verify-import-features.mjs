@@ -23,4 +23,5 @@ const legacy=new SQL.Database();for(const sql of [
  'CREATE TABLE purchBillTB(id INTEGER,Date TEXT)', 'CREATE TABLE items_purchTB(id INTEGER,purchFK INTEGER,item_idFK INTEGER,qty REAL)'
 ])legacy.run(sql);
 const legacyResult=await sqliteBackup(legacy.export());legacy.close();assert.equal(legacyResult.collections.products[0].name,'Legacy rice');assert.equal(Object.values(legacyResult.collections.products[0].stocks)[0],25);assert.equal(legacyResult.collections.parties[0].receivable,50);assert.equal(legacyResult.collections.warehouses[0].name,'Legacy depot');
-await assert.rejects(()=>sqliteBackup(new Uint8Array([1,2,3])));console.log(JSON.stringify({checks:18,status:'passed',formats:['mobile-json','desktop-sqlite','dataacc-db']}));
+const withProvenance=fixture();upgradeState(withProvenance);withProvenance.stockEvents=[{productId:'1',documentId:'old-opening',documentRevision:7,warehouseId:'A',quantityDelta:30,type:'opening'}];withProvenance.stockEventSequence=7;const unchanged=mergeImport(withProvenance,structuredClone(withProvenance)).state;assert.deepEqual(unchanged.stockEvents,withProvenance.stockEvents);assert.equal(unchanged.products[0].openingHistoryLocked,undefined);
+await assert.rejects(()=>sqliteBackup(new Uint8Array([1,2,3])));console.log(JSON.stringify({checks:20,status:'passed',formats:['mobile-json','desktop-sqlite','dataacc-db']}));
