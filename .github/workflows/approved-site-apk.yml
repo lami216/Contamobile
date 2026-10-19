@@ -34,6 +34,8 @@ jobs:
         run: node scripts/verify-report-sources.mjs
       - name: Verify customer and supplier historical totals
         run: node scripts/verify-party-summaries.mjs
+      - name: Verify French locale, LTR outputs and original user data
+        run: node scripts/verify-french-locale.mjs
       - name: Package pinned approved site
         run: python3 scripts/prepare-approved-android.py
       - name: Prepare independent desktop license contract fixtures

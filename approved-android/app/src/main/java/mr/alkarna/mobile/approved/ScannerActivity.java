@@ -22,10 +22,10 @@ public final class ScannerActivity extends FragmentActivity {
     private boolean finished=false;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(8,14,25));root.setPadding(12,40,12,30);
-        TextView title=new TextView(this);title.setText("وجّه الكاميرا نحو الباركود");title.setTextColor(Color.WHITE);title.setTextSize(20);title.setGravity(Gravity.CENTER);root.addView(title,new LinearLayout.LayoutParams(-1,70));
+        LinearLayout root=new LinearLayout(this);root.setLayoutDirection(NativeUi.french(this)?android.view.View.LAYOUT_DIRECTION_LTR:android.view.View.LAYOUT_DIRECTION_RTL);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(8,14,25));root.setPadding(12,40,12,30);
+        TextView title=new TextView(this);title.setText(NativeUi.text(this,"وجّه الكاميرا نحو الباركود"));title.setTextColor(Color.WHITE);title.setTextSize(20);title.setGravity(Gravity.CENTER);root.addView(title,new LinearLayout.LayoutParams(-1,70));
         PreviewView preview=new PreviewView(this);root.addView(preview,new LinearLayout.LayoutParams(-1,0,1));
-        Button close=new Button(this);close.setText("إغلاق الكاميرا");close.setOnClickListener(v->finish());root.addView(close,new LinearLayout.LayoutParams(-1,70));setContentView(root);
+        Button close=new Button(this);close.setText(NativeUi.text(this,"إغلاق الكاميرا"));close.setOnClickListener(v->finish());root.addView(close,new LinearLayout.LayoutParams(-1,70));setContentView(root);
         scanner=BarcodeScanning.getClient();
         var provider=ProcessCameraProvider.getInstance(this);
         provider.addListener(()->{
@@ -39,7 +39,7 @@ public final class ScannerActivity extends FragmentActivity {
                     }).addOnCompleteListener(task->image.close());
                 });
                 camera.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,stream,analysis);
-            }catch(Exception e){Toast.makeText(this,"الكاميرا غير متاحة. أدخل الباركود يدويًا.",Toast.LENGTH_LONG).show();finish();}
+            }catch(Exception e){Toast.makeText(this,NativeUi.text(this,"الكاميرا غير متاحة. أدخل الباركود يدويًا."),Toast.LENGTH_LONG).show();finish();}
         },ContextCompat.getMainExecutor(this));
     }
     @Override protected void onDestroy(){finished=true;worker.shutdown();if(scanner!=null)scanner.close();super.onDestroy();}

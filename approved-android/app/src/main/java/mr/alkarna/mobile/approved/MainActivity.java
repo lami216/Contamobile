@@ -74,7 +74,7 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 if(request.isForMainFrame()&&request.hasGesture()&&trusted()){
                     Intent support=SupportContact.intentFor(request.getUrl());
-                    if(support!=null)try{startActivity(support);}catch(android.content.ActivityNotFoundException e){Toast.makeText(MainActivity.this,"تعذّر فتح وسيلة التواصل. الرقم: 49823328",Toast.LENGTH_LONG).show();}
+                    if(support!=null)try{startActivity(support);}catch(android.content.ActivityNotFoundException e){Toast.makeText(MainActivity.this,NativeUi.text(MainActivity.this,"تعذّر فتح وسيلة التواصل. الرقم: 49823328"),Toast.LENGTH_LONG).show();}
                 }
                 return true;
             }
@@ -103,9 +103,10 @@ public final class MainActivity extends Activity {
     private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
     private void result(String id,JSONObject value){runOnUiThread(()->web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null));}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
-    private void error(String id,String message){result(id,value("error",message));}
+    private void error(String id,String message){result(id,value("error",NativeUi.text(this,message)));}
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
     public final class NativeHost {
+        @JavascriptInterface public void language(String language){runOnUiThread(()->{if(trusted()&&("ar".equals(language)||"fr".equals(language)))getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("language",language).apply();});}
         @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
         @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
@@ -145,8 +146,8 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void printDocument(){runOnUiThread(()->{
             if(!trusted()||!licenseAllowed())return;
-            try{((PrintManager)getSystemService(PRINT_SERVICE)).print("الكرنه",web.createPrintDocumentAdapter("الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
-            catch(Exception e){Toast.makeText(MainActivity.this,"تعذّر فتح الطباعة",Toast.LENGTH_LONG).show();}
+            try{((PrintManager)getSystemService(PRINT_SERVICE)).print(NativeUi.french(this)?"AlKarna":"الكرنه",web.createPrintDocumentAdapter(NativeUi.french(this)?"AlKarna":"الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
+            catch(Exception e){Toast.makeText(MainActivity.this,NativeUi.text(MainActivity.this,"تعذّر فتح الطباعة"),Toast.LENGTH_LONG).show();}
         });}
         @JavascriptInterface public void scanBarcode(String id){runOnUiThread(()->{
             if(!trusted()||!licenseAllowed())return;if(scannerRequest!=null){error(id,"قارئ الباركود مفتوح بالفعل");return;}

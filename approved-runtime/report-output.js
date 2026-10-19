@@ -1,37 +1,39 @@
+import {translateText} from './i18n.js';
 // Shared report content for the downloaded PDF and the separate print action.
-import {recordExportData} from './record-export.js';
+import {recordExportData,localizedRecordTitle} from './record-export.js';
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const number=v=>Number(v||0).toLocaleString('en-US',{maximumFractionDigits:2});
-export function reportModel(state,records,labels,scope='كل الفترة'){
+const number=(v,language)=>Number(v||0).toLocaleString(language==='fr'?'fr-FR':'en-US',{maximumFractionDigits:2});
+export function reportModel(state,records,labels,scope='كل الفترة',{language='ar'}={}){const t=value=>translateText(value,language);
  const blocks=[{kind:'heading',text:'سجل الفواتير'},{kind:'text',text:scope},{kind:'text',text:`${records.length} مستندات · العملة MRU`},
-  {kind:'table',widths:[.06,.17,.17,.40,.20],rows:[['الرقم','التاريخ','النوع','الطرف / البيان','المبلغ MRU'],...records.map((r,i)=>[i+1,r.date,labels[r.kind]||r.kind,r.title,number(r.total)])]},
+  {kind:'table',widths:[.06,.17,.17,.40,.20],rows:[['الرقم','التاريخ','النوع','الطرف / البيان','المبلغ MRU'],...records.map((r,i)=>[i+1,t(r.date),t(labels[r.kind]||r.kind),localizedRecordTitle(r,language),number(r.total,language)])]},
   {kind:'heading',text:'تفاصيل المستندات الكاملة'}];
  records.forEach((r,i)=>{
-  const sheets=recordExportData(state,[r],labels),headers=sheets[0].rows[0],values=sheets[0].rows[1];
-  blocks.push({kind:'subheading',text:`${i+1}. ${labels[r.kind]||r.kind} — ${r.number||r.kind.toUpperCase()+'-'+r.id}`});
+  const sheets=recordExportData(state,[r],labels,{language}),headers=sheets[0].rows[0],values=sheets[0].rows[1];
+  blocks.push({kind:'subheading',text:`${i+1}. ${t(labels[r.kind]||r.kind)} — ${r.number||r.kind.toUpperCase()+'-'+r.id}`});
   const fields=headers.map((h,j)=>[h,values[j]]).filter(([,v])=>v!==''&&v!==undefined&&v!==null);
   const rows=[];for(let j=0;j<fields.length;j+=3)rows.push(fields.slice(j,j+3).flat().concat(Array(Math.max(0,6-fields.slice(j,j+3).flat().length)).fill('')));
   blocks.push({kind:'table',widths:[.17,.16,.17,.16,.17,.17],rows,header:false});
   if(sheets[1].rows.length>1)blocks.push({kind:'table',rows:sheets[1].rows});
  });
- return {brand:state.branding||'الكرنه',created:new Date().toLocaleDateString('en-GB'),blocks};
+ for(const block of blocks){if(block.text)block.text=t(block.text);if(block.rows&&block.header!==false)block.rows[0]=block.rows[0].map(t)}
+ return {language,dir:language==='fr'?'ltr':'rtl',brand:state.branding||'AlKarna',created:new Date().toLocaleDateString(language==='fr'?'fr-MR':'en-GB'),blocks};
 }
-export function reportHtml(model){return `<div class="export-report"><header><h1>${esc(model.brand)}</h1><span>تاريخ التصدير: ${esc(model.created)}</span></header>${model.blocks.map(b=>b.kind==='table'?`<table>${b.widths?'<colgroup>'+b.widths.map(w=>`<col style="width:${w*100}%">`).join('')+'</colgroup>':''}${b.header===false?'':'<thead><tr>'+b.rows[0].map(v=>`<th>${esc(v)}</th>`).join('')+'</tr></thead>'}<tbody>${b.rows.slice(b.header===false?0:1).map(row=>'<tr>'+row.map(v=>`<td>${esc(typeof v==='boolean'?(v?'نعم':'لا'):v)}</td>`).join('')+'</tr>').join('')}</tbody></table>`:b.kind==='heading'?`<h2>${esc(b.text)}</h2>`:b.kind==='subheading'?`<h3>${esc(b.text)}</h3>`:`<p>${esc(b.text)}</p>`).join('')}</div>`}
+export function reportHtml(model){const t=value=>translateText(value,model.language);return `<div class="export-report" dir="${model.dir||'rtl'}" lang="${model.language||'ar'}"><header><h1>${esc(model.brand)}</h1><span>${esc(t('تاريخ التصدير: {date}').replace('{date}',model.created))}</span></header>${model.blocks.map(b=>b.kind==='table'?`<table>${b.widths?'<colgroup>'+b.widths.map(w=>`<col style="width:${w*100}%">`).join('')+'</colgroup>':''}${b.header===false?'':'<thead><tr>'+b.rows[0].map(v=>`<th>${esc(v)}</th>`).join('')+'</tr></thead>'}<tbody>${b.rows.slice(b.header===false?0:1).map(row=>'<tr>'+row.map(v=>`<td>${esc(typeof v==='boolean'?t(v?'نعم':'لا'):typeof v==='number'?number(v,model.language):v)}</td>`).join('')+'</tr>').join('')}</tbody></table>`:b.kind==='heading'?`<h2>${esc(b.text)}</h2>`:b.kind==='subheading'?`<h3>${esc(b.text)}</h3>`:`<p>${esc(b.text)}</p>`).join('')}</div>`}
 
 // Canvas uses the bundled Arabic font and the browser's shaping engine. Pages
 // are bounded and released one by one; the PDF works offline without a printer.
-export async function reportPdf(model){
+export async function reportPdf(model){const french=model.language==='fr',t=value=>translateText(value,model.language),textX=french?40:754;
  await document.fonts.load('12px Arabic');await document.fonts.ready;
  const W=794,H=1123,M=40,BOTTOM=H-50,images=[];let canvas,ctx,y,pageNumber=0;
- const font=(size=12,bold=false)=>{ctx.font=`${bold?'700':'400'} ${size}px Arabic, sans-serif`;ctx.direction='rtl';ctx.textAlign='right';ctx.fillStyle='#25364a'};
- function wrap(value,width,size=12,bold=false){font(size,bold);const source=String(typeof value==='boolean'?(value?'نعم':'لا'):value??''),out=[];let line='';for(const word of source.split(/\s+/)){const next=line?line+' '+word:word;if(ctx.measureText(next).width<=width){line=next;continue}if(line){out.push(line);line=''}if(ctx.measureText(word).width<=width){line=word;continue}for(const ch of word){if(ctx.measureText(line+ch).width>width&&line){out.push(line);line=''}line+=ch}}out.push(line);return out}
- function newPage(){canvas=document.createElement('canvas');canvas.width=W*1.5;canvas.height=H*1.5;ctx=canvas.getContext('2d');ctx.scale(1.5,1.5);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);font(16,true);ctx.fillText(model.brand,W-M,35);font(10);ctx.fillText('تاريخ التصدير: '+model.created,250,35);ctx.strokeStyle='#9baabd';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(M,48);ctx.lineTo(W-M,48);ctx.stroke();y=70;pageNumber++}
- async function finish(){font(10);ctx.fillText('صفحة '+pageNumber,W-M,H-25);const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.92));if(!blob)throw new Error('تعذر تجهيز صفحة PDF');images.push(new Uint8Array(await blob.arrayBuffer()));canvas.width=canvas.height=0;await new Promise(resolve=>setTimeout(resolve,0))}
+ const font=(size=12,bold=false)=>{ctx.font=`${bold?'700':'400'} ${size}px ${french?'Arial':'Arabic'}, sans-serif`;ctx.direction=french?'ltr':'rtl';ctx.textAlign=french?'left':'right';ctx.fillStyle='#25364a'};
+ function wrap(value,width,size=12,bold=false){font(size,bold);const source=String(typeof value==='boolean'?t(value?'نعم':'لا'):typeof value==='number'?number(value,model.language):value??''),out=[];let line='';for(const word of source.split(/\s+/)){const next=line?line+' '+word:word;if(ctx.measureText(next).width<=width){line=next;continue}if(line){out.push(line);line=''}if(ctx.measureText(word).width<=width){line=word;continue}for(const ch of word){if(ctx.measureText(line+ch).width>width&&line){out.push(line);line=''}line+=ch}}out.push(line);return out}
+ function newPage(){canvas=document.createElement('canvas');canvas.width=W*1.5;canvas.height=H*1.5;ctx=canvas.getContext('2d');ctx.scale(1.5,1.5);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);font(16,true);ctx.fillText(model.brand,textX,35);font(10);ctx.fillText(t('تاريخ التصدير: {date}').replace('{date}',model.created),french?W-250:250,35);ctx.strokeStyle='#9baabd';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(M,48);ctx.lineTo(W-M,48);ctx.stroke();y=70;pageNumber++}
+ async function finish(){font(10);ctx.fillText(t('صفحة {number}').replace('{number}',pageNumber),textX,H-25);const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.92));if(!blob)throw new Error('تعذر تجهيز صفحة PDF');images.push(new Uint8Array(await blob.arrayBuffer()));canvas.width=canvas.height=0;await new Promise(resolve=>setTimeout(resolve,0))}
  async function ensure(height){if(y+height>BOTTOM){await finish();newPage();return true}return false}
- function drawRow(cells,widths,header=false,offset=0,count){let x=W-M;const lineHeight=15,h=8+(count??Math.max(1,...cells.map(c=>c.length)))*lineHeight;ctx.fillStyle=header?'#e0e8f2':'#ffffff';ctx.fillRect(M,y,W-2*M,h);ctx.strokeStyle='#b4bfce';ctx.lineWidth=.7;for(let i=0;i<cells.length;i++){const width=widths[i]*(W-2*M);ctx.strokeRect(x-width,y,width,h);font(header?10:11,header);cells[i].slice(offset,count===undefined?undefined:offset+count).forEach((line,j)=>ctx.fillText(line,x-7,y+17+j*lineHeight));x-=width}y+=h;return h}
+ function drawRow(cells,widths,header=false,offset=0,count){let x=french?M:W-M;const lineHeight=15,h=8+(count??Math.max(1,...cells.map(c=>c.length)))*lineHeight;ctx.fillStyle=header?'#e0e8f2':'#ffffff';ctx.fillRect(M,y,W-2*M,h);ctx.strokeStyle='#b4bfce';ctx.lineWidth=.7;for(let i=0;i<cells.length;i++){const width=widths[i]*(W-2*M);ctx.strokeRect(french?x:x-width,y,width,h);font(header?10:11,header);cells[i].slice(offset,count===undefined?undefined:offset+count).forEach((line,j)=>ctx.fillText(line,french?x+7:x-7,y+17+j*lineHeight));x+=french?width:-width}y+=h;return h}
  newPage();
  for(const block of model.blocks){
-  if(block.kind!=='table'){const size=block.kind==='heading'?19:block.kind==='subheading'?13:11,bold=['heading','subheading'].includes(block.kind);const lines=wrap(block.text,W-2*M,size,bold);await ensure(lines.length*(size+6)+14);font(size,bold);for(const line of lines){ctx.fillText(line,W-M,y+size);y+=size+6}y+=8;continue}
+  if(block.kind!=='table'){const size=block.kind==='heading'?19:block.kind==='subheading'?13:11,bold=['heading','subheading'].includes(block.kind);const lines=wrap(block.text,W-2*M,size,bold);await ensure(lines.length*(size+6)+14);font(size,bold);for(const line of lines){ctx.fillText(line,textX,y+size);y+=size+6}y+=8;continue}
   if(!block.rows.length)continue;
   const widths=block.widths||Array(block.rows[0].length).fill(1/block.rows[0].length),header=block.header!==false,headerCells=header?block.rows[0].map((v,i)=>wrap(v,widths[i]*(W-2*M)-14,10,true)):null;
   const headHeight=header?8+Math.max(...headerCells.map(c=>c.length))*15:0;

@@ -60,7 +60,9 @@ public class ApprovedRuntimeTest {
         until("!document.querySelector('#continue').hidden");capture("activation-valid");
         js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
-        js("(()=>{const values={name:'QA owner',shop:'QA store',username:'qa',password:'1234',seed:'empty'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
+        assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));
+        assertEquals("true",js("document.querySelector('.licensed-identity').innerText.includes('متجر الفحص')"));capture("licensed-first-setup");
+        js("(()=>{const values={username:'qa',password:'1234'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
         until("document.querySelector('.brand-logo').naturalWidth>0");
         action("site:account-menu");until("!!document.querySelector('.account-sheet')");
@@ -145,6 +147,10 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("document.querySelector('.report-trace').innerText.includes('\u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0639\u0645\u0644\u0627\u0621')&&Math.abs(reportReceiptReconciliation31().residual)<.005"));capture("report-credit-reconciliation");action("close");
         action("go:operations");capture("invoice-register");
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
+        action("site:language:fr");assertEquals("true",js("document.querySelector('#phone').dir==='ltr'&&document.documentElement.lang==='fr'"));capture("french-register");
+        action("go:settings");assertEquals("false",js("!!document.querySelector('[data-action=\"site:seed-demo\"]')"));
+        action("site:support");assertEquals("true",js("document.querySelector('.support-hint').innerText.includes('renouvellement')"));capture("french-support");action("close");
+        action("go:operations");
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
         for(String format:new String[]{"excel","pdf"}){
@@ -158,7 +164,7 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
-        assertEquals("10",js("S.products[0].qty"));assertEquals("5",js("S.records.length"));capture("cold-relaunch");
+        assertEquals("10",js("S.products[0].qty"));assertEquals("5",js("S.records.length"));assertEquals("true",js("document.querySelector('#phone').dir==='ltr'"));capture("cold-relaunch");
         activity.close();
     }
 }
