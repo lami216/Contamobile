@@ -11,3 +11,5 @@
 .phone .browse-toolbar:has(.feature-filter-button){flex-wrap:wrap}.phone .browse-toolbar:has(.feature-filter-button)>.browse-select{flex:1 1 calc(50% - 4px)}.phone .browse-toolbar>.feature-filter-button{flex:1 0 100%;min-height:38px}
 
 .phone .feature-report-table .money-wide{font-size:clamp(9px,2.6vw,12px)!important}.phone .feature-report-table .money-wide .currency{display:none}.phone .feature-report-table .column-sort{white-space:normal!important;line-height:1.4}
+
+.feature-row-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
