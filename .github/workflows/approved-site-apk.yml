@@ -28,6 +28,8 @@ jobs:
           gradle-version: '8.13'
       - name: Install pinned Android platform
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare pinned offline SQLite dependency
+        run: python3 scripts/prepare-approved-dependencies.py
       - name: Verify source navigation regression
         run: node scripts/verify-approved-source-navigation.mjs
       - name: Verify report sources and reconciliation
@@ -36,6 +38,10 @@ jobs:
         run: node scripts/verify-party-summaries.mjs
       - name: Verify French locale, LTR outputs and original user data
         run: node scripts/verify-french-locale.mjs
+      - name: Verify report scopes, statements, categories, currency and permissions
+        run: node scripts/verify-feature-domains.mjs
+      - name: Verify SQLite import, conflict policies and repeat safety
+        run: node scripts/verify-import-features.mjs
       - name: Package pinned approved site
         run: python3 scripts/prepare-approved-android.py
       - name: Prepare independent desktop license contract fixtures
@@ -46,15 +52,22 @@ jobs:
         run: python3 scripts/prepare-approved-signing.py
       - name: Verify signing credential handling
         run: python3 scripts/test-approved-signing.py
-      - name: Build previous-version upgrade fixture with the same permanent key
+      - name: Check out the actual previously delivered 1.0.11 source
+        uses: actions/checkout@v4
+        with:
+          ref: ff82a0e0e709ac5bed7d5f4118147ede900fd76c
+          path: previous-release
+      - name: Build the previous release with the same permanent key
         run: |
-          gradle -p approved-android :app:assembleRelease -PalkarnaVersionCode=11 -PalkarnaVersionName=1.0.10-upgrade-fixture --no-daemon --stacktrace
+          python3 previous-release/scripts/prepare-approved-android.py
+          gradle -p previous-release/approved-android :app:assembleRelease --no-daemon --stacktrace
           mkdir -p approved-upgrade
-          cp approved-android/app/build/outputs/apk/release/app-release.apk approved-upgrade/previous.apk
+          cp previous-release/approved-android/app/build/outputs/apk/release/app-release.apk approved-upgrade/previous.apk
       - name: Build installable non-debug APK and device tests
         run: |
           gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace
           mkdir -p approved-output
+          echo ff82a0e0e709ac5bed7d5f4118147ede900fd76c > approved-output/previous-source.txt
           cp approved-android/app/build/outputs/apk/release/app-release.apk approved-output/alkarna-approved.apk
           python3 scripts/verify-activation-package.py approved-output/alkarna-approved.apk
           python3 scripts/verify-approved-signature.py approved-upgrade/previous.apk approved-output/alkarna-approved.apk > approved-output/signature.txt

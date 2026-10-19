@@ -98,3 +98,42 @@ Legacy `return` records remain read-only historical data. They are not offered a
 ## Approved runtime party summaries — 2026-10-18
 
 The approved Android runtime and standalone preview now share the desktop customer/supplier historical trade, cash and gross-profit/purchase-count summaries, separate current debt directions and bounded metric source lists. Aggregate scope is every active account of the selected type across all time; search does not change the totals. See PARTY_SUMMARIES.md for the source trace, sign mapping and evidence.
+
+## Approved APK feature-gap audit — 2026-10-19
+
+**Scope correction:** the older feature table above describes the legacy React Native implementation. Its completed statuses must not be used to claim parity for the approved embedded-web APK. This audit compares desktop `lami216/offline-conta` at `1b4951947a82ca9da21337c757fe7afdd2329403` with the actual 1.0.11 APK sources at `ff82a0e0e709ac5bed7d5f4118147ede900fd76c` (`approved-runtime` and `approved-android`). No application behavior was changed during this audit.
+
+Evidence: 41 desktop source/test files inspected; 11 current-runtime screens/dialogs opened in an isolated browser; six export-scope probes. Local evidence is in `outputs/desktop-parity-audit/findings.json`, with `work/audit-desktop-parity.cjs` as the repeatable probe. This is a capability audit, not a claim that every accounting edge case has been tested against the desktop engine.
+
+| Capability | Approved-runtime assessment | Desktop source / current evidence |
+|---|---|---|
+| Currency selection / additional saved currency codes | Missing. MRU is hardcoded in amount rendering and outputs. Desktop changes display currency; it does not exchange or convert stored balances. | `lib/currency-core.ts`, `lib/currency-settings.ts`, GeneralSettings; mobile `engine.js` money formatter, `app.js` outputs |
+| Product-category create/rename/delete and assignment/filtering | Missing in the approved product model/editor and pickers. | `app/product-category-dialog.tsx`, ProductForm, ProductSearchPicker; mobile product-editor fields |
+| Per-user, per-screen view/create/edit/delete permissions | Partial. Enforcement and presets exist; the approved editor exposes preset roles only and overwrites capabilities with the role preset when saving. | UsersPermissions, `lib/permission-dependencies.ts`; mobile `saveUser` and new-user fields |
+| Invoice branding | Partial. Store name, phone, address and footer exist; custom invoice logo, registration/tax numbers and name typography controls are absent. The fixed app logo is a different feature. | `lib/invoice-branding.ts`, GeneralSettings; mobile branding screen has four fields |
+| Saved A4 / thermal80 / thermal58 output profiles | Missing from approved settings; native printing starts with ISO_A4. Generic Android printing already exists. | `app/printing.ts`, PrintSettingsPanel; native MainActivity `printDocument` |
+| Report product/category/payment-account/direction/debt-side filters | Partial. Report types and date range exist; the approved report toolbar only exposes report and period. | Reports, `app/report-types.ts`; current report screen probes |
+| Report-specific XLSX/PDF/print data | Defect / incomplete. `exportRecords()` ignores reportType and emits the generic period-filtered record register. In a sale/purchase/expense fixture, all six tested report types export all three kinds. Stock/debt/party reports need their own report model, not record rows. | Desktop Reports `printReport`; mobile `app.js` exportRecords/exportExcel/exportPdf/printRecords; six executable probes |
+| Party ledger inside Reports | Partial. Party pages have operation histories; the report named party-ledger currently shows party balances, not a selected party's dated opening/movement/closing ledger. | Desktop Reports party filters and `lib/reports.ts`; mobile `reportDetails` party-ledger branch |
+| Individual document output | Partial. Individual invoice supports print/system Save as PDF. The desktop three-choice document XLSX/direct-PDF/printer output is not implemented as three separate actions on the approved individual invoice. Register export already has three choices. | Desktop DocumentDetail/OutputChoiceDialog; mobile `invoice-view.js` document-actions |
+| Multi-product stock transfer / stock correction | Missing. Approved editor and reviewStock produce one product line per operation. | Desktop MultiStockForm/StockDraftTable; approved utility-form fields and reviewStock |
+| Opening-stock provenance and dedicated correction controls | Partial. Creation posts opening stock and preserves a readonly opening quantity on product edit. Desktop also replays consumed/remaining/transferred opening allocations and supports controlled opening quantity/cost/location correction/history. | `lib/opening-stock.ts`, ProductForm, `app/opening-stock-history.tsx`; approved productOpening/product editor |
+| Warehouse default-for-sale and safe archive/delete | Partial. Create/rename/select exist; dedicated persistent sales-default and archive/delete workflows are absent. | Desktop WarehouseAdmin; approved warehouse administration actions |
+| Customer/supplier safe archive and restore | Missing. Approved product/payment-account archives exist, but party archive/restore does not. | Desktop Parties/PartyEditDialog; approved site-archived only includes products/accounts |
+| Payment-account activation and opening-balance correction history | Partial. Name/current-balance correction/archive exist. Active/inactive toggle and the desktop dedicated opening-balance correction workflow/history are absent; approved current-balance correction is a deposit/withdraw record. | PaymentAccountDialog; approved site-account-edit and site-account-adjust |
+| Independent document sequences per sale/purchase/expense | Missing for newly created approved records. They share a global numeric ID counter and kind-ID display. | `lib/document-sequences.ts`; approved newRecord |
+| Expense backdating | Missing from approved expense editor (name/account/amount/note only). Desktop has a separately validated expense date. | Desktop Expenses; approved expense-editor probe |
+| Expense / stock-operation drafts and dirty-editor guards | Partial. Sale/purchase draft persistence exists; stock and expense editors do not carry the desktop draft/leave-protection workflows. | Desktop Expenses, MultiStockForm, stock-operation-draft; approved savePosDraft only |
+| Advanced legacy import and merge | Partial. Approved JSON backup preview/replace/safety-copy exists. Desktop additionally accepts SQLite/DB sources and supports matching/conflicts, stock/account policies, chunked/progress-tracked import runs and merge. | Desktop DataSettings, legacy/import-run.ts, migration/preview.ts; approved reviewImport/desktopToState |
+| Backup reminder before exit | Desktop capability requiring Android-specific adaptation; absent from native Back/exit behavior. Manual backup exists. This is a prompt, not automatic scheduled backup. | `desktop/close-flow.cjs`; native MainActivity onBackPressed |
+
+Intentionally changed by the user: wholesale pricing, customer/supplier offset workflow, generic document-resource tabs, and redundant invoice-creation/recent-invoice controls. Do not reintroduce them as parity fixes.
+
+Confirmed present, not gaps: Arabic/French RTL/LTR, dark/light, barcode scanning, expiration checks, all four party receive/pay directions, transient source location/highlight, per-number source drilldowns, customer/supplier aggregate/account summaries, product and payment-account archives, manual backup/restore, preset user roles, bounded lists/paging and sortable table headers. The missing report filters above do not mean that sorting is absent globally.
+
+Suggested priority: correct report output scope and complete party-ledger reporting; then currency/categories/granular permissions; then stock/opening and administration gaps; then printing/branding and advanced import/draft conveniences. These are audit findings and proposed work order, not implemented changes or a new APK release.
+
+
+## Approved runtime feature release 1.0.12
+
+The 2026-10-19 gap audit is now implemented in the approved runtime. See [APPROVED_FEATURES.md](APPROVED_FEATURES.md) for contracts, deliberate exclusions, import limitations and preservation gates. Production delivery requires the signed Android workflow to pass; the old React Native checklist is not release evidence.

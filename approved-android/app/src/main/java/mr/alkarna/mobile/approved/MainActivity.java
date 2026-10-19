@@ -110,6 +110,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
         @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
+        @JavascriptInterface public void closeApp(){runOnUiThread(()->{if(trusted()&&licenseAllowed())finish();});}
         @JavascriptInterface public void activationContinue(){runOnUiThread(()->openApp());}
         @JavascriptInterface public void copyDeviceCode(){runOnUiThread(()->{if(trusted()&&licensing!=null)((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("AlKarna device",licensing.deviceCode()));});}
         @JavascriptInterface public void installActivation(String id,String content){
@@ -174,6 +175,6 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onPause(){if(licensing!=null)licensing.checkpoint();super.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
-    @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
+    @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
     @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

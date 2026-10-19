@@ -18,7 +18,7 @@ adb install -r approved-android/app/build/outputs/apk/androidTest/release/app-re
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#seedPreviousVersion -e expectedVersionCode "$previous_code" mr.alkarna.mobile.approved.test/androidx.test.runner.AndroidJUnitRunner | tee approved-output/upgrade-before.txt
 grep -Eq '^OK \(1 test\)' approved-output/upgrade-before.txt
 adb shell am force-stop mr.alkarna.mobile.approved
-# No uninstall, clear, restore, activation import or database migration between these phases.
+# No uninstall, clear, restore or activation import between these phases.
 adb install -r approved-output/alkarna-approved.apk | tee approved-output/upgrade-install.txt
 grep -q 'Success' approved-output/upgrade-install.txt
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterInPlaceUpdate -e expectedVersionCode "$current_code" mr.alkarna.mobile.approved.test/androidx.test.runner.AndroidJUnitRunner | tee approved-output/upgrade-after.txt

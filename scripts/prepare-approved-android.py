@@ -1,5 +1,7 @@
 from pathlib import Path
 import hashlib,json,shutil
+import runpy
+runpy.run_path(str(Path(__file__).with_name('prepare-approved-dependencies.py')),run_name='__main__')
 repo=Path(__file__).resolve().parent.parent
 source=repo/'approved-runtime';target=repo/'approved-android/app/src/main/assets/approved';target.mkdir(parents=True,exist_ok=True)
 if (target/'demo-data.js').exists():(target/'demo-data.js').unlink()

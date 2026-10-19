@@ -74,13 +74,13 @@ public class ApprovedRuntimeTest {
         action("close");action("appearance:dark");action("go:settings");
         assertEquals("true",js("!!document.querySelector('#content [data-action=\"site:support\"]')"));
         action("site:support");capture("support-contact-dark");action("close");action("go:home");
-        js("act('go:inventory');act('open:product');true");
+        action("go:inventory");action("open:product");
         until("!!document.querySelector('.product-editor-sheet')");capture("product-editor");
         assertEquals("false",js("document.querySelector('.sheet').innerText.includes('\u0633\u0639\u0631 \u0627\u0644\u062c\u0645\u0644\u0629')"));
         js("(()=>{const values={name:'\u0634\u0627\u064a',price:'100',cost:'40',qty:'10',openingWarehouse:S.warehouse};for(const [key,value] of Object.entries(values))document.querySelector('#sheet-form [name='+key+']').value=value;act('save-product');return true})()");
         until("S.products.length===1&&modal===null&&!document.querySelector('.busy')");
         assertEquals("10",js("S.products[0].qty"));assertEquals("0",js("S.records[0].total"));
-        js("act('new:sale');act('pos:add:'+S.products[0].id);true");
+        action("new:sale");action("pos:add:"+js("S.products[0].id"));
         until("!!document.querySelector('.pos-cart-table')");capture("sale-cart");
         assertEquals("false",js("document.body.innerText.includes('\u0633\u0639\u0631 \u0627\u0644\u062c\u0645\u0644\u0629')"));
         js("act('pos:checkout');true");until("modal==='payment'");
@@ -159,12 +159,27 @@ public class ApprovedRuntimeTest {
             assertTrue("Native save picker for "+format,save.waitForExists(20000));
             save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
         }
-        js("act('site:export-print');true");until("!!document.querySelector('#print-root .export-report')");device.waitForIdle();Thread.sleep(2000);capture("android-print-dialog");device.pressBack();
+        assertEquals("false",js("(()=>{modal='site-export';render();return !!document.querySelector('[data-action=\"site:export-print\"]')})()"));action("close");
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
         assertEquals("10",js("S.products[0].qty"));assertEquals("5",js("S.records.length"));assertEquals("true",js("document.querySelector('#phone').dir==='ltr'"));capture("cold-relaunch");
+        String balances=js("JSON.stringify({accounts:S.accounts.map(a=>a.balance),parties:S.parties.map(p=>p.balance),stocks:S.products.map(p=>p.stocks)})");
+        action("site:feature:currency");js("document.querySelector('[name=newCode]').value='EUR';true");action("site:feature:currency-save");
+        assertEquals("\"EUR\"",js("S.currency.code"));assertEquals(balances,js("JSON.stringify({accounts:S.accounts.map(a=>a.balance),parties:S.parties.map(p=>p.balance),stocks:S.products.map(p=>p.stocks)})"));
+        action("site:feature:categories");js("document.querySelector('[name=categoryName]').value='Épicerie';true");action("site:feature:category-save");action("close");
+        action("product:"+js("S.products[0].id"));action("open:productedit");js("document.querySelector('[name=categoryId]').value=S.categories[0].id;true");action("save-product");
+        assertEquals("true",js("S.products[0].categoryId===S.categories[0].id"));
+        action("site:feature:opening:"+js("S.products[0].id"));assertEquals("true",js("modal==='feature-opening'&&document.querySelector('.feature-opening-metrics').innerText.includes('10')"));capture("french-opening-history");action("close");
+        action("ledger:"+supplierId);action("site:feature:party-statement:"+supplierId);assertEquals("true",js("reportType==='party-ledger'&&!!document.querySelector('.feature-report-table')&&document.querySelector('#content').innerText.includes('Solde final')"));capture("french-party-statement");
+        js("window.__qaExportDone=false;act('site:export-pdf').finally(()=>window.__qaExportDone=true);true");
+        var statementSave=device.findObject(new UiSelector().resourceId("android:id/button1"));assertTrue("Statement PDF saved directly",statementSave.waitForExists(20000));statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
+        action("go:users");action("site:new-user");js("(()=>{for(const [k,v]of Object.entries({name:'Vendeur',username:'seller',password:'1234'}))document.querySelector('#sheet-form [name='+k+']').value=v;return true})()");action("site:feature:permission-toggle:pos.edit:true");capture("french-granular-permissions");action("site:feature:user-save");
+        js("window.__qaSql=false;initSqlJs().then(SQL=>{const db=new SQL.Database();db.run('CREATE TABLE offline_test(value INTEGER)');db.run('INSERT INTO offline_test VALUES (7)');window.__qaSql=db.exec('SELECT value FROM offline_test')[0].values[0][0]===7;db.close()});true");until("window.__qaSql===true");
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
+        assertEquals("true",js("S.currency.code==='EUR'&&S.categories[0].name==='Épicerie'&&S.products[0].categoryId===S.categories[0].id&&S.users.some(u=>u.username==='seller'&&u.capabilities.includes('pos.edit'))"));
+        System.out.println("FEATURES PASS: native direct PDF, statement, display-only currency, categories, granular permissions, offline SQLite and cold persistence.");
         activity.close();
     }
 }

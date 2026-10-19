@@ -1,0 +1,8 @@
+{
+  "reference": "offline-conta@1b4951947a82ca9da21337c757fe7afdd2329403",
+  "base": "approved 1.0.11@ff82a0e0e709ac5bed7d5f4118147ede900fd76c",
+  "interaction": "Keep current compact tables, bounded lists, semantic colors, stable bottom sheets, direct numeric entry and Arabic/French layouts. Add optional report filters in a focused sheet; use the same report data for the screen, XLSX and direct PDF. Settings use existing action rows. Advanced product/category/permission controls remain progressive. Stock operations use compact multi-line tables with one numeric editor per row. Opening corrections are separate from normal stock corrections and retain provenance/audit.",
+  "persistence": "Additive snapshot migration, same IndexedDB name/origin, no reset, no activation or signing-identity change; validate before atomic writes and imports.",
+  "excludedByUser": ["printer settings", "thermal paper profiles", "wholesale", "offset", "demo transactions", "redundant invoice creation controls"],
+  "order": ["report models and export", "party ledger", "currency", "categories", "granular permissions", "branding and document PDF", "multi-product stock and drafts", "opening provenance and correction", "warehouse and party lifecycle", "payment activation and opening corrections", "document sequences and expense dates", "advanced import/merge", "Arabic/French and upgrade regression", "signed APK"]
+}

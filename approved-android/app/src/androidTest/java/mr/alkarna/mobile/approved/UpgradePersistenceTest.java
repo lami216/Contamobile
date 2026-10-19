@@ -71,6 +71,16 @@ public class UpgradePersistenceTest {
         long expected=Long.parseLong(InstrumentationRegistry.getArguments().getString("expectedVersionCode"));
         assertEquals(expected,target().getPackageManager().getPackageInfo(target().getPackageName(),0).getLongVersionCode());
     }
+    private void preserved(Object oldValue,Object newValue,String path) throws Exception {
+        if(oldValue instanceof JSONObject){assertTrue(path,newValue instanceof JSONObject);JSONObject old=(JSONObject)oldValue,next=(JSONObject)newValue;for(Iterator<String> keys=old.keys();keys.hasNext();){String key=keys.next();assertTrue(path+"."+key+" retained",next.has(key));preserved(old.get(key),next.get(key),path+"."+key);}}
+        else if(oldValue instanceof JSONArray){assertTrue(path,newValue instanceof JSONArray);JSONArray old=(JSONArray)oldValue,next=(JSONArray)newValue;assertEquals(path+" length",old.length(),next.length());for(int i=0;i<old.length();i++)preserved(old.get(i),next.get(i),path+"["+i+"]");}
+        else assertEquals(path,oldValue,newValue);
+    }
+    private void businessPreserved(String beforeText,String afterText) throws Exception {
+        JSONObject old=new JSONObject(beforeText),next=new JSONObject(afterText);preserved(old.getJSONArray("users"),next.getJSONArray("users"),"credentials and permissions");preserved(old.getJSONArray("meta"),next.getJSONArray("meta"),"session metadata");
+        JSONArray snapshots=old.getJSONArray("snapshots"),updated=next.getJSONArray("snapshots");
+        for(int i=0;i<snapshots.length();i++){JSONObject row=snapshots.getJSONObject(i),found=null;for(int j=0;j<updated.length();j++)if(updated.getJSONObject(j).getString("id").equals(row.getString("id")))found=updated.getJSONObject(j);assertNotNull("Old snapshot retained",found);if(row.getString("id").equals("shop")){preserved(row.getJSONObject("state"),found.getJSONObject("state"),"all existing business fields");assertTrue("Additive migration schema",found.getJSONObject("state").getInt("featureSchema")>=2);}else preserved(row,found,"historical snapshot");}
+    }
     @Test public void seedPreviousVersion() throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());
         String document=TestLicenseIssuer.issue(license.deviceCode(),"temporary",10800);
@@ -103,11 +113,10 @@ public class UpgradePersistenceTest {
         try{license.install(before.getString("document"));fail("Consumed activation was reset by update");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_ALREADY_USED",e.code);}
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
-        assertEquals("All persisted business tables and credentials unchanged",before.getString("database"),databaseSnapshot());
+        businessPreserved(before.getString("database"),databaseSnapshot());
         assertEquals(before.getString("localStorage"),text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))"));
         js("document.querySelector('[name=username]').value='upgrade-owner';document.querySelector('[name=password]').value='1234';true");action("site:login");until("!!document.querySelector('.nav')");
         assertEquals("11",js("S.products[0].qty"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));assertEquals("true",js("document.documentElement.lang==='fr'&&document.querySelector('#phone').dir==='ltr'&&previewAppearance29==='light'"));
         System.out.println("UPGRADE PASS: real install -r preserved every business store, password, device code, certificate, native activation key, consumed license and remaining duration.");
     }
 }
-

@@ -24,3 +24,6 @@ approved-android/app/src/androidTest/assets/license-contract.json
 *.pfx
 *SIGNING_BUNDLE*
 signing-private/
+
+# Materialized from the integrity-pinned sql.js package during build.
+approved-runtime/assets/sql-asm.js

@@ -4,8 +4,8 @@ plugins { id 'com.android.application' }
 // Never fall back to the machine-generated debug identity on a release build.
 def signingEnvironment = ['ALKARNA_KEYSTORE_PATH', 'ALKARNA_STORE_PASSWORD', 'ALKARNA_KEY_ALIAS', 'ALKARNA_KEY_PASSWORD']
 def hasReleaseSigning = signingEnvironment.every { System.getenv(it)?.trim() }
-def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(12)
-def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.11')
+def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(13)
+def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.12')
 android {
  namespace 'mr.alkarna.mobile.approved'
  compileSdk 35
