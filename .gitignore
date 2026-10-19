@@ -16,3 +16,11 @@ approved-android/app/src/main/assets/
 approved-android/app/src/main/res/drawable/app_icon.png
 approved-android/local.properties
 approved-android/app/src/androidTest/assets/license-contract.json
+
+# Private release signing material must never enter source control or artifacts.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*SIGNING_BUNDLE*
+signing-private/

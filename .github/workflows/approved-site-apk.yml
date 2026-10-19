@@ -2,7 +2,7 @@ name: Approved seller app APK
 on:
   push:
     branches: [feat/approved-seller-app]
-    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-android.py', '.github/workflows/approved-site-apk.yml']
+    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-*.py', 'scripts/verify-approved-signature.py', 'scripts/test-approved-*', '.github/workflows/approved-site-apk.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,13 +40,25 @@ jobs:
         run: python3 scripts/prepare-approved-android.py
       - name: Prepare independent desktop license contract fixtures
         run: node scripts/prepare-license-fixtures.mjs
+      - name: Load the permanent release signing identity
+        env:
+          ALKARNA_SIGNING_BUNDLE: ${{ secrets.ALKARNA_SIGNING_BUNDLE }}
+        run: python3 scripts/prepare-approved-signing.py
+      - name: Verify signing credential handling
+        run: python3 scripts/test-approved-signing.py
+      - name: Build previous-version upgrade fixture with the same permanent key
+        run: |
+          gradle -p approved-android :app:assembleRelease -PalkarnaVersionCode=11 -PalkarnaVersionName=1.0.10-upgrade-fixture --no-daemon --stacktrace
+          mkdir -p approved-upgrade
+          cp approved-android/app/build/outputs/apk/release/app-release.apk approved-upgrade/previous.apk
       - name: Build installable non-debug APK and device tests
         run: |
           gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace
           mkdir -p approved-output
           cp approved-android/app/build/outputs/apk/release/app-release.apk approved-output/alkarna-approved.apk
           python3 scripts/verify-activation-package.py approved-output/alkarna-approved.apk
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose approved-output/alkarna-approved.apk > approved-output/signature.txt
+          python3 scripts/verify-approved-signature.py approved-upgrade/previous.apk approved-output/alkarna-approved.apk > approved-output/signature.txt
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs approved-output/alkarna-approved.apk >> approved-output/signature.txt
           sha256sum approved-output/alkarna-approved.apk > approved-output/SHA256SUMS.txt
       - name: Enable KVM
         run: |
@@ -61,6 +73,9 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: bash scripts/test-approved-android.sh
+      - name: Remove ephemeral signing files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/alkarna-signing/release.p12"
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

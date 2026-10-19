@@ -1,11 +1,42 @@
 plugins { id 'com.android.application' }
+
+// Customer APKs must keep one private signing key for their entire lifetime.
+// Never fall back to the machine-generated debug identity on a release build.
+def signingEnvironment = ['ALKARNA_KEYSTORE_PATH', 'ALKARNA_STORE_PASSWORD', 'ALKARNA_KEY_ALIAS', 'ALKARNA_KEY_PASSWORD']
+def hasReleaseSigning = signingEnvironment.every { System.getenv(it)?.trim() }
+def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(12)
+def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.11')
 android {
  namespace 'mr.alkarna.mobile.approved'
  compileSdk 35
- defaultConfig { applicationId 'mr.alkarna.mobile.approved'; minSdk 26; targetSdk 35; versionCode 11; versionName '1.0.10'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+ defaultConfig { applicationId 'mr.alkarna.mobile.approved'; minSdk 26; targetSdk 35; versionCode approvedVersionCode; versionName approvedVersionName; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
  testBuildType 'release'
- buildTypes { release { signingConfig signingConfigs.debug; minifyEnabled false; debuggable false } }
+ signingConfigs {
+  release {
+   if (hasReleaseSigning) {
+    storeFile file(System.getenv('ALKARNA_KEYSTORE_PATH'))
+    storeType 'PKCS12'
+    storePassword System.getenv('ALKARNA_STORE_PASSWORD')
+    keyAlias System.getenv('ALKARNA_KEY_ALIAS')
+    keyPassword System.getenv('ALKARNA_KEY_PASSWORD')
+   }
+  }
+ }
+ buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false; debuggable false } }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+gradle.taskGraph.whenReady { graph ->
+ if (graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }) {
+  if (!hasReleaseSigning) throw new GradleException('Persistent release signing is required. No debug-key fallback is allowed.')
+  def store = java.security.KeyStore.getInstance('PKCS12')
+  new File(System.getenv('ALKARNA_KEYSTORE_PATH')).withInputStream { store.load(it, System.getenv('ALKARNA_STORE_PASSWORD').toCharArray()) }
+  def certificate = store.getCertificate(System.getenv('ALKARNA_KEY_ALIAS'))
+  if (certificate == null || !store.isKeyEntry(System.getenv('ALKARNA_KEY_ALIAS'))) throw new GradleException('Release signing key is missing.')
+  def actual = java.security.MessageDigest.getInstance('SHA-256').digest(certificate.encoded).encodeHex().toString()
+  def expected = rootProject.file('signing-certificate.sha256').text.trim()
+  if (actual != expected) throw new GradleException('Signing certificate changed. Refusing an APK that cannot update existing installations.')
+ }
 }
 dependencies {
  implementation 'androidx.webkit:webkit:1.14.0'
