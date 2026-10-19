@@ -84,6 +84,10 @@ public class UpgradePersistenceTest {
         assertEquals("11",js("S.products[0].qty"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));
         action("site:language:fr");action("appearance:light");action("site:logout");
         until("!!document.querySelector('[data-action=\"site:login\"]')");
+        // Settle the existing first-cold-launch product-name migration on the old
+        // version before taking a byte-for-byte baseline of every stored row.
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);
+        until("!!document.querySelector('[data-action=\"site:login\"]')");
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
             .put("remainingSeconds",license.status().getJSONObject("license").getDouble("remainingSeconds"))
