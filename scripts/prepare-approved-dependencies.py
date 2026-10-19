@@ -12,8 +12,8 @@ def prepare():
     if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest()==ASSET_SHA256:
         return
     with urllib.request.urlopen(f'https://registry.npmjs.org/sql.js/-/sql.js-{VERSION}.tgz',timeout=60) as response:
-        package=response.read(4*1024*1024+1)
-    if len(package)>4*1024*1024 or base64.b64encode(hashlib.sha512(package).digest()).decode()!=INTEGRITY:
+        package=response.read(16*1024*1024+1)
+    if len(package)>16*1024*1024 or base64.b64encode(hashlib.sha512(package).digest()).decode()!=INTEGRITY:
         raise ValueError('Pinned sql.js package integrity mismatch')
     with tarfile.open(fileobj=io.BytesIO(package),mode='r:gz') as archive:
         data=archive.extractfile('package/dist/sql-asm.js').read(2*1024*1024+1)
