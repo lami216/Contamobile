@@ -22,7 +22,9 @@ public class UpgradePersistenceTest {
     private ActivityScenario<MainActivity> activity;
     private Map<String,PublicKey> originalKeys;
     private Context target() { return InstrumentationRegistry.getInstrumentation().getTargetContext(); }
-    private File testFile(String name) { return new File(InstrumentationRegistry.getInstrumentation().getContext().getFilesDir(),name); }
+    // Instrumentation executes with the target UID. Its temporary emulator-only state
+    // must live under that UID, and survives the target APK replacement between phases.
+    private File testFile(String name) { return new File(target().getNoBackupFilesDir(),"instrumentation-"+name); }
     private void write(String name,String content) throws Exception {try(var out=new FileOutputStream(testFile(name))){out.write(content.getBytes(StandardCharsets.UTF_8));}}
     private String read(String name) throws Exception {try(var in=new FileInputStream(testFile(name))){return new String(in.readAllBytes(),StandardCharsets.UTF_8);}}
     @Before public void persistentInstrumentationIssuer() throws Exception {
@@ -104,3 +106,4 @@ public class UpgradePersistenceTest {
         System.out.println("UPGRADE PASS: real install -r preserved every business store, password, device code, certificate, native activation key, consumed license and remaining duration.");
     }
 }
+
