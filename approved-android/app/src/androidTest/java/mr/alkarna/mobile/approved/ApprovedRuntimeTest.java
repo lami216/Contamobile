@@ -50,6 +50,8 @@ public class ApprovedRuntimeTest {
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
+        until("document.querySelector('.activation-contact img').naturalWidth>0");
+        assertEquals("true",js("document.querySelector('#contact-whatsapp').href.includes(document.querySelector('#device-code').textContent)"));
         String activationDevice=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
         assertTrue(activationDevice.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
         assertEquals("false",js("NativeHost.licenseAllowed()"));
@@ -60,6 +62,16 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         js("(()=>{const values={name:'QA owner',shop:'QA store',username:'qa',password:'1234',seed:'empty'};for(const [key,value] of Object.entries(values))document.querySelector('#site-auth-form [name='+key+']').value=value;act('site:setup');return true})()");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
+        until("document.querySelector('.brand-logo').naturalWidth>0");
+        action("site:account-menu");until("!!document.querySelector('.account-sheet')");
+        assertEquals("true",js("document.querySelector('.account-sheet').getBoundingClientRect().height<Math.min(innerHeight-10,640)"));
+        assertEquals("true",js("document.querySelector('[data-action=\"appearance:dark\"]').getAttribute('aria-pressed')==='true'"));capture("account-menu-dark");
+        action("appearance:light");assertEquals("true",js("document.querySelector('[data-action=\"appearance:light\"]').getAttribute('aria-pressed')==='true'"));capture("account-menu-light");
+        action("site:support");until("document.querySelector('.support-image').naturalWidth>0");capture("support-contact-light");
+        assertEquals("true",js("document.querySelector('.support-whatsapp').href==='https://wa.me/22249823328'"));
+        action("close");action("appearance:dark");action("go:settings");
+        assertEquals("true",js("!!document.querySelector('#content [data-action=\"site:support\"]')"));
+        action("site:support");capture("support-contact-dark");action("close");action("go:home");
         js("act('go:inventory');act('open:product');true");
         until("!!document.querySelector('.product-editor-sheet')");capture("product-editor");
         assertEquals("false",js("document.querySelector('.sheet').innerText.includes('\u0633\u0639\u0631 \u0627\u0644\u062c\u0645\u0644\u0629')"));

@@ -24,7 +24,7 @@ import org.json.JSONObject;
 import java.io.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Offline host for the seller-approved runtime. No HTTP server or external navigation. */
+/** Offline host for the seller-approved runtime. No HTTP server. Only explicit support taps can open an external app. */
 public final class MainActivity extends Activity {
     public static final String ORIGIN = "https://appassets.androidplatform.net";
     private WebView web;
@@ -71,7 +71,13 @@ public final class MainActivity extends Activity {
                 WebResourceResponse response=assets.shouldInterceptRequest(request.getUrl());
                 return response!=null?response:new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
             }
-            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return true;}
+            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
+                if(request.isForMainFrame()&&request.hasGesture()&&trusted()){
+                    Intent support=SupportContact.intentFor(request.getUrl());
+                    if(support!=null)try{startActivity(support);}catch(android.content.ActivityNotFoundException e){Toast.makeText(MainActivity.this,"تعذّر فتح وسيلة التواصل. الرقم: 49823328",Toast.LENGTH_LONG).show();}
+                }
+                return true;
+            }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){Log.e("AlKarna",request.getUrl()+": "+error.getDescription());}
         });
         web.setWebChromeClient(new WebChromeClient(){

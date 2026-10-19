@@ -8,6 +8,9 @@ for name,digest in json.loads((source/'reference-sha256.json').read_text()).item
 for name in ['native-adapter.js','native.css','activation.html','activation.css','activation.js']:shutil.copyfile(source/name,target/name)
 fonts=target/'assets';fonts.mkdir(exist_ok=True)
 for name in ['StitchArabic.ttf','StitchArabicBold.ttf','OFL-IBM-Plex.txt']:shutil.copyfile(repo/'assets/fonts'/name,fonts/name)
+for name,digest in json.loads((source/'assets-sha256.json').read_text()).items():
+    assert hashlib.sha256((source/'assets'/name).read_bytes()).hexdigest()==digest, 'Brand asset changed: '+name
+    shutil.copyfile(source/'assets'/name,fonts/name)
 s=(target/'index.html').read_text(encoding='utf-8').replace('</head>','<link rel="stylesheet" href="native.css"></head>').replace('<script src="engine.js">','<script src="native-adapter.js"></script><script src="engine.js">')
 (target/'index.html').write_text(s,encoding='utf-8')
 p=target/'app.js';s=p.read_text(encoding='utf-8')
