@@ -57,7 +57,7 @@ public class ApprovedRuntimeTest {
         assertEquals("false",js("NativeHost.licenseAllowed()"));
         String license=TestLicenseIssuer.issue(activationDevice,"perpetual",0);
         js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
-        until("!document.querySelector('#continue').hidden");capture("activation-valid");
+        until("!document.querySelector('#continue').hidden");assertEquals("true",js("new URL(document.querySelector('#contact-whatsapp').href).searchParams.get('text').includes('مساعدة')"));capture("activation-valid");
         js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));

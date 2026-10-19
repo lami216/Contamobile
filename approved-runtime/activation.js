@@ -14,7 +14,12 @@
  const message=(text,kind='')=>{$('status').textContent=text;$('status').className=kind};
  const reasons={LICENSE_REQUIRED:['فعّل هذا الهاتف للبدء','Activez ce téléphone pour commencer'],LICENSE_EXPIRED:['انتهت مدة الترخيص. أضف ملف تفعيل جديدًا','La licence a expiré. Ajoutez un nouveau fichier.'],LICENSE_CLOCK_ROLLBACK:['تم اكتشاف إرجاع ساعة الجهاز. تواصل مع مسؤول التفعيل','Un recul de l’horloge a été détecté. Contactez le responsable.']};
  const duration=seconds=>{const n=Math.max(0,Math.ceil(seconds)),days=Math.floor(n/86400),hours=Math.floor(n%86400/3600),minutes=Math.floor(n%3600/60);return days?days+' '+t('يوم','j')+' '+hours+' '+t('ساعة','h'):hours?hours+' '+t('ساعة','h')+' '+minutes+' '+t('دقيقة','min'):minutes+' '+t('دقيقة','min')+' '+n%60+' '+t('ثانية','s')};
- function show(status){current=status;$('contact-whatsapp').href='https://wa.me/22249823328?text='+encodeURIComponent(t('أريد تفعيل الكرنه على هاتفي. كود الجهاز: ','Je souhaite activer AlKarna sur mon téléphone. Code : ')+(status.deviceId||''));$('device-code').textContent=status.deviceId||'—';$('copy-code').disabled=!status.deviceId;$('continue').hidden=!status.valid;
+ function show(status){current=status;const supportMode=status.valid||['LICENSE_EXPIRED','LICENSE_CLOCK_ROLLBACK','LICENSE_STATE_INVALID','LICENSE_STORAGE_ERROR'].includes(status.code);
+  $('contact-title').textContent=supportMode?t('الدعم وتجديد الترخيص','Assistance et renouvellement'):copy['contact-title'][fr?1:0];
+  $('contact-intro').textContent=supportMode?t('للمساعدة أو تجديد ترخيص هاتفك، تواصل معنا عبر واتساب.','Pour l’assistance ou le renouvellement, contactez-nous par WhatsApp.'):copy['contact-intro'][fr?1:0];
+  $('contact-send').textContent=supportMode?t('التواصل مع الدعم','Contacter l’assistance'):copy['contact-send'][fr?1:0];
+  $('intro').textContent=status.valid?t('هذا الهاتف مفعّل. يمكنك مراجعة بيانات الترخيص أو إضافة ملف تجديد.','Ce téléphone est activé. Consultez votre licence ou ajoutez un fichier de renouvellement.'):copy.intro[fr?1:0];
+  $('contact-whatsapp').href='https://wa.me/22249823328?text='+encodeURIComponent((supportMode?t('أحتاج مساعدة في الكرنه. كود الجهاز: ','J’ai besoin d’aide pour AlKarna. Code : '):t('أريد تفعيل الكرنه على هاتفي. كود الجهاز: ','Je souhaite activer AlKarna sur mon téléphone. Code : '))+(status.deviceId||''));$('device-code').textContent=status.deviceId||'—';$('copy-code').disabled=!status.deviceId;$('continue').hidden=!status.valid;
   $('title').textContent=status.valid?t('الهاتف مفعّل','Téléphone activé'):copy.title[fr?1:0];
   $('file-text').textContent=status.valid?t('تحديث ملف الترخيص','Mettre à jour la licence'):copy['file-text'][fr?1:0];
   const info=$('license-info');info.hidden=!status.valid;info.replaceChildren();
