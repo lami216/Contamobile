@@ -146,7 +146,7 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void printDocument(){runOnUiThread(()->{
             if(!trusted()||!licenseAllowed())return;
-            try{((PrintManager)getSystemService(PRINT_SERVICE)).print(NativeUi.french(this)?"AlKarna":"الكرنه",web.createPrintDocumentAdapter(NativeUi.french(this)?"AlKarna":"الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
+            try{((PrintManager)getSystemService(PRINT_SERVICE)).print(NativeUi.french(MainActivity.this)?"AlKarna":"الكرنه",web.createPrintDocumentAdapter(NativeUi.french(MainActivity.this)?"AlKarna":"الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
             catch(Exception e){Toast.makeText(MainActivity.this,NativeUi.text(MainActivity.this,"تعذّر فتح الطباعة"),Toast.LENGTH_LONG).show();}
         });}
         @JavascriptInterface public void scanBarcode(String id){runOnUiThread(()->{

@@ -445,3 +445,5 @@ Object.assign(mobileFrench,{
  "لا توجد منتجات": "Aucun produit",
  "لا يوجد مخزون في هذا النطاق": "Aucun stock dans ce périmètre"
 });
+
+Object.assign(mobileFrench,{"حجم الملف أكبر من الحد المتاح":"Le fichier dépasse la taille autorisée","تعذر تجهيز صفحة PDF":"Impossible de préparer une page PDF"});

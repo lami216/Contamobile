@@ -167,7 +167,7 @@ function protectedDisplayValues(){
  return values;
 }
 function translateUi(root){
- const language=appLanguage();root.dir=language==='fr'?'ltr':'rtl';document.documentElement.lang=language;document.documentElement.dir=root.dir;if(language!=='fr')return;
+ const language=appLanguage();root.dir=language==='fr'?'ltr':'rtl';document.documentElement.lang=language;document.documentElement.dir=root.dir;document.title=language==='fr'?'AlKarna':'الكرنه';if(language!=='fr')return;
  const protectedValues=protectedDisplayValues(),walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[];
  while(walker.nextNode())nodes.push(walker.currentNode);
  for(const node of nodes){const parent=node.parentElement,value=node.textContent.trim(),systemLabel=parent?.closest('.nav,.section-title,.sheet-head,.app-head h1,thead,.party-stat-label,.party-summary-heading,.summary-head,.metric-label,.account-appearance h3,.field>label,.catalog-copy,.catalog-item>strong,.catalog-item>small');if(!value||parent?.closest('[data-user-content],.locale-switch,input,textarea,script,style')||protectedValues.has(value)&&!systemLabel)continue;const translated=translateText(node.textContent);if(translated!==node.textContent)node.textContent=translated;}
