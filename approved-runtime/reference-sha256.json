@@ -39,6 +39,6 @@
   "legacy-import.js": "287297331067d2e12b898000b076c01713e1fc6e24c9a8668d379e7d7158d62b",
   "sw.js": "b1157f4527727b91d7a014181d3b03c7c1530cd206632dd80899cadee91648e6",
   "manifest.webmanifest": "2dd1b23e5f8bd6ba812b1dce7af81f90ed39687663e60d6efd8240bdb9f1130b",
-  "owner-recovery.js": "6f577f77f997e64e7a302d9a73d7416720e7bbc35985453bf01b610d25ba9ea0",
-  "owner-recovery.css": "44bcf2769c058f277f7e8b8a12c3c3f8ac8e0ad9d9aaa6af619037da9e6ffd3b"
+  "owner-recovery.js": "3f5beb7c1feb5cda659140c5d9eb32e73348f308ca968a95dfee52011c77bdbe",
+  "owner-recovery.css": "f7bd8b93e222ef3c955eac494407d9d44367b10d0832bd89102decc8e4141f6c"
 }
