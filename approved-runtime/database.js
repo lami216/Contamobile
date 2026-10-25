@@ -8,6 +8,30 @@ export class ShopDatabase {
   async all(store){return new Promise((resolve,reject)=>{const r=this.db.transaction(store).objectStore(store).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
   async put(store,value){return new Promise((resolve,reject)=>{const tx=this.db.transaction(store,'readwrite');tx.objectStore(store).put(value);tx.oncomplete=()=>resolve(value);tx.onabort=tx.onerror=()=>reject(tx.error||new StoreError('تعذّر حفظ البيانات'))})}
   async load(){const row=await this.get('snapshots','shop');this.revision=row?.revision||0;return row?.state||null}
+  async recoverOwner(prepared){
+    const p=prepared,password=p?.password;
+    if(p?.stage!=='prepared'||!['shopId','ownerId','requestId','grantId','intentId'].every(k=>typeof p[k]==='string'&&/^[A-Za-z0-9_.:-]{1,160}$/.test(p[k]))||password?.algorithm!=='PBKDF2-SHA256'||password.iterations!==210000||! /^[a-f0-9]{32}$/.test(password.salt)||! /^[a-f0-9]{64}$/.test(password.hash))throw new StoreError('تفويض الاستعادة غير صالح');
+    // The native Keystore journal validates the signed claim before exposing this intent.
+    // Password + receipt + owner session invalidation commit together; no accounting row is written.
+    return new Promise((resolve,reject)=>{
+      const tx=this.db.transaction(['users','meta','snapshots'],'readwrite'),users=tx.objectStore('users'),meta=tx.objectStore('meta');let failure=null,alreadyApplied=false;
+      const abort=message=>{failure=new StoreError(message);tx.abort()};
+      const receipt=meta.get('owner-recovery:'+p.grantId);
+      receipt.onsuccess=()=>{
+        if(receipt.result){const r=receipt.result;if(r.ownerId!==p.ownerId||r.shopId!==p.shopId||r.intentId!==p.intentId||r.requestId!==p.requestId)return abort('تعارض في إيصال الاستعادة');alreadyApplied=true;return;}
+        const shop=tx.objectStore('snapshots').get('shop');shop.onsuccess=()=>{
+          if(shop.result?.state?.originId!==p.shopId)return abort('هذا التفويض يخص محلاً آخر');
+          const owner=users.get(p.ownerId);owner.onsuccess=()=>{
+            if(owner.result?.role!=='owner'||owner.result.active===false)return abort('الاستعادة خاصة بحساب المالك الفعال');
+            users.put({...owner.result,password:structuredClone(password),updatedAt:new Date().toISOString()});
+            meta.put({id:'owner-recovery:'+p.grantId,ownerId:p.ownerId,shopId:p.shopId,intentId:p.intentId,requestId:p.requestId,appliedAt:new Date().toISOString()});
+            const cursor=meta.openCursor();cursor.onsuccess=()=>{const c=cursor.result;if(c){if(c.value.id.startsWith('session:')&&c.value.user===p.ownerId)c.delete();c.continue()}};
+          };
+        };
+      };
+      tx.oncomplete=()=>resolve({applied:true,alreadyApplied});tx.onabort=tx.onerror=()=>reject(failure||tx.error||new StoreError('لم تكتمل الاستعادة؛ أعد المحاولة'));
+    });
+  }
   async save(state,backup=null){validateState(state);const copy=structuredClone(state);return new Promise((resolve,reject)=>{const tx=this.db.transaction(['snapshots','meta'],'readwrite');const store=tx.objectStore('snapshots');let failure=null;const request=store.get('shop');request.onsuccess=()=>{if((request.result?.revision||0)!==this.revision){failure=new StoreError('تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل.');tx.abort();return}if(backup)store.put({id:'before-compact-product-names',state:structuredClone(backup),updatedAt:new Date().toISOString()});store.put({id:'shop',revision:this.revision+1,state:copy,updatedAt:new Date().toISOString()})};tx.oncomplete=()=>{this.revision++;resolve(this.revision)};tx.onabort=tx.onerror=()=>reject(failure||tx.error||new StoreError('لم يكتمل الحفظ؛ لم تُسجّل العملية'))})}
   async replace(state,users){validateState(state);for(const u of users)if(!u.id||!u.username||!['owner','manager','accountant','sales','custom'].includes(u.role)||!/^([a-f0-9]{64})$/.test(u.password?.hash||'')||!/^([a-f0-9]{32})$/.test(u.password?.salt||''))throw new StoreError('حساب مستخدم غير صالح في النسخة');for(const u of users)if(u.capabilities&&(!Array.isArray(u.capabilities)||u.capabilities.some(c=>!CAPABILITIES.includes(c))))throw new StoreError('صلاحيات مستخدم غير صالحة');if(new Set(users.map(u=>u.username)).size!==users.length||new Set(users.map(u=>u.id)).size!==users.length)throw new StoreError('حسابات مكررة في النسخة');if(!users.some(u=>u.role==='owner'&&u.active!==false))throw new StoreError('النسخة تحتاج حساب مالك فعال');const old=await this.get('snapshots','shop');if((old?.revision||0)!==this.revision)throw new StoreError('تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل الاستعادة.');return new Promise((resolve,reject)=>{const tx=this.db.transaction(['snapshots','users','meta'],'readwrite');tx.objectStore('snapshots').put({id:'safety-backup',state:old?.state,users:[] ,updatedAt:new Date().toISOString()});tx.objectStore('snapshots').put({id:'shop',state:structuredClone(state),revision:this.revision+1,updatedAt:new Date().toISOString()});tx.objectStore('users').clear();for(const user of users)tx.objectStore('users').put(user);tx.oncomplete=()=>{this.revision++;resolve()};tx.onabort=tx.onerror=()=>reject(tx.error||new StoreError('فشلت الاستعادة؛ بقيت البيانات السابقة'))})}
 }

@@ -8,6 +8,7 @@
   licenseStatus:()=>call('activationStatus'),
   activation:()=>NativeHost.openActivation()
  };
+ window.NativeFiles.ownerRecovery=(command,value='')=>call('ownerRecovery',command,value);
  window.print=()=>NativeHost.printDocument();
  let lastTheme='',lastLanguage='';new MutationObserver(()=>{const language=document.documentElement.lang==='fr'?'fr':'ar';if(language!==lastLanguage){lastLanguage=language;NativeHost.language(language)}const theme=document.querySelector('#phone')?.dataset.appearance||'dark';if(theme!==lastTheme){lastTheme=theme;NativeHost.theme(theme)}}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['data-appearance','lang']});
 })();

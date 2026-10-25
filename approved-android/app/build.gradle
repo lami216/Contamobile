@@ -4,12 +4,18 @@ plugins { id 'com.android.application' }
 // Never fall back to the machine-generated debug identity on a release build.
 def signingEnvironment = ['ALKARNA_KEYSTORE_PATH', 'ALKARNA_STORE_PASSWORD', 'ALKARNA_KEY_ALIAS', 'ALKARNA_KEY_PASSWORD']
 def hasReleaseSigning = signingEnvironment.every { System.getenv(it)?.trim() }
-def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(13)
-def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.12')
+def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(14)
+def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.13-trial')
 android {
  namespace 'mr.alkarna.mobile.approved'
  compileSdk 35
- defaultConfig { applicationId 'mr.alkarna.mobile.approved'; minSdk 26; targetSdk 35; versionCode approvedVersionCode; versionName approvedVersionName; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+ defaultConfig {
+  applicationId 'mr.alkarna.mobile.approved'; minSdk 26; targetSdk 35; versionCode approvedVersionCode; versionName approvedVersionName; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+  // Public fixed deployment metadata, never an admin/review password. Empty keeps offline operation unchanged.
+  buildConfigField 'String', 'CONTATOOLS_ORIGIN', groovy.json.JsonOutput.toJson(System.getenv('CONTATOOLS_ORIGIN') ?: '')
+  buildConfigField 'String', 'CONTATOOLS_ISSUERS', groovy.json.JsonOutput.toJson(System.getenv('CONTATOOLS_ISSUERS') ?: '{}')
+ }
+ buildFeatures { buildConfig true }
  testBuildType 'release'
  signingConfigs {
   release {

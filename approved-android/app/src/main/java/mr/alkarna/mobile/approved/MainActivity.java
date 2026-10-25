@@ -33,6 +33,8 @@ public final class MainActivity extends Activity {
     private String scannerRequest;
     private Export pendingExport;
     private DeviceLicense licensing;
+    private ContatoolsClient administration;
+    private final java.util.concurrent.ExecutorService administrationQueue=java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean activationPage;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
     private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
@@ -105,7 +107,26 @@ public final class MainActivity extends Activity {
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
     private void error(String id,String message){result(id,value("error",NativeUi.text(this,message)));}
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
+    private void administration(String id,String command,String content){runOnUiThread(()->{
+        if(!trusted()||activationPage||!licenseAllowed()){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        administrationQueue.execute(()->{
+            try{
+                if(administration==null){if(BuildConfig.CONTATOOLS_ORIGIN.isEmpty()){result(id,value("stage","unconfigured"));return;}administration=new ContatoolsClient(MainActivity.this,licensing,BuildConfig.CONTATOOLS_ORIGIN,new JSONObject(BuildConfig.CONTATOOLS_ISSUERS));}
+                if(content.length()>16384)throw new IOException("Invalid recovery input");JSONObject response;
+                switch(command){
+                    case "register":response=administration.register(new JSONObject(content));break;
+                    case "request":response=administration.request(content);break;
+                    case "poll":response=administration.poll();break;
+                    case "prepare":response=administration.prepare(new JSONObject(content));break;
+                    case "resume":response=administration.resume();break;
+                    case "finish":JSONObject receipt=new JSONObject(content);response=administration.finish(receipt.getString("grantId"),receipt.getString("intentId"));break;
+                    default:throw new IOException("Unknown administration operation");
+                }result(id,response);
+            }catch(Exception e){error(id,"تعذّر الاتصال بخدمة الاستعادة. لم يُغيّر التفعيل؛ أعد المحاولة أو تواصل مع الدعم.");}
+        });
+    });}
     public final class NativeHost {
+        @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
         @JavascriptInterface public void language(String language){runOnUiThread(()->{if(trusted()&&("ar".equals(language)||"fr".equals(language)))getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("language",language).apply();});}
         @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
@@ -176,5 +197,5 @@ public final class MainActivity extends Activity {
     @Override protected void onPause(){if(licensing!=null)licensing.checkpoint();super.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
     @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
-    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
+    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);administrationQueue.shutdown();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

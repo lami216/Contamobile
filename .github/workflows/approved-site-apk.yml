@@ -1,7 +1,7 @@
 name: Approved seller app APK
 on:
   push:
-    branches: [feat/approved-seller-app]
+    branches: [feat/approved-seller-app, feat/contatools-legacy-registration-recovery]
     paths: ['approved-android/**', 'approved-runtime/**', 'scripts/prepare-approved-*.py', 'scripts/verify-approved-signature.py', 'scripts/test-approved-*', '.github/workflows/approved-site-apk.yml']
   workflow_dispatch:
 permissions:
@@ -52,10 +52,10 @@ jobs:
         run: python3 scripts/prepare-approved-signing.py
       - name: Verify signing credential handling
         run: python3 scripts/test-approved-signing.py
-      - name: Check out the actual previously delivered 1.0.11 source
+      - name: Check out the actual previously delivered 1.0.12 source
         uses: actions/checkout@v4
         with:
-          ref: ff82a0e0e709ac5bed7d5f4118147ede900fd76c
+          ref: 1efb01fc1cd7bc62670510e57c6158734ad4bf05
           path: previous-release
       - name: Build the previous release with the same permanent key
         run: |
@@ -67,7 +67,7 @@ jobs:
         run: |
           gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest --no-daemon --stacktrace
           mkdir -p approved-output
-          echo ff82a0e0e709ac5bed7d5f4118147ede900fd76c > approved-output/previous-source.txt
+          echo 1efb01fc1cd7bc62670510e57c6158734ad4bf05 > approved-output/previous-source.txt
           cp approved-android/app/build/outputs/apk/release/app-release.apk approved-output/alkarna-approved.apk
           python3 scripts/verify-activation-package.py approved-output/alkarna-approved.apk
           python3 scripts/verify-approved-signature.py approved-upgrade/previous.apk approved-output/alkarna-approved.apk > approved-output/signature.txt
@@ -96,6 +96,15 @@ jobs:
           path: approved-output/alkarna-approved.apk
           compression-level: 0
           if-no-files-found: error
+      - name: Upload separate emulator integration inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: contatools-emulator-inputs
+          path: |
+            approved-upgrade/previous.apk
+            approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+          compression-level: 0
+          retention-days: 7
       - name: Upload device proof
         if: always()
         uses: actions/upload-artifact@v4

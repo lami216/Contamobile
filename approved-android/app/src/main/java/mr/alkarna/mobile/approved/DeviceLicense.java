@@ -37,6 +37,13 @@ final class DeviceLicense {
         load();
     }
     String deviceCode(){return device;}
+    synchronized JSONObject registrationSnapshot() throws Exception {
+        // Read the original verified document; never install it again or restart its clock.
+        if(document==null||loadFailure!=null||documentFailure!=null)throw new IOException("Original activation unavailable for registration");
+        JSONObject current=status(),p=document.getJSONObject("payload");Object remaining=JSONObject.NULL;
+        if("temporary".equals(p.getString("type"))){JSONObject active=state.optJSONObject("activeLicense");remaining=current.optBoolean("valid")?(long)current.getJSONObject("license").getDouble("remainingSeconds"):active==null?0L:Math.max(0L,(long)Math.ceil(active.optDouble("remainingMs",0)/1000));}
+        return new JSONObject().put("licenseDocument",document.toString()).put("activation",new JSONObject().put("valid",current.optBoolean("valid")).put("remainingSeconds",remaining).put("status",current.optBoolean("valid")?"valid":current.optString("code","unavailable")));
+    }
     private SecretKey stateKey(boolean create) throws Exception {
         if(keyStore.containsAlias(KEY_ALIAS))return (SecretKey)keyStore.getKey(KEY_ALIAS,null);
         if(!create)throw new Exception("Missing activation key");

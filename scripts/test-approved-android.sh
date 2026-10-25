@@ -25,5 +25,5 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenc
 grep -Eq '^OK \(1 test\)' approved-output/upgrade-after.txt
 # Reset only disposable emulator test data before the independent seller/activation suite.
 adb shell pm clear mr.alkarna.mobile.approved
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest mr.alkarna.mobile.approved.test/androidx.test.runner.AndroidJUnitRunner | tee approved-output/android-tests.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest mr.alkarna.mobile.approved.test/androidx.test.runner.AndroidJUnitRunner | tee approved-output/android-tests.txt
 grep -Eq '^OK \([0-9]+ tests?\)' approved-output/android-tests.txt
