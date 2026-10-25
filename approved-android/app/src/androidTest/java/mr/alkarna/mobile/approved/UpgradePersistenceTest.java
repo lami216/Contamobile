@@ -94,7 +94,7 @@ public class UpgradePersistenceTest {
         assertEquals("11",js("S.products[0].qty"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));
         action("site:language:fr");action("appearance:light");action("site:logout");
         until("!!document.querySelector('[data-action=\"site:login\"]')");
-        js("window.__upgradeWorker=false;(async()=>{const {ShopDatabase,passwordDigest}=await import('./database.js');const db=await new ShopDatabase().open();await db.put('users',{id:'upgrade-worker',username:'upgrade-worker',name:'عامل المحل',role:'sales',active:true,capabilities:['sales.create'],password:await passwordDigest('worker-5678')});db.db.close();window.__upgradeWorker=true})() ;true");until("window.__upgradeWorker===true");
+        js("window.__upgradeWorker=false;(async()=>{const {ShopDatabase,passwordDigest}=await import('https://appassets.androidplatform.net/assets/approved/database.js');const db=await new ShopDatabase().open();await db.put('users',{id:'upgrade-worker',username:'upgrade-worker',name:'عامل المحل',role:'sales',active:true,capabilities:['sales.create'],password:await passwordDigest('worker-5678')});db.db.close();window.__upgradeWorker=true})() ;true");until("window.__upgradeWorker===true");
         // Settle the existing first-cold-launch product-name migration on the old
         // version before taking a byte-for-byte baseline of every stored row.
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
