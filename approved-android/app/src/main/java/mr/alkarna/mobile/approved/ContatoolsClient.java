@@ -76,12 +76,15 @@ final class ContatoolsClient {
    JSONObject result=dispatch("register",payload);if(!result.optBoolean("registered"))throw new ServiceFailure(200,true,0);
    registration.success(fingerprint,System.currentTimeMillis());journal.state.put("context",new JSONObject().put("shopId",shop).put("owners",safe));saveRegistration();return result;
   }catch(Exception failure){
-   boolean permanent=failure instanceof ServiceFailure&&((ServiceFailure)failure).permanent||failure instanceof javax.net.ssl.SSLHandshakeException||failure instanceof javax.net.ssl.SSLPeerUnverifiedException;
+   boolean permanent=permanentRegistrationFailure(failure);
    long retry=failure instanceof ServiceFailure?((ServiceFailure)failure).retryAt:0;
    registration.failed(System.currentTimeMillis(),permanent,retry,random.nextDouble());saveRegistration();
    return new JSONObject().put("stage",permanent?"blocked":"scheduled").put("retryAt",registration.nextAttempt).put("registered",false);
   }
  }
+ // A certificate/network incident can be repaired without changing this installation.
+ // Retry with bounded backoff and normal TLS validation; only an explicit protocol denial blocks.
+ static boolean permanentRegistrationFailure(Exception failure){return failure instanceof ServiceFailure&&((ServiceFailure)failure).permanent;}
  private JSONObject target(JSONObject request) throws Exception {return new JSONObject().put("installationId",identity.id()).put("shopId",request.getString("shopId")).put("ownerId",request.getString("ownerId")).put("requestId",request.getString("requestId"));}
  synchronized JSONObject request(String ownerId) throws Exception {
   JSONObject pending=journal.state.optJSONObject("pending");if(pending!=null)return resume();
