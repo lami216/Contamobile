@@ -34,8 +34,11 @@ public final class MainActivity extends Activity {
     private Export pendingExport;
     private DeviceLicense licensing;
     private ContatoolsClient administration;
-    private final java.util.concurrent.ExecutorService administrationQueue=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final java.util.concurrent.ThreadPoolExecutor administrationQueue=createAdministrationQueue();
+    private android.net.ConnectivityManager.NetworkCallback networkCallback;
+    private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
     private boolean activationPage;
+    private volatile boolean activityResumed;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
     private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
@@ -109,22 +112,33 @@ public final class MainActivity extends Activity {
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
     private void administration(String id,String command,String content){runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
-        administrationQueue.execute(()->{
+        try{administrationQueue.execute(()->{
             try{
+                if(!activityResumed&&(command.equals("register")||command.equals("poll")||command.equals("ack"))){result(id,value("stage","paused"));return;}
                 if(administration==null){if(BuildConfig.CONTATOOLS_ORIGIN.isEmpty()){result(id,value("stage","unconfigured"));return;}administration=new ContatoolsClient(MainActivity.this,licensing,BuildConfig.CONTATOOLS_ORIGIN,new JSONObject(BuildConfig.CONTATOOLS_ISSUERS));}
                 if(content.length()>16384)throw new IOException("Invalid recovery input");JSONObject response;
                 switch(command){
-                    case "register":response=administration.register(new JSONObject(content));break;
+                    case "register":response=administration.registerAutomatically(new JSONObject(content));break;
+                    case "register-now":response=administration.register(new JSONObject(content));break;
                     case "request":response=administration.request(content);break;
                     case "poll":response=administration.poll();break;
                     case "prepare":response=administration.prepare(new JSONObject(content));break;
                     case "resume":response=administration.resume();break;
-                    case "finish":JSONObject receipt=new JSONObject(content);response=administration.finish(receipt.getString("grantId"),receipt.getString("intentId"));break;
+                    case "resume-local":response=administration.resumeLocal();break;
+                    case "ack":response=administration.acknowledgePending();break;
+                    case "finish":JSONObject receipt=new JSONObject(content);response=administration.finishLocally(receipt.getString("grantId"),receipt.getString("intentId"));break;
                     default:throw new IOException("Unknown administration operation");
                 }result(id,response);
+            }catch(ContatoolsClient.ServiceFailure e){JSONObject failure=value("error","تعذّر الاتصال بخدمة الاستعادة؛ أعد المحاولة لاحقًا.");try{failure.put("retryAt",e.retryAt).put("permanent",e.permanent).put("status",e.status);}catch(Exception ignored){}result(id,failure);
             }catch(Exception e){error(id,"تعذّر الاتصال بخدمة الاستعادة. لم يُغيّر التفعيل؛ أعد المحاولة أو تواصل مع الدعم.");}
-        });
+        });}catch(java.util.concurrent.RejectedExecutionException full){JSONObject failure=value("error","هناك طلب جارٍ. أعد المحاولة بعد قليل.");try{failure.put("retryAt",System.currentTimeMillis()+5000);}catch(Exception ignored){}result(id,failure);}
     });}
+    private void watchNetwork(){
+        if(networkCallback!=null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);if(manager==null)return;
+        networkCallback=new android.net.ConnectivityManager.NetworkCallback(){@Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))runOnUiThread(()->{if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('alkarna-network-available'))",null);});}};
+        try{manager.registerDefaultNetworkCallback(networkCallback);}catch(Exception unavailable){networkCallback=null;}
+    }
+    private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
     public final class NativeHost {
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
         @JavascriptInterface public void language(String language){runOnUiThread(()->{if(trusted()&&("ar".equals(language)||"fr".equals(language)))getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("language",language).apply();});}
@@ -194,8 +208,8 @@ public final class MainActivity extends Activity {
             }).start();
         }
     }
-    @Override protected void onPause(){if(licensing!=null)licensing.checkpoint();super.onPause();}
-    @Override protected void onResume(){super.onResume();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
+    @Override protected void onPause(){activityResumed=false;stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
+    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
     @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
-    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);administrationQueue.shutdown();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
+    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }
