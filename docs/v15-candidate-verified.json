@@ -1,0 +1,19 @@
+{
+  "mode": "candidate",
+  "file": "alkarna-1.0.14-v15.apk",
+  "applicationId": "mr.alkarna.mobile.approved",
+  "versionCode": 15,
+  "versionName": "1.0.14",
+  "sha256": "a9f43f5ede426db0292ebfa56813e80f050b3fe7a599aed56eb623a7a3599e12",
+  "certificateSha256": "a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2",
+  "bytes": 26407841,
+  "apksignerVerified": true,
+  "service": {
+    "apkSha256": "a9f43f5ede426db0292ebfa56813e80f050b3fe7a599aed56eb623a7a3599e12",
+    "origin": "https://3ali.store",
+    "publicIssuerIds": [
+      "0d224040-8d24-4f18-9b3e-052fe2016a6f"
+    ],
+    "inspection": "actual APK bytes"
+  }
+}

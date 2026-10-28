@@ -1,0 +1,28 @@
+[
+  {
+    "file": "previous-v14.apk",
+    "sha256": "4d69fc1f88d4709d4928c906e15801ff2028995ad0131d611e946973bb831c90",
+    "certificateSha256": "a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2",
+    "signatureVerified": true,
+    "manifest": {
+      "versionCode": "14",
+      "versionName": "1.0.13-trial",
+      "package": "mr.alkarna.mobile.approved",
+      "allowBackup": "false",
+      "usesCleartextTraffic": "false"
+    }
+  },
+  {
+    "file": "alkarna-1.0.14-v15.apk",
+    "sha256": "a9f43f5ede426db0292ebfa56813e80f050b3fe7a599aed56eb623a7a3599e12",
+    "certificateSha256": "a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2",
+    "signatureVerified": true,
+    "manifest": {
+      "versionCode": "15",
+      "versionName": "1.0.14",
+      "package": "mr.alkarna.mobile.approved",
+      "allowBackup": "false",
+      "usesCleartextTraffic": "false"
+    }
+  }
+]

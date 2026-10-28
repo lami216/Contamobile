@@ -1,0 +1,75 @@
+{
+  "apkSha256Before": "a9f43f5ede426db0292ebfa56813e80f050b3fe7a599aed56eb623a7a3599e12",
+  "apkSha256After": "a9f43f5ede426db0292ebfa56813e80f050b3fe7a599aed56eb623a7a3599e12",
+  "sameBytes": true,
+  "localServiceOnly": true,
+  "androidHttpRequests": 36,
+  "events": [
+    {
+      "operation": "recovery.claim",
+      "endpoint": "challenge",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "operation": "recovery.claim",
+      "endpoint": "dispatch",
+      "status": 200,
+      "count": 3
+    },
+    {
+      "operation": "recovery.claim",
+      "endpoint": "dispatch",
+      "status": 403,
+      "count": 1
+    },
+    {
+      "operation": "recovery.complete",
+      "endpoint": "challenge",
+      "status": 200,
+      "count": 3
+    },
+    {
+      "operation": "recovery.complete",
+      "endpoint": "dispatch",
+      "status": 200,
+      "count": 3
+    },
+    {
+      "operation": "recovery.poll",
+      "endpoint": "challenge",
+      "status": 200,
+      "count": 6
+    },
+    {
+      "operation": "recovery.poll",
+      "endpoint": "dispatch",
+      "status": 200,
+      "count": 6
+    },
+    {
+      "operation": "recovery.request",
+      "endpoint": "challenge",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "operation": "recovery.request",
+      "endpoint": "dispatch",
+      "status": 200,
+      "count": 4
+    },
+    {
+      "operation": "register",
+      "endpoint": "challenge",
+      "status": 200,
+      "count": 1
+    },
+    {
+      "operation": "register",
+      "endpoint": "dispatch",
+      "status": 200,
+      "count": 1
+    }
+  ]
+}
