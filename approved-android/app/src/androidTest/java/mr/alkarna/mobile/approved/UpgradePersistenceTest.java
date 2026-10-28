@@ -83,7 +83,8 @@ public class UpgradePersistenceTest {
     }
     @Test public void seedPreviousVersion() throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());
-        String document=TestLicenseIssuer.issue(license.deviceCode(),"temporary",10800);
+        String type=InstrumentationRegistry.getArguments().getString("upgradeLicenseType","temporary");
+        String document=TestLicenseIssuer.issue(license.deviceCode(),type,10800);
         assertTrue(license.install(document).getBoolean("valid"));
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
@@ -101,7 +102,8 @@ public class UpgradePersistenceTest {
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
-            .put("remainingSeconds",license.status().getJSONObject("license").getDouble("remainingSeconds"))
+            .put("type",type).put("remainingSeconds",license.status().getJSONObject("license").get("remainingSeconds"))
+            .put("installationId",new InstallationIdentity().id()).put("installationFingerprint",new InstallationIdentity().fingerprint())
             .put("localStorage",text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))"));
         license.checkpoint();write("upgrade-before.json",snapshot.toString());
         System.out.println("UPGRADE seed: saved user credentials, inventory, sale, account balance, French/light preferences and temporary activation.");
@@ -110,7 +112,10 @@ public class UpgradePersistenceTest {
         checkVersion();JSONObject before=new JSONObject(read("upgrade-before.json"));DeviceLicense license=new DeviceLicense(target());
         assertEquals(before.getString("certificate"),signer());assertEquals(before.getString("device"),license.deviceCode());
         JSONObject status=license.status();assertTrue("Activation survived APK replacement",status.getBoolean("valid"));JSONObject active=status.getJSONObject("license");
-        assertEquals(before.getString("licenseId"),active.getString("licenseId"));assertTrue(active.getDouble("remainingSeconds")>0);assertTrue("Update must not restart license duration",active.getDouble("remainingSeconds")<=before.getDouble("remainingSeconds"));
+        assertEquals(before.getString("licenseId"),active.getString("licenseId"));assertEquals(before.getString("type"),active.getString("type"));
+        assertEquals(before.getString("installationId"),new InstallationIdentity().id());assertEquals(before.getString("installationFingerprint"),new InstallationIdentity().fingerprint());
+        if("temporary".equals(before.getString("type"))){assertTrue(active.getDouble("remainingSeconds")>0);assertTrue("Update must not restart license duration",active.getDouble("remainingSeconds")<=before.getDouble("remainingSeconds"));}
+        else assertTrue("Perpetual stays perpetual with no countdown",active.isNull("remainingSeconds"));
         try{license.install(before.getString("document"));fail("Consumed activation was reset by update");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_ALREADY_USED",e.code);}
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
@@ -118,6 +123,9 @@ public class UpgradePersistenceTest {
         assertEquals(before.getString("localStorage"),text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))"));
         js("document.querySelector('[name=username]').value='upgrade-owner';document.querySelector('[name=password]').value='1234';true");action("site:login");until("!!document.querySelector('.nav')");
         assertEquals("11",js("S.products[0].qty"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));assertEquals("true",js("document.documentElement.lang==='fr'&&document.querySelector('#phone').dir==='ltr'&&previewAppearance29==='light'"));
+        action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");
+        js("document.querySelector('[name=username]').value='upgrade-worker';document.querySelector('[name=password]').value='worker-5678';true");action("site:login");until("!!document.querySelector('.nav')");
+        assertEquals("11",js("S.products[0].qty"));action("site:logout");
         System.out.println("UPGRADE PASS: real install -r preserved every business store, password, device code, certificate, native activation key, consumed license and remaining duration.");
     }
 }
