@@ -31,3 +31,13 @@ test('poll failure respects Retry-After, pauses when hidden, and permanent rejec
  const time=clock();let visible=true,calls=0,permanent=false;const p=new RecoveryPoller({...time,visible:()=>visible,online:()=>true,random:()=>0,poll:async()=>{calls++;throw Object.assign(new Error('synthetic'),{retryAt:time.now()+120000,permanent});},onResult:()=>{},onError:()=>{}});
  p.pending();await time.advance(45000);assert.equal(calls,1);assert.equal((await p.refresh()).stage,'cooldown');visible=false;p.pause();await time.advance(500000);assert.equal(calls,1);visible=true;permanent=true;p.wake();await time.advance(1000);assert.equal(calls,2);assert.equal(time.size,0);
 });
+
+test('native timer functions are invoked without replacing their browser receiver',()=>{
+ const timers={
+  setTimer:function(){assert.equal(this,undefined,'Window timer receiver must not become a scheduler instance');return 1;},
+  clearTimer:function(){assert.equal(this,undefined,'Window timer receiver must not become a scheduler instance');}
+ };
+ const r=new RegistrationEvents({call:async()=>({registered:true}),context:()=>({owners:[{id:'synthetic-owner'}]}),visible:()=>true,online:()=>true,...timers});
+ r.notify();r.notify();r.cancel();
+ const p=new RecoveryPoller({poll:async()=>({status:'waiting'}),onResult:()=>{},onError:()=>{},visible:()=>true,online:()=>true,...timers});p.pending();p.pause();p.stop();
+});

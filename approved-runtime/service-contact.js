@@ -1,9 +1,9 @@
 /** Foreground-only scheduling. Native code owns durable registration/retry policy. */
 export class RegistrationEvents {
  constructor({call,context,visible,online,now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout,onResult=()=>{}}){Object.assign(this,{call,context,visible,online,now,setTimer,clearTimer,onResult});this.timer=null;this.flight=null;this.again=false;}
- cancel(){if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;}
+ cancel(){if(this.timer!==null)(0,this.clearTimer)(this.timer);this.timer=null;}
  notify(){this.cancel();if(!this.visible()||!this.online())return;if(this.flight){this.again=true;return;}this.schedule(this.now()+750);}
- schedule(at){this.cancel();if(!this.visible()||!this.online())return;this.timer=this.setTimer(()=>{this.timer=null;this.run().catch(()=>{});},Math.min(2147483647,Math.max(0,at-this.now())));}
+ schedule(at){this.cancel();if(!this.visible()||!this.online())return;this.timer=(0,this.setTimer)(()=>{this.timer=null;this.run().catch(()=>{});},Math.min(2147483647,Math.max(0,at-this.now())));}
  async run(){
   if(this.flight)return this.flight;if(!this.visible()||!this.online())return {stage:'offline'};
   const context=this.context();if(!context.owners.length)return {stage:'idle'};
@@ -18,11 +18,11 @@ export class RegistrationEvents {
 /** One timer and one outstanding poll, only for the visible pending request. */
 export class RecoveryPoller {
  constructor({poll,onResult,onError,visible,online,now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout,random=Math.random}){Object.assign(this,{poll,onResult,onError,visible,online,now,setTimer,clearTimer,random});this.timer=null;this.flight=null;this.waiting=false;this.nextAt=0;this.manualAt=0;this.failures=0;this.generation=0;}
- cancel(){if(this.timer!==null)this.clearTimer(this.timer);this.timer=null;}
+ cancel(){if(this.timer!==null)(0,this.clearTimer)(this.timer);this.timer=null;}
  stop(){this.cancel();this.waiting=false;this.generation++;}
  pause(){this.cancel();}
  pending(){this.waiting=true;this.failures=0;this.nextAt=this.now()+45000;this.manualAt=Math.max(this.manualAt,this.now()+10000);this.schedule();}
- schedule(){this.cancel();if(!this.waiting||this.flight||!this.visible()||!this.online())return;this.timer=this.setTimer(()=>{this.timer=null;this.refresh(false).catch(()=>{});},Math.min(2147483647,Math.max(0,this.nextAt-this.now())));}
+ schedule(){this.cancel();if(!this.waiting||this.flight||!this.visible()||!this.online())return;this.timer=(0,this.setTimer)(()=>{this.timer=null;this.refresh(false).catch(()=>{});},Math.min(2147483647,Math.max(0,this.nextAt-this.now())));}
  wake(){if(this.waiting){this.nextAt=Math.max(this.nextAt,this.now()+1000);this.schedule();}}
  async refresh(manual=true){
   if(!this.waiting||!this.visible()||!this.online())return {stage:'paused'};
