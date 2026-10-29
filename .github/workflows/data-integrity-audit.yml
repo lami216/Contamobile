@@ -21,6 +21,8 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/audit-tools" --no-package-lock --ignore-scripts playwright@1.62.1
           node "$RUNNER_TEMP/audit-tools/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Prepare pinned offline SQLite before guarded startup tests
+        run: python3 scripts/prepare-approved-dependencies.py
       - name: Real Chromium storage and UI fault injection
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/audit-tools/node_modules/playwright
@@ -31,7 +33,6 @@ jobs:
           node scripts/test-import-html-escaping.mjs
       - name: Accounting, locale, import, bridge and contact regressions
         run: |
-          python3 scripts/prepare-approved-dependencies.py
           node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-service-contact.mjs
           node scripts/verify-approved-source-navigation.mjs
           node scripts/verify-report-sources.mjs
