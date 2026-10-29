@@ -45,8 +45,10 @@ final class DataRescueClient {
  private JSONObject validate(JSONObject envelope,long now) throws Exception {
   return RecoveryGrant.verify(envelope,issuers,identity.id(),identity.fingerprint(),license.deviceCode(),license.registrationSnapshot(),now);
  }
- synchronized boolean poll() throws Exception {
-  long elapsed=android.os.SystemClock.elapsedRealtime();if(state.optInt("pollBoot",-2)==bootCount&&elapsed>=state.optLong("pollElapsed")&&elapsed-state.optLong("pollElapsed")<300000)return false;
+ synchronized JSONObject publicIdentity() throws Exception {return new JSONObject().put("installationId",identity.id()).put("deviceCode",license.deviceCode());}
+ synchronized boolean poll() throws Exception {return poll(false);}
+ synchronized boolean poll(boolean explicitSupportRefresh) throws Exception {
+  long elapsed=android.os.SystemClock.elapsedRealtime();long minimum=explicitSupportRefresh?5000:300000;if(state.optInt("pollBoot",-2)==bootCount&&elapsed>=state.optLong("pollElapsed")&&elapsed-state.optLong("pollElapsed")<minimum)return false;
   state.put("pollBoot",bootCount).put("pollElapsed",elapsed);save();JSONObject result;
   try{result=exchange("poll",target(null));}
   catch(ContatoolsClient.ServiceFailure failure){
@@ -60,10 +62,13 @@ final class DataRescueClient {
  }
  private JSONObject target(String caseId) throws Exception {JSONObject value=new JSONObject().put("installationId",identity.id());if(caseId!=null)value.put("caseId",caseId);return value;}
  private JSONObject exchange(String operation,JSONObject payload) throws Exception {
+  long elapsed=android.os.SystemClock.elapsedRealtime();if(state.optInt("networkDelayBoot",-2)==bootCount&&state.optLong("networkDelayUntil")>elapsed)throw new ContatoolsClient.ServiceFailure(429,false,System.currentTimeMillis()+state.optLong("networkDelayUntil")-elapsed);
+  try{
   JSONObject challenge=transport.post("/api/android/rescue/challenge",new JSONObject().put("operation",operation).put("payload",payload));
   String message=challenge.getString("message");JSONObject proof=new JSONObject(message);
   if(!"contatools-device-proof".equals(proof.optString("schema"))||proof.optInt("version")!=1||!operation.equals(proof.optString("operation"))||!identity.id().equals(proof.optString("installationId"))||!ProtocolJson.hash(payload).equals(proof.optString("payloadHash"))||!challenge.getString("id").equals(proof.optString("id"))||message.length()>4096)throw new IOException("RESCUE_PROOF");
   return transport.post("/api/android/rescue/"+("chunk".equals(operation)?"chunk":"dispatch"),new JSONObject().put("operation",operation).put("payload",payload).put("challengeId",challenge.getString("id")).put("signature",identity.sign(message)));
+  }catch(ContatoolsClient.ServiceFailure failure){long delay=Math.min(86400000L,Math.max(0,failure.retryAt-System.currentTimeMillis()));if(delay>0){state.put("networkDelayBoot",bootCount).put("networkDelayUntil",android.os.SystemClock.elapsedRealtime()+delay);save();}throw failure;}
  }
  synchronized void decline(JSONObject grant) throws Exception {state.put("declined",grant.getString("caseId"));state.remove("grant");save();}
  synchronized void consent(JSONObject grant,boolean snapshot,boolean upload) throws Exception {

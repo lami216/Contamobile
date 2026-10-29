@@ -25,4 +25,13 @@
  <string name="rescue_export_failed">لم يكتمل حفظ الحزمة. يمكنك المحاولة مجددًا.</string>
  <string name="rescue_exported">تم حفظ الحزمة المشفرة في المكان الذي اخترته.</string>
  <string name="rescue_restart">وصل طلب إنقاذ لهذا الهاتف. استخدم «فرض الإيقاف» من معلومات التطبيق في إعدادات Android، ثم افتحه لعرض الموافقة قبل بدء التخزين.</string>
+ <string name="rescue_support_intro">هذا مدخل الدعم الاختياري. أرسل هذه المعرفات العامة للدعم للتحقق من الجهاز، ثم حدّث الطلب بعد موافقة الإدارة. لن تُفتح بيانات المحل قبل موافقتك على طلب إنقاذ صالح.</string>
+ <string name="rescue_installation">معرّف التثبيت العام</string>
+ <string name="rescue_support_copy">نسخ معرّفات الدعم</string>
+ <string name="rescue_support_refresh">التحقق من طلب الإنقاذ</string>
+ <string name="rescue_support_checking">جارٍ التحقق من تفويض هذا الجهاز…</string>
+ <string name="rescue_support_wait">لم يصل تفويض صالح بعد. تأكد من الاتصال والتفعيل، ثم اطلب من الدعم مراجعة الجهاز وحاول بعد قليل.</string>
+ <string name="rescue_support_cold">سبق تشغيل المحاسبة في هذه العملية. لحفظ الأدلة بأمان، استخدم «فرض الإيقاف» من معلومات التطبيق في إعدادات Android، ثم افتح رابط الدعم contamobile://data-rescue مباشرة دون فتح التطبيق من أيقونته.</string>
+ <string name="rescue_close">إغلاق الدعم</string>
+ <string name="rescue_refuse_close">رفض الفحص وإغلاق الدعم</string>
 </resources>

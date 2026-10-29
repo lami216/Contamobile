@@ -25,4 +25,13 @@
  <string name="rescue_export_failed">Enregistrement incomplet. Réessayez.</string>
  <string name="rescue_exported">Le paquet chiffré a été enregistré à l’emplacement choisi.</string>
  <string name="rescue_restart">Une demande vise ce téléphone. Choisissez « Forcer l’arrêt » dans les informations de l’application des paramètres Android, puis rouvrez-la pour donner votre accord avant le démarrage du stockage.</string>
+ <string name="rescue_support_intro">Cet accès à l’assistance est facultatif. Envoyez ces identifiants publics à l’assistance pour vérifier l’appareil, puis actualisez après l’accord administratif. Les données du magasin ne seront pas ouvertes sans votre accord sur une demande valide.</string>
+ <string name="rescue_installation">Identifiant public de l’installation</string>
+ <string name="rescue_support_copy">Copier les identifiants publics</string>
+ <string name="rescue_support_refresh">Vérifier la demande</string>
+ <string name="rescue_support_checking">Vérification de l’autorisation de cet appareil…</string>
+ <string name="rescue_support_wait">Aucune autorisation valide reçue. Vérifiez la connexion et la licence, demandez à l’assistance de vérifier l’appareil, puis réessayez.</string>
+ <string name="rescue_support_cold">La comptabilité a déjà démarré dans ce processus. Choisissez « Forcer l’arrêt » dans les paramètres Android, puis ouvrez directement contamobile://data-rescue sans ouvrir l’application depuis son icône.</string>
+ <string name="rescue_close">Fermer l’assistance</string>
+ <string name="rescue_refuse_close">Refuser et fermer l’assistance</string>
 </resources>

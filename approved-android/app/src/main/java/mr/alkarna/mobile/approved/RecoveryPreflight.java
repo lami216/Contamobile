@@ -31,7 +31,7 @@ final class RecoveryPreflight {
  private LinearLayout card;
  private TextView status;
  private File bundle;
- private boolean active,busy,destroyed;
+ private boolean active,busy,destroyed,supportMode;
  private final AtomicBoolean cancelUpload=new AtomicBoolean();
  RecoveryPreflight(Activity activity,FrameLayout root,DeviceLicense license,Runnable continueApp){
   this.activity=activity;this.root=root;this.continueApp=continueApp;
@@ -58,6 +58,25 @@ final class RecoveryPreflight {
  }
  boolean active(){return active;}
  static boolean capturing(){return CAPTURING.get();}
+ void supportStart(){
+  supportMode=true;
+  if(MainActivity.hasCreatedWebView()){active=true;layout();status.setText(t(R.string.rescue_support_cold));button(R.string.rescue_close,false,activity::finish);return;}
+  if(intercept(false))return;
+  active=true;showSupport(false);
+ }
+ private void showSupport(boolean failed){
+  layout();status.setText(t(failed?R.string.rescue_support_wait:R.string.rescue_support_intro));
+  if(client!=null){try{JSONObject identity=client.publicIdentity();label(t(R.string.rescue_device)+"\n"+identity.getString("deviceCode"),13,muted,false).setTextIsSelectable(true);label(t(R.string.rescue_installation)+"\n"+identity.getString("installationId"),13,muted,false).setTextIsSelectable(true);button(R.string.rescue_support_copy,false,()->{try{String publicIds=identity.getString("deviceCode")+"\n"+identity.getString("installationId");((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Contatools support",publicIds));}catch(Exception unavailable){status.setText(t(R.string.rescue_support_wait));}});}catch(Exception unavailable){status.setText(t(R.string.rescue_support_wait));}
+   button(R.string.rescue_support_refresh,true,this::refreshSupport);
+  }else status.setText(t(R.string.rescue_support_wait));
+  button(R.string.rescue_close,false,activity::finish);
+ }
+ private void refreshSupport(){
+  if(busy||client==null)return;
+  if(MainActivity.hasCreatedWebView()){supportStart();return;}
+  busy=true;layout();status.setText(t(R.string.rescue_support_checking));button(R.string.rescue_close,false,activity::finish);
+  WORK.execute(()->{boolean available=false;try{available=client.poll(true);}catch(Exception unavailable){}boolean ready=available;ui(()->{busy=false;if(MainActivity.hasCreatedWebView()||ready)supportStart();else showSupport(true);});});
+ }
  private String t(int id){return textContext.getString(id);}
  private int dp(int value){return Math.round(value*activity.getResources().getDisplayMetrics().density);}
  private void ui(Runnable action){activity.runOnUiThread(()->{if(!destroyed&&!activity.isFinishing())action.run();});}
@@ -75,7 +94,7 @@ final class RecoveryPreflight {
  private void details(){
   try{label(t(R.string.rescue_case)+"\n"+grant.getString("caseId"),13,muted,false);label(t(R.string.rescue_device)+"\n"+grant.getString("deviceCode"),13,muted,false);label(t(R.string.rescue_expires)+" "+android.text.format.DateFormat.getDateFormat(activity).format(new Date(grant.getLong("expiresAt")))+" "+android.text.format.DateFormat.getTimeFormat(activity).format(new Date(grant.getLong("expiresAt"))),13,muted,false);}catch(Exception ignored){}
  }
- private void showConsent(){layout();status.setText(t(R.string.rescue_intro));details();label(t(R.string.rescue_sensitive),14,muted,false);label(t(R.string.rescue_offline),13,muted,false);button(R.string.rescue_accept,true,this::capture);button(R.string.rescue_refuse,false,()->{try{client.decline(grant);WORK.execute(()->{try{client.sendConsent(grant,false,false);}catch(Exception ignored){}});}catch(Exception failure){return;}leave();});}
+ private void showConsent(){layout();status.setText(t(R.string.rescue_intro));details();label(t(R.string.rescue_sensitive),14,muted,false);label(t(R.string.rescue_offline),13,muted,false);button(R.string.rescue_accept,true,this::capture);button(supportMode?R.string.rescue_refuse_close:R.string.rescue_refuse,false,()->{try{client.decline(grant);WORK.execute(()->{try{client.sendConsent(grant,false,false);}catch(Exception ignored){}});}catch(Exception failure){return;}leave();});}
  private void capture(){
   synchronized(MainActivity.class){if(busy||MainActivity.hasCreatedWebView()||!CAPTURING.compareAndSet(false,true))return;}
   try{if(client.cachedGrant()==null){CAPTURING.set(false);showFailure();return;}client.consent(grant,true,false);}catch(Exception failure){CAPTURING.set(false);showFailure();return;}
@@ -107,7 +126,7 @@ final class RecoveryPreflight {
    boolean success=okay;ui(()->{if(success)showReady(false);else showFailure();});
   });
  }
- private void showReady(boolean uploaded){layout();status.setText(t(uploaded?R.string.rescue_received:R.string.rescue_ready));details();button(R.string.rescue_save,true,this::export);if(!uploaded)button(R.string.rescue_send,false,this::confirmUpload);button(R.string.rescue_finish,false,this::leave);}
+ private void showReady(boolean uploaded){layout();status.setText(t(uploaded?R.string.rescue_received:R.string.rescue_ready));details();button(R.string.rescue_save,true,this::export);if(!uploaded)button(R.string.rescue_send,false,this::confirmUpload);button(supportMode?R.string.rescue_close:R.string.rescue_finish,false,this::leave);}
  private void confirmUpload(){layout();status.setText(t(R.string.rescue_upload_intro));label(t(R.string.rescue_sensitive),14,muted,false);button(R.string.rescue_upload_accept,true,()->{try{client.consent(grant,true,true);}catch(Exception failure){showFailure();return;}upload();});button(R.string.rescue_cancel,false,()->showReady(false));}
  private void upload(){
   if(busy)return;busy=true;cancelUpload.set(false);layout();status.setText(t(R.string.rescue_uploading));button(R.string.rescue_stop,false,()->cancelUpload.set(true));
@@ -118,7 +137,7 @@ final class RecoveryPreflight {
   if(request!=SAVE_RESCUE)return false;if(result!=Activity.RESULT_OK||intent==null||intent.getData()==null)return true;
   Uri destination=intent.getData();WORK.execute(()->{boolean okay=false;try(InputStream input=new FileInputStream(bundle);OutputStream output=activity.getContentResolver().openOutputStream(destination,"wt")){if(output==null)throw new IOException();byte[] buffer=new byte[65536];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);output.flush();okay=true;}catch(Exception failed){}boolean success=okay;ui(()->status.setText(t(success?R.string.rescue_exported:R.string.rescue_export_failed)));});return true;
  }
- private void showFailure(){layout();status.setText(t(R.string.rescue_failed));button(R.string.rescue_finish,false,this::leave);}
+ private void showFailure(){layout();status.setText(t(R.string.rescue_failed));button(supportMode?R.string.rescue_close:R.string.rescue_finish,false,this::leave);}
  private void leave(){if(busy||CAPTURING.get())return;active=false;root.removeAllViews();continueApp.run();}
  boolean back(){if(!active)return false;if(!busy)activity.finish();return true;}
  void destroy(){destroyed=true;cancelUpload.set(true);}

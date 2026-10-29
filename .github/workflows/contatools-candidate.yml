@@ -40,10 +40,14 @@ jobs:
         run: |
           test "$(gh api repos/lami216/Contamobile/actions/runs/40202607079 --jq .head_sha)" = ffb5cfd571681a9760dc4d6f76a9ff14488407e5
           gh run download 40202607079 --repo lami216/Contamobile --name alkarna-approved-apk --dir baseline-v14
+          test "$(gh api repos/lami216/Contamobile/actions/runs/39312062039 --jq .head_sha)" = 1efb01fc1cd7bc62670510e57c6158734ad4bf05
+          gh run download 39312062039 --repo lami216/Contamobile --name alkarna-approved-apk --dir baseline-v13
+          echo "9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c  baseline-v13/alkarna-approved.apk" | sha256sum --check
           mkdir -p candidate-output
           python3 scripts/verify-candidate-apk.py baseline baseline-v14/alkarna-approved.apk > candidate-output/baseline-verified.json
       - name: Existing source checks and deterministic scheduling policy
         run: |
+          bash -n scripts/test-candidate-upgrade.sh
           python3 scripts/prepare-approved-dependencies.py
           node --test scripts/test-service-contact.mjs
           java scripts/RegistrationPolicyCheck.java
@@ -65,14 +69,14 @@ jobs:
           cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.14-v15.apk
           python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.14-v15.apk > candidate-output/candidate-verified.json
           python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.14-v15.apk
-          python3 scripts/verify-approved-signature.py baseline-v14/alkarna-approved.apk candidate-output/alkarna-1.0.14-v15.apk
+          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk candidate-output/alkarna-1.0.14-v15.apk
           sha256sum candidate-output/alkarna-1.0.14-v15.apk > candidate-output/SHA256SUMS.txt
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact v14 to v15 updates, temporary and perpetual, and existing offline suites
+      - name: Exact original v13 and v14 to v15 updates, temporary and perpetual, and existing offline suites
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

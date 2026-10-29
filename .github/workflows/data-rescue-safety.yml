@@ -39,13 +39,14 @@ jobs:
       - name: Compile and execute raw-evidence and package contract checks
         run: |
           package=approved-android/app/src/main/java/mr/alkarna/mobile/approved
-          javac -encoding UTF-8 -cp "$ANDROID_HOME/platforms/android-35/android.jar:$RUNNER_TEMP/rescue-deps/json.jar" -d "$RUNNER_TEMP/rescue-classes" "$package/LicenseVerifier.java" "$package/ProtocolJson.java" "$package/RecoveryGrant.java" "$package/RecoveryClock.java" "$package/RecoverySnapshot.java" "$package/RecoveryPackage.java" approved-android/app/src/test/java/mr/alkarna/mobile/approved/RecoverySnapshotSelfTest.java scripts/java/mr/alkarna/mobile/approved/*.java
+          javac -encoding UTF-8 -cp "$ANDROID_HOME/platforms/android-35/android.jar:$RUNNER_TEMP/rescue-deps/json.jar" -d "$RUNNER_TEMP/rescue-classes" "$package/LicenseVerifier.java" "$package/ProtocolJson.java" "$package/RecoveryGrant.java" "$package/RecoveryClock.java" "$package/RecoverySupportEntry.java" "$package/RecoverySnapshot.java" "$package/RecoveryPackage.java" approved-android/app/src/test/java/mr/alkarna/mobile/approved/RecoverySnapshotSelfTest.java scripts/java/mr/alkarna/mobile/approved/*.java
           java -cp "$RUNNER_TEMP/rescue-classes:$RUNNER_TEMP/rescue-deps/json.jar:$ANDROID_HOME/platforms/android-35/android.jar" mr.alkarna.mobile.approved.RecoverySnapshotSelfTest
           java -cp "$RUNNER_TEMP/rescue-classes:$RUNNER_TEMP/rescue-deps/json.jar:$ANDROID_HOME/platforms/android-35/android.jar" mr.alkarna.mobile.approved.RecoveryProtocolChecks
       - name: Prepare the existing pinned offline runtime
         run: python3 scripts/prepare-approved-android.py
       - name: Existing accounting and locale regressions
         run: |
+          node scripts/verify-data-rescue-entry.mjs
           node scripts/verify-approved-source-navigation.mjs
           node scripts/verify-report-sources.mjs
           node scripts/verify-party-summaries.mjs

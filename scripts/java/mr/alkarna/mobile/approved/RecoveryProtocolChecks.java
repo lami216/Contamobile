@@ -39,6 +39,9 @@ public final class RecoveryProtocolChecks {
   JSONObject document=new JSONObject().put("payload",new JSONObject().put("licenseId","synthetic-license"));JSONObject license=new JSONObject().put("licenseDocument",document.toString());
   JSONObject grant=new JSONObject().put("caseId",caseId).put("installationId","synthetic-installation").put("keyFingerprint","synthetic-fingerprint").put("deviceCode","synthetic-device").put("licenseDocumentHash",ProtocolJson.hash(document)).put("licenseId","synthetic-license").put("issuedAt",now-1000).put("expiresAt",now+60000).put("scope",new JSONArray().put("snapshot").put("export").put("upload")).put("encryptionKey",new JSONObject().put("kty","RSA").put("n",ProtocolJson.base64(unsigned(publicRsa.getModulus()))).put("e","AQAB")).put("encryptionKeyId","synthetic-package-key").put("maxBytes",268435456).put("maxFiles",4096).put("chunkSize",196608);
   JSONObject envelope=sign(grant,issuer);
+  check(RecoverySupportEntry.accepts("android.intent.action.VIEW","contamobile://data-rescue"),"explicit support entry rejected");
+  check(!RecoverySupportEntry.accepts("android.intent.action.MAIN","contamobile://data-rescue"),"ordinary launch entered support");
+  for(String uri:new String[]{null,"","https://data-rescue","contamobile://data-rescue/scan","contamobile://data-rescue?path=/data","contamobile://data-rescue#grant","contamobile://other","contamobile://user@data-rescue","contamobile://data-rescue:9"})check(!RecoverySupportEntry.accepts("android.intent.action.VIEW",uri),"unsafe support entry accepted");
   check(RecoveryClock.now(7,7,now,1000,61000,now-999999,now)==now+60000,"wall rollback extended the grant");
   rejects(()->RecoveryClock.now(8,7,now,1000,61000,now,now),"reboot reused an offline grant");
   rejects(()->RecoveryClock.now(-1,-1,now,1000,61000,now,now),"unknown boot reused a grant");

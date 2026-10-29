@@ -33,13 +33,41 @@ A notification asks the user to close the app completely. The code never copies 
 Chromium files: a process-level flag prevents collection after any WebView was created;
 an Activity recreation during a copy waits for that copy to finish before WebView can start.
 
-**First-upgrade limitation:** a pre-Contatools APK has no cached targeted grant or registered
-installation. Its first launch after upgrade may initialize Chromium before enrollment and
-remote authorization are available. This implementation cannot promise to preserve that
-first launch's evidence. Do not treat installing and opening an update as a safe recovery
-procedure for the affected customer. A separately reviewed support procedure/build and a
-real same-signer upgrade test are required before handling that device. Merely knowing the
-device code does not grant access to accounting data.
+**Normal first-launch limitation:** a pre-Contatools APK has no cached targeted grant or
+registered installation. Opening the ordinary app icon after upgrade may initialize
+Chromium before enrollment and remote authorization are available. Ordinary startup must
+not be described as a safe evidence-preservation procedure. Use the explicit native
+support entry below; the actual same-signer upgrade and on-device entry tests still gate
+customer use. Merely knowing a device code does not grant access to accounting data.
+
+## Explicit native support entry for an unregistered damaged installation
+
+`RecoverySupportActivity` accepts only an explicit VIEW of `contamobile://data-rescue`.
+The secret-free fixed link has no paths, grant contents, file names, query parameters or
+commands. All other action/URI combinations are rejected. Opening it never starts
+MainActivity or creates a WebView. The existing native license and installation EC identity
+are sufficient to enroll and poll without reading the damaged shop or owner database.
+
+The safe support procedure after the candidate has passed its release gates is:
+
+1. Preserve the installed app and its data. Install the verified same-signature higher-code
+   update without pressing Open or launching the ordinary app icon.
+2. Choose Android app-info **Force stop**, then open `contamobile://data-rescue` directly.
+3. The native support screen displays public device and installation IDs. The customer
+   shares those IDs with authorized support for human identity/ownership verification.
+4. The customer presses the explicit refresh button. Native proof plus the existing signed
+   license enroll the installation; there is no accounting read or shop/owner-login dependency.
+5. Administration reviews the matching device/license and approves a short-lived case.
+6. The customer refreshes again (minimum five seconds between explicit refresh attempts,
+   while the normal automatic channel remains at five minutes and respects Retry-After).
+   The pinned signed grant is verified, and the existing native consent gate appears.
+7. Only explicit local consent permits capture. Export remains encrypted; upload requires
+   a separate consent. Closing support returns to Android and does not open accounting.
+
+If any MainActivity WebView has already been created in this process, the support screen
+refuses capture and instructs Force stop and reopening the support link. The process-wide
+capture/WebView interlock also covers multiple Activities and recreation during capture.
+First enrollment requires internet; an absent offline authorization cannot be invented.
 
 A previously received signed grant permits offline local collection until its signed expiry.
 The device cannot observe a later server cancellation while offline; the screen discloses
@@ -57,7 +85,8 @@ After explicit local consent, `RecoverySnapshot` takes fixed, native-discovered
 `app_webview*/Default/IndexedDB` and legacy `app_webview*/IndexedDB` roots inside
 `Context.getDataDir()`. It rejects symbolic links below the private boundary, special files,
 unsafe paths, excess files/directories, changing files, insufficient space and size limits.
-Limits: 4096 entries, 256 MiB total, 64 MiB per file, depth 24 and at least 16 MiB reserve.
+Limits: 4096 entries, 256 MiB total, 64 MiB per file, source depth 20 and at least 16 MiB
+reserve beyond twice the source byte count.
 The source is opened only for reading. No LevelDB, SQLite or IndexedDB repair API is used.
 
 Transient copies live only in the app's private `no_backup/data-rescue/<case>/snapshot-<id>`.
@@ -101,6 +130,29 @@ The raw snapshot self-test and the protocol/package checks use synthetic files a
 keys only. The six existing approved-runtime checks cover navigation, reports, party totals,
 French locale, feature domains and imports. Exact commands/results are recorded in the final
 handoff; source inspection does not substitute for runtime execution.
+
+Executed locally with an official Temurin 17 JRE and Eclipse ECJ Java 17 compiler:
+
+- `RecoverySnapshotSelfTest`: 19 passed, 1 skipped because this Windows host cannot create
+  symbolic links, 0 failed. Includes byte-identical binary/blob copies, missing/empty roots,
+  source-preservation hashes, size/count/free-space limits, changed files, interruption and
+  cleanup boundary tests. Linux CI runs the actual symbolic-link refusal check.
+- `RecoveryProtocolChecks`: 33 passed, 0 failed, including the fixed support entry policy,
+  wrong installation/key/license,
+  issuer/signature/tampering/expiry, monotonic clock and reboot rejection, authenticated
+  RSA-OAEP/AES-GCM package round-trip, archive hash/content, and unchanged original bytes.
+- All six existing approved-runtime scripts passed. The feature-domain script reports 15
+  checks and the import script 20 checks. The ignored pinned SQLite asset was verified by
+  SHA-256 before the import test; the initial missing-asset failure was resolved before rerun.
+- `git diff --check` passed. Full Android compilation and on-device results remain pending
+  until the new CI workflow or a prepared Android environment executes them.
+
+`verify-data-rescue-entry.mjs` passed the explicit-entry architecture assertions. The added
+device instrumentation `RecoverySupportEntryTest` verifies no WebView is present, no
+WebView-created flag change, no new capture directory and no new IndexedDB root from
+opening the support link. Its execution result must be recorded separately; merely adding
+the test is not device verification. Protocol checks also exercise the fixed action/URI
+policy and reject path/query/fragment/credential/port payloads.
 
 Remaining release gates: compile the entire Android app with the actual SDK, UI checks on
 small screens in Arabic/French and both themes, actual on-device process restart and
