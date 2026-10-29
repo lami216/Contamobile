@@ -22,7 +22,7 @@ export function invoiceDocument(state,record,{esc,money,icon,labels,atSource=fal
       <footer class="document-total"><div><span>${noncash?'قيمة العملية':'الإجمالي'}</span><small>${r.voided?'أُلغي أثر هذا المستند':esc(paymentNote)}</small></div>${money(r.total,'document-total-amount',outgoing?'negative':'positive')}</footer>
     </article>
     <div class="document-actions" role="group" aria-label="إجراءات المستند"><button class="document-print" data-action="site:print">${icon('print')}طباعة / حفظ PDF</button>${r.kind!=='offset'?`${!atSource&&!r.voided?`<button data-action="source-location:${r.id}">${icon('arrow')}الانتقال إلى المصدر</button>`:''}${atSource&&!r.voided?`<button data-action="source:${r.id}">${icon('edit')}${['sale','purchase','expense'].includes(r.kind)?'تعديل الفاتورة':'تعديل العملية'}</button>`:''}`: ""}${!r.voided?`<button class="document-delete" data-action="void:${r.id}">${icon('trash')}حذف العملية</button>`:''}</div>
-    <button class="document-history" data-action="explain:document:${r.id}">${icon('activity')}سجل التعديلات <span>${r.revision||0}</span></button>
+    <button class="document-history" data-action="explain:document:${r.id}">${icon('activity')}سجل التعديلات <span>${esc(r.revision||0)}</span></button>
     ${r.voided?'<p class="document-void-note">أُلغي أثر العملية مع الاحتفاظ بالمستند وسجل تعديلاته.</p>':''}
   </div>`;
 }

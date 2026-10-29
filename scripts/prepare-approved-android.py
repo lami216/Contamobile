@@ -18,8 +18,6 @@ s=(target/'index.html').read_text(encoding='utf-8').replace('</head>','<link rel
 (target/'index.html').write_text(s,encoding='utf-8')
 p=target/'app.js';s=p.read_text(encoding='utf-8')
 s=s.replace("async function offerExport(name,blob){", "async function offerExport(name,blob){await window.NativeFiles.saveBlob(name,blob);modal=null;render();toast('تم حفظ الملف');return;}async function unusedBrowserOfferExport(name,blob){")
-s=s.replace("function download(name,text,type='application/json'){", "function download(name,text,type='application/json'){return window.NativeFiles.saveBlob(name,new Blob([text],{type}));}function unusedBrowserDownload(name,text,type='application/json'){")
-s=s.replace("download('alkarna-'+today()+'.json'", "await download('alkarna-'+today()+'.json'")
 s=s.replace("if('serviceWorker' in navigator)", "if(false&&'serviceWorker' in navigator)")
 p.write_text(s,encoding='utf-8')
 p=target/'barcode-camera.js';s=p.read_text(encoding='utf-8').replace("export async function scanProductBarcode(input,{onError=()=>{}}={}){", "export async function scanProductBarcode(input,{onError=()=>{}}={}){if(window.NativeFiles){try{const result=await window.NativeFiles.scan();if(result.value){input.value=result.value;input.dispatchEvent(new Event('input',{bubbles:true}));input.focus()}}catch(e){onError(e.message)}return;}")

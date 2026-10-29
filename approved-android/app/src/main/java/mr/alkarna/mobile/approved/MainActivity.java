@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
     private static final java.util.concurrent.ThreadPoolExecutor administrationQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
-    private boolean activationPage;
+    private boolean activationPage,activationTransitionPending;
     private volatile boolean activityResumed;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
     private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
@@ -117,8 +117,21 @@ public final class MainActivity extends Activity {
     }
     public WebView getWebView(){return web;}
     private boolean licenseAllowed(){return licensing!=null&&licensing.status().optBoolean("valid");}
-    private void showActivation(){if(activationPage)return;activationPage=true;web.evaluateJavascript("typeof savePosDraft==='function'&&savePosDraft()",ignored->web.loadUrl(ORIGIN+"/assets/approved/activation.html"));}
-    private void openApp(){if(!licenseAllowed())return;activationPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
+    private void showActivation(){
+        if(activationPage||activationTransitionPending||web==null||isFinishing()||isDestroyed())return;
+        activationTransitionPending=true;continueActivationTransition();
+    }
+    private void continueActivationTransition(){
+        if(!activationTransitionPending||web==null||isFinishing()||isDestroyed()){activationTransitionPending=false;return;}
+        String current=web.getUrl();if(current!=null&&!"about:blank".equals(current)&&!current.startsWith(ORIGIN+"/assets/approved/")){activationTransitionPending=false;return;}
+        // A term expiry blocks new actions immediately, but an already accepted write may finish.
+        web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return false;if(typeof window.karnaSavePosDraft==='function')window.karnaSavePosDraft();return true})()",ready->{
+            if(!activationTransitionPending||isFinishing()||isDestroyed())return;
+            if("false".equals(ready)){licenseTimer.postDelayed(this::continueActivationTransition,250);return;}
+            activationTransitionPending=false;activationPage=true;web.loadUrl(ORIGIN+"/assets/approved/activation.html");
+        });
+    }
+    private void openApp(){if(!licenseAllowed())return;activationTransitionPending=false;activationPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
     private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
     private void result(String id,JSONObject value){runOnUiThread(()->web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null));}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
@@ -225,6 +238,6 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onPause(){activityResumed=false;stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
     @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null)dataRescue.probe();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
-    @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
+    @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return true;if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
     @Override protected void onDestroy(){if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

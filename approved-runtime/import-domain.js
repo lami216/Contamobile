@@ -16,9 +16,13 @@ export function reconcileImportOpening(state){
 export function mergeImport(current,incoming,options={}){
  const next=structuredClone(current),source=structuredClone(incoming);upgradeState(next);upgradeState(source);
  const result={state:next,counts:{products:0,parties:0,accounts:0,warehouses:0,categories:0,records:0,existing:0},conflicts:[],warnings:[]},maps={products:new Map(),parties:new Map(),accounts:new Map(),categories:new Map(),warehouses:new Map()};
+ // Allocate remapped IDs once per collection; rescanning a growing invoice history for
+ // every imported document stalls the main thread on otherwise supported backup sizes.
+ const lastIds=Object.fromEntries(['categories','products','parties','accounts','records'].map(kind=>[kind,next[kind].reduce((max,row)=>Math.max(max,row.id),kind==='records'?100:0)]));
+ const allocateId=kind=>++lastIds[kind];
  const choices=options.matches||{},policy=kind=>options[kind]||'current',affectedProducts=new Set();
  for(const w of source.warehouses){let target=next.warehouses.find(x=>normalize(x)===normalize(w));if(!target){target=w;next.warehouses.push(w);next.warehouseMeta[w]={...source.warehouseMeta[w]};for(const p of next.products)p.stocks[w]=0;result.counts.warehouses++}maps.warehouses.set(w,target)}
- for(const c of source.categories){let target=next.categories.find(x=>normalize(x.name)===normalize(c.name));if(!target){target={...c,id:Math.max(0,...next.categories.map(x=>x.id))+1};next.categories.push(target);result.counts.categories++}maps.categories.set(c.id,target.id)}
+ for(const c of source.categories){let target=next.categories.find(x=>normalize(x.name)===normalize(c.name));if(!target){target={...c,id:allocateId('categories')};next.categories.push(target);result.counts.categories++}maps.categories.set(c.id,target.id)}
  for(const kind of ['products','parties','accounts'])for(const row of source[kind]){
   const key=keyOf(source,kind,row),sameRole=x=>kind!=='parties'||x.type===row.type;
   let matches=next[kind].filter(x=>sameRole(x)&&(keyOf(next,kind,x)===key||x.importKeys?.includes(key)));
@@ -27,7 +31,7 @@ export function mergeImport(current,incoming,options={}){
   let target=choices[key]==='new'?null:choices[key]?next[kind].find(x=>x.id===Number(choices[key])&&sameRole(x)):matches.length===1?matches[0]:null;
   if(matches.length>1&&!Object.hasOwn(choices,key)){result.conflicts.push({key,kind,name:row.name,candidates:matches.map(x=>({id:x.id,name:x.name}))});continue;}
   if(choices[key]&&choices[key]!=='new'&&!target)throw Error('اختيار مطابقة غير صالح');
-  if(!target){target={...structuredClone(row),id:Math.max(0,...next[kind].map(x=>x.id))+1,importKey:key};if(kind==='products'){target.stocks=Object.fromEntries(next.warehouses.map(w=>[w,0]));for(const [w,q]of Object.entries(row.stocks))target.stocks[maps.warehouses.get(w)]=q;target.categoryId=maps.categories.get(row.categoryId)||null;target.openingWarehouse=maps.warehouses.get(row.openingWarehouse);target.qty=num(target.stocks[next.warehouse]);}next[kind].push(target);result.counts[kind]++;}
+  if(!target){target={...structuredClone(row),id:allocateId(kind),importKey:key};if(kind==='products'){target.stocks=Object.fromEntries(next.warehouses.map(w=>[w,0]));for(const [w,q]of Object.entries(row.stocks))target.stocks[maps.warehouses.get(w)]=q;target.categoryId=maps.categories.get(row.categoryId)||null;target.openingWarehouse=maps.warehouses.get(row.openingWarehouse);target.qty=num(target.stocks[next.warehouse]);}next[kind].push(target);result.counts[kind]++;}
   else{result.counts.existing++;target.importKeys=[...new Set([...(target.importKeys||[]),key])];if(kind==='products'&&policy('stocks')==='imported'){for(const [w,q]of Object.entries(row.stocks))target.stocks[maps.warehouses.get(w)]=q;}if(kind!=='products'&&policy(kind)==='imported')target.balance=row.balance;}
   if(kind==='products'&&(target.importKey===key&&!current.products.some(p=>p.id===target.id)||policy('stocks')==='imported'&&JSON.stringify(current.products.find(p=>p.id===target.id)?.stocks)!==JSON.stringify(target.stocks)))affectedProducts.add(target.id);
   maps[kind].set(row.id,target.id);
@@ -36,7 +40,7 @@ export function mergeImport(current,incoming,options={}){
  const known=new Map(next.records.map(r=>[keyOf(next,'records',r),r]));
  for(const record of source.records){
   const key=keyOf(source,'records',record),old=known.get(key);if(old&&policy('records')!=='imported'){result.counts.existing++;continue;}
-  const r={...structuredClone(record),id:old?.id||Math.max(100,...next.records.map(x=>x.id))+1,importKey:key};
+  const r={...structuredClone(record),id:old?.id||allocateId('records'),importKey:key};
   for(const name of ['account','to'])if(r[name]){r[name]=maps.accounts.get(r[name]);if(!r[name])throw Error('وسيلة دفع المستند غير موجودة')}
   if(r.party){r.party=maps.parties.get(r.party);if(!r.party)throw Error('طرف المستند غير موجود')}
   if(r.otherParty)throw Error('التقاص غير مدعوم');

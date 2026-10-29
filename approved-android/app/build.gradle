@@ -5,6 +5,9 @@ plugins { id 'com.android.application' }
 def signingEnvironment = ['ALKARNA_KEYSTORE_PATH', 'ALKARNA_STORE_PASSWORD', 'ALKARNA_KEY_ALIAS', 'ALKARNA_KEY_PASSWORD']
 def hasReleaseSigning = signingEnvironment.every { System.getenv(it)?.trim() }
 def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(14)
+// Isolated emulator audit only; the release signing path is unchanged.
+def auditDebugTests = providers.gradleProperty('alkarnaAuditDebugTests').map { it.toBoolean() }.getOrElse(false)
+
 def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.13-trial')
 // Public deployment metadata, confirmed by the owner from the current service export.
 def servicePublic = new groovy.json.JsonSlurper().parse(rootProject.file('contatools-public.json'))
@@ -26,7 +29,7 @@ android {
   buildConfigField 'String', 'CONTATOOLS_ISSUERS', groovy.json.JsonOutput.toJson(groovy.json.JsonOutput.toJson(serviceIssuers))
  }
  buildFeatures { buildConfig true }
- testBuildType 'release'
+ testBuildType(auditDebugTests ? 'debug' : 'release')
  signingConfigs {
   release {
    if (hasReleaseSigning) {
