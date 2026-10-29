@@ -7,12 +7,12 @@ mkdir -p candidate-proof
 adb shell cmd connectivity airplane-mode enable
 adb shell svc wifi disable
 adb shell svc data disable
-candidate=candidate-output/alkarna-1.0.15-v16.apk
+candidate=candidate-output/alkarna-1.0.16-v17.apk
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
-# Six synthetic scenarios. Each baseline -> candidate pair uses install-r, without data clear.
+# Eight synthetic scenarios. Each baseline -> candidate pair uses install-r, without data clear.
 # Reset only BETWEEN separate scenarios, never during an in-place upgrade.
 first=true
-for baseline in 13 14 15; do
+for baseline in 13 14 15 16; do
  previous=baseline-v$baseline/alkarna-approved.apk
  for type in temporary perpetual; do
   if [ "$first" = false ]; then adb uninstall "$app"; fi
@@ -27,7 +27,7 @@ for baseline in 13 14 15; do
   adb shell am force-stop "$app"
   adb install -r "$candidate" | tee "candidate-proof/$label-install-r.txt"
   grep -q Success "candidate-proof/$label-install-r.txt"
-  adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterInPlaceUpdate -e expectedVersionCode 16 "$runner" | tee "candidate-proof/$label-after.txt"
+  adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterInPlaceUpdate -e expectedVersionCode 17 "$runner" | tee "candidate-proof/$label-after.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-after.txt"
  done
 done

@@ -97,18 +97,18 @@ final class RecoveryPreflight {
  private void showConsent(){layout();status.setText(t(R.string.rescue_intro));details();label(t(R.string.rescue_sensitive),14,muted,false);label(t(R.string.rescue_offline),13,muted,false);button(R.string.rescue_accept,true,this::capture);button(supportMode?R.string.rescue_refuse_close:R.string.rescue_refuse,false,()->{try{client.decline(grant);WORK.execute(()->{try{client.sendConsent(grant,false,false);}catch(Exception ignored){}});}catch(Exception failure){return;}leave();});}
  private void capture(){
   synchronized(MainActivity.class){if(busy||MainActivity.hasCreatedWebView()||!CAPTURING.compareAndSet(false,true))return;}
-  try{if(client.cachedGrant()==null){CAPTURING.set(false);showFailure();return;}client.consent(grant,true,false);}catch(Exception failure){CAPTURING.set(false);showFailure();return;}
+  try{if(client.cachedGrant()==null){CAPTURING.set(false);showFailure("grant: REFRESH_REQUIRED");return;}client.consent(grant,true,false);}catch(Exception failure){CAPTURING.set(false);showFailure(failureCode("consent",failure));return;}
   busy=true;layout();status.setText(t(R.string.rescue_copying));
   WORK.execute(()->{
-   File dataRoot=activity.getDataDir();File snapshot=null;boolean okay=false;
+   File dataRoot=activity.getDataDir();File snapshot=null;boolean okay=false;String stage="grant",failureDetail="";
    try{
     // The worker may have been queued behind network work; authorize at the actual read boundary.
     JSONObject current=client.cachedGrant();if(MainActivity.hasCreatedWebView()||current==null||!grant.getString("caseId").equals(current.getString("caseId")))throw new IOException("RESCUE_EXPIRED");
-    try{client.sendConsent(grant,true,false);}
+    stage="server-consent";try{client.sendConsent(grant,true,false);}
     catch(ContatoolsClient.ServiceFailure denial){if(denial.permanent)throw denial;}
     catch(IOException offline){/* A previously received signed grant permits local offline capture. */}
     current=client.cachedGrant();if(MainActivity.hasCreatedWebView()||current==null||!grant.getString("caseId").equals(current.getString("caseId")))throw new IOException("RESCUE_EXPIRED");
-    File caseDir=client.packageFile(grant).getParentFile();if(!caseDir.exists()&&!caseDir.mkdirs())throw new IOException("RESCUE_STORAGE");
+    stage="storage";File caseDir=client.packageFile(grant).getParentFile();if(!caseDir.exists()&&!caseDir.mkdirs())throw new IOException("RESCUE_STORAGE");
     // Clear only interrupted private copies of this already-consented case, never WebView files.
     File[] stale=caseDir.listFiles();if(stale!=null)for(File file:stale)if(file.getName().startsWith("snapshot-"))RecoverySnapshot.cleanup(dataRoot,file);
     snapshot=new File(caseDir,"snapshot-"+UUID.randomUUID());Map<String,File> roots=new LinkedHashMap<>();
@@ -119,11 +119,11 @@ final class RecoveryPreflight {
      if(legacyRoot.exists())roots.put("profile"+profile+"-legacy",legacyRoot);profile++;
     }
     if(roots.isEmpty())roots.put("app_webview-default",new File(dataRoot,"app_webview/Default/IndexedDB"));
-    RecoverySnapshot.Result result=RecoverySnapshot.capture(dataRoot,roots,snapshot,RecoverySnapshot.Limits.defaults(),(done,total,bytes)->ui(()->status.setText(t(R.string.rescue_copying)+" "+done+" / "+total)));
-    RecoveryPackage.write(grant,result,bundle,System.currentTimeMillis());okay=true;
-   }catch(Exception failed){/* Only safe generic errors reach the UI; original files stay untouched. */}
-   finally{try{if(snapshot!=null)RecoverySnapshot.cleanup(dataRoot,snapshot);}catch(Exception cleanupFailed){okay=false;}CAPTURING.set(false);busy=false;}
-   boolean success=okay;ui(()->{if(success)showReady(false);else showFailure();});
+    stage="snapshot";RecoverySnapshot.Result result=RecoverySnapshot.capture(dataRoot,roots,snapshot,RecoverySnapshot.Limits.defaults(),(done,total,bytes)->ui(()->status.setText(t(R.string.rescue_copying)+" "+done+" / "+total)));
+    stage="encryption";RecoveryPackage.write(grant,result,bundle,System.currentTimeMillis());okay=true;
+   }catch(Exception failed){failureDetail=failureCode(stage,failed);}
+   finally{try{if(snapshot!=null&&snapshot.exists())RecoverySnapshot.cleanup(dataRoot,snapshot);}catch(Exception cleanupFailed){okay=false;failureDetail=failureCode("cleanup",cleanupFailed);}CAPTURING.set(false);busy=false;}
+   boolean success=okay;String detail=failureDetail;ui(()->{if(success)showReady(false);else showFailure(detail);});
   });
  }
  private void showReady(boolean uploaded){layout();status.setText(t(uploaded?R.string.rescue_received:R.string.rescue_ready));details();button(R.string.rescue_save,true,this::export);if(!uploaded)button(R.string.rescue_send,false,this::confirmUpload);button(supportMode?R.string.rescue_close:R.string.rescue_finish,false,this::leave);}
@@ -137,7 +137,9 @@ final class RecoveryPreflight {
   if(request!=SAVE_RESCUE)return false;if(result!=Activity.RESULT_OK||intent==null||intent.getData()==null)return true;
   Uri destination=intent.getData();WORK.execute(()->{boolean okay=false;try(InputStream input=new FileInputStream(bundle);OutputStream output=activity.getContentResolver().openOutputStream(destination,"wt")){if(output==null)throw new IOException();byte[] buffer=new byte[65536];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);output.flush();okay=true;}catch(Exception failed){}boolean success=okay;ui(()->status.setText(t(success?R.string.rescue_exported:R.string.rescue_export_failed)));});return true;
  }
- private void showFailure(){layout();status.setText(t(R.string.rescue_failed));button(supportMode?R.string.rescue_close:R.string.rescue_finish,false,this::leave);}
+ private static String failureCode(String stage,Exception error){String message=error.getMessage();String code=message!=null&&message.matches("[A-Za-z0-9_-]{1,100}")?message:"";return stage+": "+error.getClass().getSimpleName()+(code.isEmpty()?"":" / "+code);}
+ private void showFailure(){showFailure("operation: FAILED");}
+ private void showFailure(String code){layout();status.setText(t(R.string.rescue_failed)+"\n\n"+code);status.setTextIsSelectable(true);button(supportMode?R.string.rescue_close:R.string.rescue_finish,false,this::leave);}
  private void leave(){if(busy||CAPTURING.get())return;active=false;root.removeAllViews();continueApp.run();}
  boolean back(){if(!active)return false;if(!busy)activity.finish();return true;}
  void destroy(){destroyed=true;cancelUpload.set(true);}

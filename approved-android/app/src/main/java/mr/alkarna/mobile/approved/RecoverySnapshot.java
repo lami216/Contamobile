@@ -138,7 +138,9 @@ final class RecoverySnapshot {
         while (!Files.exists(existingParent, LinkOption.NOFOLLOW_LINKS)) existingParent = existingParent.getParent();
         if (limits.reserveBytes > Long.MAX_VALUE - total * 2) throw new IOException("capture-insufficient-space");
         long required = total * 2 + limits.reserveBytes;
-        if (Files.getFileStore(existingParent).getUsableSpace() < required) throw new IOException("capture-insufficient-space");
+        // Android denies Files.getFileStore even inside our own sandbox. File uses
+        // statvfs on Android and remains usable in the standalone JVM safety suite.
+        if (existingParent.toFile().getUsableSpace() < required) throw new IOException("capture-insufficient-space");
         createPrivateDirectories(dataRoot, target);
         long copied = 0;
         int completed = 0;
