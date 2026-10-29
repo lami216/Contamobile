@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+ <string name="rescue_title">استرجاع بيانات المحل</string>
+ <string name="rescue_intro">طلب فريق الدعم فحص البيانات المحلية الموجودة على هذا الجهاز. لن يتم حذف بياناتك أو تعديلها أثناء الفحص. لا يضمن الفحص استرجاع البيانات.</string>
+ <string name="rescue_sensitive">يشمل الفحص ملفات IndexedDB الخام وقد تتضمن أسماء العملاء وأرقامهم ومعاملاتهم وحسابات المستخدمين وتجزئات كلمات المرور. لا يشمل مفاتيح الهاتف الخاصة أو ملفات التفعيل. تُحفظ الحزمة مشفرة لفريق الدعم المخول.</string>
+ <string name="rescue_offline">يعمل حفظ النسخة محليًا دون إنترنت. إرسالها إلى الدعم يحتاج اتصالًا وموافقة منفصلة. لا يمكن التحقق من إلغاء التفويض أثناء انقطاع الاتصال.</string>
+ <string name="rescue_case">رقم طلب الإنقاذ</string>
+ <string name="rescue_device">الهاتف المقصود</string>
+ <string name="rescue_expires">صالح حتى</string>
+ <string name="rescue_accept">الموافقة وبدء الفحص</string>
+ <string name="rescue_refuse">رفض الفحص وفتح التطبيق</string>
+ <string name="rescue_copying">جارٍ حفظ نسخة الأدلة…</string>
+ <string name="rescue_ready">حزمة الأدلة المشفرة جاهزة. العثور على ملفات لا يعني أن البيانات قابلة للاسترجاع.</string>
+ <string name="rescue_save">حفظ نسخة على الهاتف</string>
+ <string name="rescue_send">إرسال الحزمة إلى الدعم</string>
+ <string name="rescue_finish">إنهاء وفتح التطبيق</string>
+ <string name="rescue_upload_intro">هل توافق على إرسال حزمة الأدلة المشفرة إلى Contatools ليحللها فريق الدعم؟ تظل هذه موافقة منفصلة عن الفحص المحلي.</string>
+ <string name="rescue_upload_accept">الموافقة وإرسال الحزمة</string>
+ <string name="rescue_cancel">إلغاء</string>
+ <string name="rescue_uploading">جارٍ إرسال الحزمة…</string>
+ <string name="rescue_stop">إيقاف الإرسال بعد الجزء الحالي</string>
+ <string name="rescue_received">اكتمل استلام الحزمة. ينتظر تحليل الدعم؛ لم تُستعد بيانات تلقائيًا.</string>
+ <string name="rescue_upload_failed">لم يكتمل الإرسال. بقيت الحزمة على الهاتف؛ يمكنك استئناف الإرسال ما دام التفويض صالحًا.</string>
+ <string name="rescue_failed">لم يكتمل الإجراء. لم نُعدّل ملفات المحاسبة الأصلية. تواصل مع الدعم قبل تجربة أخرى.</string>
+ <string name="rescue_export_failed">لم يكتمل حفظ الحزمة. يمكنك المحاولة مجددًا.</string>
+ <string name="rescue_exported">تم حفظ الحزمة المشفرة في المكان الذي اخترته.</string>
+ <string name="rescue_restart">وصل طلب إنقاذ لهذا الهاتف. استخدم «فرض الإيقاف» من معلومات التطبيق في إعدادات Android، ثم افتحه لعرض الموافقة قبل بدء التخزين.</string>
+</resources>

@@ -1,0 +1,65 @@
+name: Data rescue safety review
+on:
+  push:
+    branches: [feat/live-contatools-light-sync-20261027]
+    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/java/**', '.github/workflows/data-rescue-safety.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: data-rescue-safety-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unsigned-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install fixed Android compile platform
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Fetch pinned JSON dependency for independent JVM checks
+        run: |
+          mkdir -p "$RUNNER_TEMP/rescue-deps" "$RUNNER_TEMP/rescue-classes"
+          curl --fail --silent --show-error --location --retry 2 https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o "$RUNNER_TEMP/rescue-deps/json.jar"
+          echo "3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed  $RUNNER_TEMP/rescue-deps/json.jar" | sha256sum --check
+      - name: Compile and execute raw-evidence and package contract checks
+        run: |
+          package=approved-android/app/src/main/java/mr/alkarna/mobile/approved
+          javac -encoding UTF-8 -cp "$ANDROID_HOME/platforms/android-35/android.jar:$RUNNER_TEMP/rescue-deps/json.jar" -d "$RUNNER_TEMP/rescue-classes" "$package/LicenseVerifier.java" "$package/ProtocolJson.java" "$package/RecoveryGrant.java" "$package/RecoveryClock.java" "$package/RecoverySnapshot.java" "$package/RecoveryPackage.java" approved-android/app/src/test/java/mr/alkarna/mobile/approved/RecoverySnapshotSelfTest.java scripts/java/mr/alkarna/mobile/approved/*.java
+          java -cp "$RUNNER_TEMP/rescue-classes:$RUNNER_TEMP/rescue-deps/json.jar:$ANDROID_HOME/platforms/android-35/android.jar" mr.alkarna.mobile.approved.RecoverySnapshotSelfTest
+          java -cp "$RUNNER_TEMP/rescue-classes:$RUNNER_TEMP/rescue-deps/json.jar:$ANDROID_HOME/platforms/android-35/android.jar" mr.alkarna.mobile.approved.RecoveryProtocolChecks
+      - name: Prepare the existing pinned offline runtime
+        run: python3 scripts/prepare-approved-android.py
+      - name: Existing accounting and locale regressions
+        run: |
+          node scripts/verify-approved-source-navigation.mjs
+          node scripts/verify-report-sources.mjs
+          node scripts/verify-party-summaries.mjs
+          node scripts/verify-french-locale.mjs
+          node scripts/verify-feature-domains.mjs
+          node scripts/verify-import-features.mjs
+      - name: Compile the whole unsigned debug app and run JVM unit tests
+        run: gradle -p approved-android :app:compileDebugJavaWithJavac :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: Save actual test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-rescue-review-tests
+          path: |
+            approved-android/app/build/reports/tests/testDebugUnitTest/
+            approved-android/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore

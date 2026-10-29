@@ -34,6 +34,10 @@ public final class MainActivity extends Activity {
     private Export pendingExport;
     private DeviceLicense licensing;
     private ContatoolsClient administration;
+    private RecoveryPreflight dataRescue;
+    // An Activity recreation must never capture live Chromium storage in this process.
+    private static volatile boolean webViewWasCreated;
+    static boolean hasCreatedWebView(){return webViewWasCreated;}
     private static final java.util.concurrent.ThreadPoolExecutor administrationQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
@@ -55,7 +59,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         try{licensing=new DeviceLicense(this);}catch(Exception e){Log.e("AlKarna","Activation storage unavailable");}
         root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(8,14,25));
-        web=new WebView(this);web.setId(View.generateViewId());root.addView(web,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
+        setContentView(root);
         if(Build.VERSION.SDK_INT>=30){
             getWindow().setDecorFitsSystemWindows(false);
             getWindow().getDecorView().setOnApplyWindowInsetsListener((v,insets)->{
@@ -63,6 +67,16 @@ public final class MainActivity extends Activity {
                 root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
             });
         }
+        dataRescue=new RecoveryPreflight(this,root,licensing,this::initializeWebView);
+        if(!dataRescue.intercept(webViewWasCreated))initializeWebView();
+    }
+    private void initializeWebView(){
+        if(web!=null||isFinishing()||isDestroyed())return;
+        synchronized(MainActivity.class){
+            if(RecoveryPreflight.capturing()){licenseTimer.postDelayed(this::initializeWebView,250);return;}
+            webViewWasCreated=true;
+        }
+        web=new WebView(this);web.setId(View.generateViewId());root.addView(web,new FrameLayout.LayoutParams(-1,-1));
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);s.setAllowContentAccess(true);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSupportMultipleWindows(false);s.setTextZoom(100);
@@ -153,7 +167,7 @@ public final class MainActivity extends Activity {
             catch(Exception e){error(id,e instanceof LicenseVerifier.Rejected?e.getMessage():"تعذّر حفظ ملف التفعيل");}
         }
         @JavascriptInterface public void theme(String appearance){runOnUiThread(()->{
-            if(!trusted())return;boolean light="light".equals(appearance);root.setBackgroundColor(Color.parseColor(light?"#f1f4f8":"#080e19"));
+            if(!trusted())return;boolean light="light".equals(appearance);getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("theme",light?"light":"dark").apply();root.setBackgroundColor(Color.parseColor(light?"#f1f4f8":"#080e19"));
             getWindow().getDecorView().setSystemUiVisibility(light?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
         });}
         @JavascriptInterface public void beginExport(String id,String name,String mime){
@@ -195,6 +209,7 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==CAMERA&&scannerRequest!=null){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startScanner();else{error(scannerRequest,"لم يُسمح بالكاميرا. أدخل الباركود يدويًا.");scannerRequest=null;}}}
     @Override protected void onActivityResult(int request,int code,Intent intent){
         super.onActivityResult(request,code,intent);
+        if(dataRescue!=null&&dataRescue.onActivityResult(request,code,intent))return;
         if(request==PICK_FILE&&chooser!=null){chooser.onReceiveValue(code==RESULT_OK&&intent!=null?new Uri[]{intent.getData()}:null);chooser=null;}
         if(request==SCAN&&scannerRequest!=null){String id=scannerRequest;scannerRequest=null;if(code==RESULT_OK&&intent!=null)result(id,value("value",intent.getStringExtra("barcode")));else result(id,value("cancelled",true));}
         if(request==SAVE_FILE&&pendingExport!=null){
@@ -209,7 +224,7 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){activityResumed=false;stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
-    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
-    @Override public void onBackPressed(){if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
-    @Override protected void onDestroy(){licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
+    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null)dataRescue.probe();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
+    @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
+    @Override protected void onDestroy(){if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

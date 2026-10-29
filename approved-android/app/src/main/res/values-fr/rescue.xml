@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+ <string name="rescue_title">Récupérer les données du magasin</string>
+ <string name="rescue_intro">L’assistance demande un examen des données locales de cet appareil. Les originaux ne seront ni supprimés ni modifiés. La récupération n’est pas garantie.</string>
+ <string name="rescue_sensitive">Les fichiers IndexedDB bruts peuvent contenir des clients, numéros, opérations, comptes et empreintes de mots de passe. Les clés privées et les fichiers de licence sont exclus. Le paquet est chiffré pour l’assistance autorisée.</string>
+ <string name="rescue_offline">La copie locale fonctionne hors ligne. L’envoi exige une connexion et un accord distinct. L’annulation de l’autorisation ne peut pas être vérifiée hors ligne.</string>
+ <string name="rescue_case">Demande de récupération</string>
+ <string name="rescue_device">Appareil concerné</string>
+ <string name="rescue_expires">Valable jusqu’au</string>
+ <string name="rescue_accept">Accepter et commencer l’examen</string>
+ <string name="rescue_refuse">Refuser et ouvrir l’application</string>
+ <string name="rescue_copying">Copie des éléments…</string>
+ <string name="rescue_ready">Le paquet chiffré est prêt. La présence de fichiers ne prouve pas que les données sont récupérables.</string>
+ <string name="rescue_save">Enregistrer sur le téléphone</string>
+ <string name="rescue_send">Envoyer à l’assistance</string>
+ <string name="rescue_finish">Terminer et ouvrir l’application</string>
+ <string name="rescue_upload_intro">Acceptez-vous d’envoyer le paquet chiffré à Contatools pour analyse par l’assistance ? Cet accord est distinct de celui de l’examen local.</string>
+ <string name="rescue_upload_accept">Accepter et envoyer</string>
+ <string name="rescue_cancel">Annuler</string>
+ <string name="rescue_uploading">Envoi du paquet…</string>
+ <string name="rescue_stop">Arrêter après le bloc en cours</string>
+ <string name="rescue_received">Le paquet a été reçu pour analyse. Aucune restauration automatique n’a été effectuée.</string>
+ <string name="rescue_upload_failed">Envoi incomplet. Le paquet reste sur le téléphone. Réessayez tant que l’autorisation est valide.</string>
+ <string name="rescue_failed">Opération incomplète. Les fichiers comptables originaux restent inchangés. Contactez l’assistance avant de réessayer.</string>
+ <string name="rescue_export_failed">Enregistrement incomplet. Réessayez.</string>
+ <string name="rescue_exported">Le paquet chiffré a été enregistré à l’emplacement choisi.</string>
+ <string name="rescue_restart">Une demande vise ce téléphone. Choisissez « Forcer l’arrêt » dans les informations de l’application des paramètres Android, puis rouvrez-la pour donner votre accord avant le démarrage du stockage.</string>
+</resources>
