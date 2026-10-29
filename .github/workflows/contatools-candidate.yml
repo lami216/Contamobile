@@ -1,4 +1,4 @@
-name: Contatools distribution candidate v15
+name: Contatools distribution candidate v16
 on:
   push:
     branches: [feat/live-contatools-light-sync-20261027]
@@ -8,15 +8,15 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: candidate-v15-${{ github.ref }}
+  group: candidate-v16-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '14'
-      ALKARNA_PREVIOUS_APK_SHA256: 4d69fc1f88d4709d4928c906e15801ff2028995ad0131d611e946973bb831c90
+      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '15'
+      ALKARNA_PREVIOUS_APK_SHA256: 6204cfe04ce59acb2d4e089bb9d1711524949441e04b05d5b10b0c985ff7b74d
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,8 +43,9 @@ jobs:
           test "$(gh api repos/lami216/Contamobile/actions/runs/39312062039 --jq .head_sha)" = 1efb01fc1cd7bc62670510e57c6158734ad4bf05
           gh run download 39312062039 --repo lami216/Contamobile --name alkarna-approved-apk --dir baseline-v13
           echo "9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c  baseline-v13/alkarna-approved.apk" | sha256sum --check
-          mkdir -p candidate-output
-          python3 scripts/verify-candidate-apk.py baseline baseline-v14/alkarna-approved.apk > candidate-output/baseline-verified.json
+          mkdir -p candidate-output baseline-v15
+          curl --fail --silent --show-error --location https://3ali.store/downloads/alkarna-1.0.14-v15.apk -o baseline-v15/alkarna-approved.apk
+          python3 scripts/verify-candidate-apk.py baseline baseline-v15/alkarna-approved.apk > candidate-output/baseline-verified.json
       - name: Existing source checks and deterministic scheduling policy
         run: |
           bash -n scripts/test-candidate-upgrade.sh
@@ -65,18 +66,18 @@ jobs:
         run: python3 scripts/prepare-approved-signing.py
       - name: Build ONCE with actual public production settings and explicit version
         run: |
-          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=15 -PalkarnaVersionName=1.0.14 --no-daemon --stacktrace
-          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.14-v15.apk
-          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.14-v15.apk > candidate-output/candidate-verified.json
-          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.14-v15.apk
-          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk candidate-output/alkarna-1.0.14-v15.apk
-          sha256sum candidate-output/alkarna-1.0.14-v15.apk > candidate-output/SHA256SUMS.txt
+          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=16 -PalkarnaVersionName=1.0.15 --no-daemon --stacktrace
+          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.15-v16.apk
+          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.15-v16.apk > candidate-output/candidate-verified.json
+          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.15-v16.apk
+          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk candidate-output/alkarna-1.0.15-v16.apk
+          sha256sum candidate-output/alkarna-1.0.15-v16.apk > candidate-output/SHA256SUMS.txt
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact original v13 and v14 to v15 updates, temporary and perpetual, and existing offline suites
+      - name: Exact original v13, v14 and v15 to v16 updates, temporary and perpetual, and native launcher shortcut
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -87,8 +88,8 @@ jobs:
       - name: Preserve exact tested customer bytes
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-candidate-v15
-          path: candidate-output/alkarna-1.0.14-v15.apk
+          name: alkarna-candidate-v16
+          path: candidate-output/alkarna-1.0.15-v16.apk
           compression-level: 0
           retention-days: 90
       - name: Separate integration-test APK and public inspection evidence
@@ -100,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: alkarna-candidate-v15-proof
+          name: alkarna-candidate-v16-proof
           path: |
             candidate-proof
             candidate-output/*.json

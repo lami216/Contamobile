@@ -31,7 +31,9 @@
  <string name="rescue_support_refresh">التحقق من طلب الإنقاذ</string>
  <string name="rescue_support_checking">جارٍ التحقق من تفويض هذا الجهاز…</string>
  <string name="rescue_support_wait">لم يصل تفويض صالح بعد. تأكد من الاتصال والتفعيل، ثم اطلب من الدعم مراجعة الجهاز وحاول بعد قليل.</string>
- <string name="rescue_support_cold">سبق تشغيل المحاسبة في هذه العملية. لحفظ الأدلة بأمان، استخدم «فرض الإيقاف» من معلومات التطبيق في إعدادات Android، ثم افتح رابط الدعم contamobile://data-rescue مباشرة دون فتح التطبيق من أيقونته.</string>
+ <string name="rescue_support_cold">سبق تشغيل المحاسبة في هذه العملية. لحفظ الأدلة بأمان، استخدم «فرض الإيقاف» من معلومات التطبيق في إعدادات Android، ثم اضغط مطولًا على أيقونة التطبيق واختر «إنقاذ البيانات» دون فتح المحاسبة.</string>
  <string name="rescue_close">إغلاق الدعم</string>
  <string name="rescue_refuse_close">رفض الفحص وإغلاق الدعم</string>
+  <string name="rescue_shortcut_short">إنقاذ البيانات</string>
+  <string name="rescue_shortcut_long">دعم إنقاذ البيانات</string>
 </resources>

@@ -37,7 +37,11 @@ public final class RecoverySupportEntryTest {
   }
   File rescue=new File(context.getNoBackupFilesDir(),"data-rescue");int copiesBefore=captureCount(rescue);
   Map<String,String> evidenceBefore=hashes(rescue,true),sourceBefore=!webViewBefore?hashes(indexed,false):null;
-  Intent intent=new Intent(context,RecoverySupportActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(RecoverySupportEntry.LINK));
+  android.content.pm.ShortcutManager shortcuts=context.getSystemService(android.content.pm.ShortcutManager.class);
+  android.content.pm.ShortcutInfo shortcut=shortcuts.getManifestShortcuts().stream().filter(item->"data_rescue".equals(item.getId())).findFirst().orElse(null);
+  assertNotNull("The installed customer APK must expose a launcher rescue shortcut",shortcut);
+  assertTrue(shortcut.isEnabled());assertEquals(1,shortcut.getIntents().length);
+  Intent intent=shortcut.getIntent();assertNotNull(intent);assertEquals(Intent.ACTION_VIEW,intent.getAction());assertEquals(Uri.parse(RecoverySupportEntry.LINK),intent.getData());assertNotNull(intent.getComponent());assertEquals(RecoverySupportActivity.class.getName(),intent.getComponent().getClassName());
   try{
   try(ActivityScenario<RecoverySupportActivity> scenario=ActivityScenario.launch(intent)){
    scenario.onActivity(activity->{assertFalse(containsWebView(activity.getWindow().getDecorView()));assertEquals(webViewBefore,MainActivity.hasCreatedWebView());});

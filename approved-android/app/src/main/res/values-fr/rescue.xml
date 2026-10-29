@@ -31,7 +31,9 @@
  <string name="rescue_support_refresh">Vérifier la demande</string>
  <string name="rescue_support_checking">Vérification de l’autorisation de cet appareil…</string>
  <string name="rescue_support_wait">Aucune autorisation valide reçue. Vérifiez la connexion et la licence, demandez à l’assistance de vérifier l’appareil, puis réessayez.</string>
- <string name="rescue_support_cold">La comptabilité a déjà démarré dans ce processus. Choisissez « Forcer l’arrêt » dans les paramètres Android, puis ouvrez directement contamobile://data-rescue sans ouvrir l’application depuis son icône.</string>
+ <string name="rescue_support_cold">La comptabilité a déjà démarré dans ce processus. Choisissez « Forcer l’arrêt » dans les paramètres Android, puis appuyez longuement sur l’icône de l’application et choisissez « Secours », sans ouvrir la comptabilité.</string>
  <string name="rescue_close">Fermer l’assistance</string>
  <string name="rescue_refuse_close">Refuser et fermer l’assistance</string>
+  <string name="rescue_shortcut_short">Secours</string>
+  <string name="rescue_shortcut_long">Assistance aux données</string>
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="data_rescue" android:enabled="true"
+        android:icon="@drawable/app_icon"
+        android:shortcutShortLabel="@string/rescue_shortcut_short"
+        android:shortcutLongLabel="@string/rescue_shortcut_long">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="mr.alkarna.mobile.approved"
+            android:targetClass="mr.alkarna.mobile.approved.RecoverySupportActivity"
+            android:data="contamobile://data-rescue" />
+    </shortcut>
+</shortcuts>
