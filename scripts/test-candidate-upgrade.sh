@@ -37,7 +37,10 @@ adb shell am force-stop "$app"
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoverySupportEntryTest -e rescueRequireColdEntry true "$runner" | tee candidate-proof/native-support-cold-entry.txt
 grep -Eq '^OK \(1 test\)' candidate-proof/native-support-cold-entry.txt
 adb shell am force-stop "$app"
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/real-capture-device.txt
+grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
+adb shell am force-stop "$app"
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt
