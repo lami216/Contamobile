@@ -28,16 +28,29 @@ public final class RecoverySupportEntryTest {
   if(requireCold)assertFalse("The cold support-entry test requires a fresh process",webViewBefore);
   File indexed=new File(context.getDataDir(),"app_webview/Default/IndexedDB");
   boolean indexedExisted=indexed.exists();
+  File defaultProfile=indexed.getParentFile(),webProfile=defaultProfile.getParentFile();boolean defaultExisted=defaultProfile.exists(),webProfileExisted=webProfile.exists();
+  Path sentinel=null;
+  if(!webViewBefore){
+   // A disposable synthetic raw file proves preservation of existing bytes on the cold path.
+   Files.createDirectories(indexed.toPath());sentinel=indexed.toPath().resolve("rescue-entry-test-"+UUID.randomUUID()+".ldb");
+   Files.write(sentinel,new byte[]{0,1,2,3,4,5,-1,0,42,10,13});
+  }
   File rescue=new File(context.getNoBackupFilesDir(),"data-rescue");int copiesBefore=captureCount(rescue);
   Map<String,String> evidenceBefore=hashes(rescue,true),sourceBefore=!webViewBefore?hashes(indexed,false):null;
   Intent intent=new Intent(context,RecoverySupportActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(RecoverySupportEntry.LINK));
+  try{
   try(ActivityScenario<RecoverySupportActivity> scenario=ActivityScenario.launch(intent)){
    scenario.onActivity(activity->{assertFalse(containsWebView(activity.getWindow().getDecorView()));assertEquals(webViewBefore,MainActivity.hasCreatedWebView());});
   }
   assertEquals(copiesBefore,captureCount(rescue));
   assertEquals(evidenceBefore,hashes(rescue,true));
   if(sourceBefore!=null)assertEquals("Native support changed the synthetic IndexedDB fixture",sourceBefore,hashes(indexed,false));
-  if(!indexedExisted)assertFalse("Support entry initialized an IndexedDB directory",indexed.exists());
+  }finally{
+   if(sentinel!=null)Files.deleteIfExists(sentinel);
+   if(!indexedExisted&&indexed.exists())assertTrue("Unexpected IndexedDB entries appeared",indexed.delete());
+   if(!defaultExisted&&defaultProfile.exists())assertTrue("Unexpected WebView profile entries appeared",defaultProfile.delete());
+   if(!webProfileExisted&&webProfile.exists())assertTrue("Support initialized Chromium profile files",webProfile.delete());
+  }
  }
  private static boolean containsWebView(View view){if(view instanceof WebView)return true;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++)if(containsWebView(group.getChildAt(i)))return true;}return false;}
  private static int captureCount(File rescue){int count=0;File[] cases=rescue.listFiles();if(cases==null)return count;for(File item:cases){if(!item.getName().matches("[a-f0-9-]{36}"))continue;File[] children=item.listFiles();if(children!=null)for(File child:children)if(child.getName().startsWith("snapshot-"))count++;}return count;}

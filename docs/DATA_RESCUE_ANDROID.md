@@ -149,10 +149,12 @@ Executed locally with an official Temurin 17 JRE and Eclipse ECJ Java 17 compile
 
 `verify-data-rescue-entry.mjs` passed the explicit-entry architecture assertions. The added
 device instrumentation `RecoverySupportEntryTest` verifies no WebView is present, no
-WebView-created flag change, no new capture directory and no new IndexedDB root from
-opening the support link. Its execution result must be recorded separately; merely adding
-the test is not device verification. Protocol checks also exercise the fixed action/URI
-policy and reject path/query/fragment/credential/port payloads.
+WebView-created flag change, no new capture directory or encrypted/partial evidence file,
+and unchanged SHA-256 hashes of an existing synthetic IndexedDB sentinel. The dedicated
+invocation uses `rescueRequireColdEntry=true` to require a fresh process and removes only its
+own synthetic sentinel/directories afterward. Its execution result must be recorded
+separately; merely adding the test is not device verification. Protocol checks also exercise
+the fixed action/URI policy and reject path/query/fragment/credential/port payloads.
 
 Remaining release gates: compile the entire Android app with the actual SDK, UI checks on
 small screens in Arabic/French and both themes, actual on-device process restart and

@@ -103,8 +103,10 @@ public class UpgradePersistenceTest {
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
             .put("type",type).put("remainingSeconds",license.status().getJSONObject("license").get("remainingSeconds"))
-            .put("installationId",new InstallationIdentity().id()).put("installationFingerprint",new InstallationIdentity().fingerprint())
             .put("localStorage",text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))"));
+        // The actual v13 APK predates Contatools; do not manufacture a pre-upgrade identity.
+        if(target().getPackageManager().getPackageInfo(target().getPackageName(),0).getLongVersionCode()>=14)
+            snapshot.put("installationId",new InstallationIdentity().id()).put("installationFingerprint",new InstallationIdentity().fingerprint());
         license.checkpoint();write("upgrade-before.json",snapshot.toString());
         System.out.println("UPGRADE seed: saved user credentials, inventory, sale, account balance, French/light preferences and temporary activation.");
     }
@@ -113,7 +115,8 @@ public class UpgradePersistenceTest {
         assertEquals(before.getString("certificate"),signer());assertEquals(before.getString("device"),license.deviceCode());
         JSONObject status=license.status();assertTrue("Activation survived APK replacement",status.getBoolean("valid"));JSONObject active=status.getJSONObject("license");
         assertEquals(before.getString("licenseId"),active.getString("licenseId"));assertEquals(before.getString("type"),active.getString("type"));
-        assertEquals(before.getString("installationId"),new InstallationIdentity().id());assertEquals(before.getString("installationFingerprint"),new InstallationIdentity().fingerprint());
+        if(before.has("installationId")){assertEquals(before.getString("installationId"),new InstallationIdentity().id());assertEquals(before.getString("installationFingerprint"),new InstallationIdentity().fingerprint());}
+        else {assertFalse("New optional identity exists after upgrading original v13",new InstallationIdentity().id().isEmpty());}
         if("temporary".equals(before.getString("type"))){assertTrue(active.getDouble("remainingSeconds")>0);assertTrue("Update must not restart license duration",active.getDouble("remainingSeconds")<=before.getDouble("remainingSeconds"));}
         else assertTrue("Perpetual stays perpetual with no countdown",active.isNull("remainingSeconds"));
         try{license.install(before.getString("document"));fail("Consumed activation was reset by update");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_ALREADY_USED",e.code);}
