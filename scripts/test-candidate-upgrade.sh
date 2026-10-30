@@ -8,7 +8,7 @@ mkdir -p "$proof_dir"
 # Keep every synthetic fixture offline even if a guest service re-enables a link.
 # This root/firewall setup is allowed only after proving this is an emulator.
 adb root
-adb wait-for-device
+timeout 30s adb wait-for-device
 test "$(adb shell id -u | tr -d '\r')" = 0
 : > "$proof_dir/network-egress-block.txt"
 for firewall in iptables ip6tables; do

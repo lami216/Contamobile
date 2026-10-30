@@ -7,7 +7,7 @@ mkdir -p "$proof_dir"
 # Airplane mode does not disable the AOSP emulator's Ethernet transport. Block
 # egress in the disposable guest before any synthetic activation/account exists.
 adb root
-adb wait-for-device
+timeout 30s adb wait-for-device
 test "$(adb shell id -u | tr -d '\r')" = 0
 : > "$proof_dir/network-egress-block.txt"
 for firewall in iptables ip6tables; do
