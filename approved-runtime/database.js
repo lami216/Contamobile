@@ -85,15 +85,34 @@ export class ShopDatabase {
       });
     },'لم تكتمل الاستعادة؛ أعد المحاولة');
   }
-  async save(state,backup=null){
-    const copy=structuredClone(state),savedBackup=backup?structuredClone(backup):null,expected=this.revision;validateState(copy);
+  async save(state,backup=null,userChanges=[]){
+    const copy=structuredClone(state),savedBackup=backup?structuredClone(backup):null,changes=structuredClone(userChanges),expected=this.revision;validateState(copy);
+    if(!Array.isArray(changes)||changes.some(change=>!change||!change.user||!Object.hasOwn(change,'expectedUser'))||new Set(changes.map(change=>change.user.id)).size!==changes.length)throw new StoreError('حسابات المستخدمين غير صالحة في النسخة');
     const revision=await this.run(['snapshots','meta','users'],'readwrite',(tx,result,abort,guard)=>{
       const store=tx.objectStore('snapshots'),request=store.get('shop');
       const write=guard(row=>{
         if(row)assertShop(row);
         if((row?.revision??0)!==expected)throw revisionConflict();
-        if(savedBackup)store.put({id:'before-compact-product-names',state:savedBackup,updatedAt:new Date().toISOString()});
-        store.put({id:'shop',revision:expected+1,state:copy,updatedAt:new Date().toISOString()});result(expected+1);
+        const finish=()=>{
+          if(savedBackup)store.put({id:'before-compact-product-names',state:savedBackup,updatedAt:new Date().toISOString()});
+          store.put({id:'shop',revision:expected+1,state:copy,updatedAt:new Date().toISOString()});result(expected+1);
+        };
+        if(!changes.length){finish();return}
+        const users=tx.objectStore('users'),request=users.getAll();
+        request.onsuccess=guard(()=>{
+          const merged=new Map(request.result.map(user=>[user.id,user]));
+          for(const change of changes){
+            const current=merged.get(change.user.id);
+            // Owner recovery changes credentials without advancing the shop revision.
+            // Check the edited account independently so a stale form cannot undo it.
+            if(change.expectedUser===null?current!==undefined:!current||!sameStoredRecord(current,change.expectedUser))throw revisionConflict();
+            merged.set(change.user.id,change.user);
+          }
+          const allUsers=[...merged.values()];validateUsers(allUsers);
+          copy.users=allUsers.map(user=>({id:user.id,name:user.name,username:user.username,role:user.role,active:user.active,capabilities:user.capabilities}));
+          for(const change of changes)users.put(change.user);
+          finish();
+        });
       });
       request.onsuccess=guard(()=>{
         if(request.result){write(request.result);return}
@@ -127,6 +146,12 @@ export class ShopDatabase {
 function incompleteShop(){return new StoreError('سجل المحل مفقود أو غير مكتمل مع وجود بيانات محلية. لا تُنشئ محلاً جديدًا؛ استخدم مدخل دعم استرجاع البيانات.')}
 function revisionConflict(){return new StoreError('تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.')}
 function assertShop(row){if(!row||row.id!=='shop'||!row.state||typeof row.state!=='object'||Array.isArray(row.state)||!Number.isSafeInteger(row.revision)||row.revision<0)throw incompleteShop()}
+function sameStoredRecord(left,right){
+  if(Object.is(left,right))return true;
+  if(!left||!right||typeof left!=='object'||typeof right!=='object'||Array.isArray(left)!==Array.isArray(right))return false;
+  const keys=Object.keys(left).sort(),other=Object.keys(right).sort();
+  return keys.length===other.length&&keys.every((key,index)=>key===other[index]&&sameStoredRecord(left[key],right[key]));
+}
 function validateUsers(users){
   if(!Array.isArray(users)||users.length>100000)throw new StoreError('حسابات المستخدمين غير صالحة في النسخة');
   const validId=id=>typeof id==='string'&&id.trim().length>0||Number.isSafeInteger(id)&&id>0;

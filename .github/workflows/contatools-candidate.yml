@@ -1,22 +1,54 @@
-name: Contatools distribution candidate v17
+name: Contatools distribution candidate v18
 on:
   push:
-    branches: [feat/live-contatools-light-sync-20261027]
+    branches: [audit/data-integrity-20261029, feat/live-contatools-light-sync-20261027]
     paths: ['approved-android/**', 'approved-runtime/**', 'scripts/verify-candidate-apk.py', 'scripts/verify-contatools-apk.py', 'scripts/test-candidate-upgrade.sh', '.github/workflows/contatools-candidate.yml']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: candidate-v17-${{ github.ref }}
+  group: candidate-v18-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  verified_bytes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.prior.outputs.run_id }}
+    steps:
+      - name: Reuse only a fully verified artifact from this exact commit
+        id: prior
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,subprocess
+          def api(path):
+              return json.loads(subprocess.check_output(['gh','api',path],text=True))
+          repo=os.environ['GITHUB_REPOSITORY'];sha=os.environ['GITHUB_SHA'];found=''
+          if os.environ['GITHUB_EVENT_NAME']!='workflow_dispatch':
+              runs=api(f'repos/{repo}/actions/workflows/contatools-candidate.yml/runs?head_sha={sha}&status=completed&per_page=30')['workflow_runs']
+              for run in runs:
+                  if run['head_sha']!=sha or run['conclusion']!='success':continue
+                  artifacts=api(f'repos/{repo}/actions/runs/{run["id"]}/artifacts')['artifacts']
+                  names={a['name'] for a in artifacts if not a['expired'] and a['size_in_bytes']>0}
+                  if {'alkarna-candidate-v18','alkarna-candidate-v18-proof'}<=names:
+                      found=str(run['id']);break
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('run_id='+found+'\n')
+          if found:
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(f'Exact tested APK retained from [verified run {found}](https://github.com/{repo}/actions/runs/{found}) for commit {sha}.\n')
+          PY
   candidate:
+    needs: verified_bytes
+    if: needs.verified_bytes.outputs.run_id == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '16'
-      ALKARNA_PREVIOUS_APK_SHA256: 4b896ca65abe0ca8ec9e766c48f66442f0aa82dcbc24696f47d6cf52ea0ade7d
+      CANDIDATE_VERSION_CODE: '18'
+      CANDIDATE_APK: candidate-output/alkarna-1.0.17-v18.apk
+      BASELINE_VERSION_CODES: '13 14 15 16 17'
+      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '17'
+      ALKARNA_PREVIOUS_APK_SHA256: 4ea578e57144431cfc2aab9902f717834ba5f1e8936e3e77141f12d66cc10b9a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,10 +75,16 @@ jobs:
           test "$(gh api repos/lami216/Contamobile/actions/runs/39312062039 --jq .head_sha)" = 1efb01fc1cd7bc62670510e57c6158734ad4bf05
           gh run download 39312062039 --repo lami216/Contamobile --name alkarna-approved-apk --dir baseline-v13
           echo "9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c  baseline-v13/alkarna-approved.apk" | sha256sum --check
-          mkdir -p candidate-output baseline-v15 baseline-v16
+          echo "4d69fc1f88d4709d4928c906e15801ff2028995ad0131d611e946973bb831c90  baseline-v14/alkarna-approved.apk" | sha256sum --check
+          mkdir -p candidate-output baseline-v15 baseline-v16 baseline-v17
           curl --fail --silent --show-error --location https://3ali.store/downloads/alkarna-1.0.14-v15.apk -o baseline-v15/alkarna-approved.apk
           curl --fail --silent --show-error --location https://3ali.store/downloads/alkarna-1.0.15-v16.apk -o baseline-v16/alkarna-approved.apk
-          python3 scripts/verify-candidate-apk.py baseline baseline-v16/alkarna-approved.apk > candidate-output/baseline-verified.json
+          curl --fail --silent --show-error --location https://3ali.store/downloads/alkarna-1.0.16-v17.apk -o baseline-v17/alkarna-approved.apk
+          echo "6204cfe04ce59acb2d4e089bb9d1711524949441e04b05d5b10b0c985ff7b74d  baseline-v15/alkarna-approved.apk" | sha256sum --check
+          echo "4b896ca65abe0ca8ec9e766c48f66442f0aa82dcbc24696f47d6cf52ea0ade7d  baseline-v16/alkarna-approved.apk" | sha256sum --check
+          python3 scripts/verify-candidate-apk.py baseline baseline-v17/alkarna-approved.apk > candidate-output/baseline-verified.json
+      - name: Verify every original baseline retains the permanent identity
+        run: python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk
       - name: Existing source checks and deterministic scheduling policy
         run: |
           bash -n scripts/test-candidate-upgrade.sh
@@ -67,18 +105,18 @@ jobs:
         run: python3 scripts/prepare-approved-signing.py
       - name: Build ONCE with actual public production settings and explicit version
         run: |
-          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=17 -PalkarnaVersionName=1.0.16 --no-daemon --stacktrace
-          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.16-v17.apk
-          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.16-v17.apk > candidate-output/candidate-verified.json
-          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.16-v17.apk
-          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk candidate-output/alkarna-1.0.16-v17.apk
-          sha256sum candidate-output/alkarna-1.0.16-v17.apk > candidate-output/SHA256SUMS.txt
+          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=18 -PalkarnaVersionName=1.0.17 --no-daemon --stacktrace
+          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.17-v18.apk
+          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.17-v18.apk > candidate-output/candidate-verified.json
+          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.17-v18.apk
+          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk candidate-output/alkarna-1.0.17-v18.apk
+          sha256sum candidate-output/alkarna-1.0.17-v18.apk > candidate-output/SHA256SUMS.txt
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact original v13, v14, v15 and v16 to v17 updates, temporary and perpetual, and native launcher shortcut
+      - name: Exact original v13, v14, v15, v16 and official v17 to v18 updates, temporary and perpetual, and native launcher shortcut
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -89,8 +127,8 @@ jobs:
       - name: Preserve exact tested customer bytes
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-candidate-v17
-          path: candidate-output/alkarna-1.0.16-v17.apk
+          name: alkarna-candidate-v18
+          path: candidate-output/alkarna-1.0.17-v18.apk
           compression-level: 0
           retention-days: 90
       - name: Separate integration-test APK and public inspection evidence
@@ -102,7 +140,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: alkarna-candidate-v17-proof
+          name: alkarna-candidate-v18-proof
           path: |
             candidate-proof
             candidate-output/*.json

@@ -30,6 +30,7 @@ jobs:
         run: |
           node scripts/test-storage-integrity.mjs
           node scripts/test-runtime-integrity.mjs
+          node scripts/test-user-integrity.mjs
           node scripts/test-import-html-escaping.mjs
       - name: Accounting, locale, import, bridge and contact regressions
         run: |

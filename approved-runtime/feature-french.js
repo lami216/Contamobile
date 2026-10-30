@@ -1,4 +1,6 @@
 export const featureFrench={
+ "لم يكتمل الحفظ؛ لم تُسجّل العملية":"L’enregistrement a échoué ; l’opération n’a pas été enregistrée.",
+ "تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.":"Les données ont changé dans une autre fenêtre. Actualisez avant de poursuivre l’enregistrement ou la restauration.",
 "لم يتأكد حفظ الملف. تحقّق من المكان الذي اخترته قبل إعادة المحاولة.":"L’enregistrement du fichier n’a pas été confirmé. Vérifiez le dossier choisi avant de réessayer.",
 "لم يصل تأكيد من التطبيق. تحقّق من النتيجة ثم أعد المحاولة.":"L’application n’a pas confirmé le résultat. Vérifiez avant de réessayer.",
 "سجل المحل مفقود أو غير مكتمل مع وجود بيانات محلية. لا تُنشئ محلاً جديدًا؛ استخدم مدخل دعم استرجاع البيانات.":"Le commerce est absent ou incomplet alors que des données locales existent. Ne créez pas un autre commerce ; utilisez l’assistance de récupération.",
