@@ -47,6 +47,19 @@ export class ShopDatabase {
   async get(store,id){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
   async all(store){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).getAll();request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
   async put(store,value){const copy=structuredClone(value);return this.run(store,'readwrite',(tx,result)=>{tx.objectStore(store).put(copy);result(copy)})}
+  async createSession(user,session){
+    // Password verification is asynchronous; recovery may have replaced that
+    // account meanwhile. Bind the session to the verified record atomically.
+    const expected=structuredClone(user),copy=structuredClone(session);
+    if(!expected||typeof copy?.id!=='string'||!copy.id.startsWith('session:')||copy.user!==expected.id||!Number.isFinite(copy.expiresAt))throw loginChanged();
+    return this.run(['users','meta'],'readwrite',(tx,result,abort,guard)=>{
+      const request=tx.objectStore('users').get(expected.id);
+      request.onsuccess=guard(()=>{
+        if(request.result?.active===false||!sameStoredRecord(request.result,expected))throw loginChanged();
+        tx.objectStore('meta').put(copy);result(copy);
+      });
+    });
+  }
   async load(){
     const loaded=await this.run(['snapshots','users','meta'],'readonly',(tx,result,abort,guard)=>{
       const values={};let pending=4;
@@ -145,6 +158,7 @@ export class ShopDatabase {
 }
 function incompleteShop(){return new StoreError('سجل المحل مفقود أو غير مكتمل مع وجود بيانات محلية. لا تُنشئ محلاً جديدًا؛ استخدم مدخل دعم استرجاع البيانات.')}
 function revisionConflict(){return new StoreError('تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.')}
+function loginChanged(){return new StoreError('تغيّرت بيانات الدخول. سجّل الدخول مجددًا بكلمة المرور الحالية.')}
 function assertShop(row){if(!row||row.id!=='shop'||!row.state||typeof row.state!=='object'||Array.isArray(row.state)||!Number.isSafeInteger(row.revision)||row.revision<0)throw incompleteShop()}
 function sameStoredRecord(left,right){
   if(Object.is(left,right))return true;

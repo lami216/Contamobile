@@ -99,6 +99,18 @@ jobs:
           node scripts/verify-import-features.mjs
           python3 scripts/prepare-approved-android.py
           node scripts/prepare-license-fixtures.mjs
+      - name: Real browser integrity gate for these exact release sources
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/release-audit-tools/node_modules/playwright
+          PLAYWRIGHT_USE_BUNDLED: '1'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/release-audit-tools" --no-package-lock --ignore-scripts playwright@1.62.1
+          node "$RUNNER_TEMP/release-audit-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          node scripts/test-storage-integrity.mjs
+          node scripts/test-runtime-integrity.mjs
+          node scripts/test-user-integrity.mjs
+          node scripts/test-import-html-escaping.mjs
+          node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs
       - name: Existing permanent release identity only
         env:
           ALKARNA_SIGNING_BUNDLE: ${{ secrets.ALKARNA_SIGNING_BUNDLE }}

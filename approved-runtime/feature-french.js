@@ -1,4 +1,5 @@
 export const featureFrench={
+ "تغيّرت بيانات الدخول. سجّل الدخول مجددًا بكلمة المرور الحالية.":"Les identifiants ont changé. Reconnectez-vous avec le mot de passe actuel.",
  "لم يكتمل الحفظ؛ لم تُسجّل العملية":"L’enregistrement a échoué ; l’opération n’a pas été enregistrée.",
  "تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.":"Les données ont changé dans une autre fenêtre. Actualisez avant de poursuivre l’enregistrement ou la restauration.",
 "لم يتأكد حفظ الملف. تحقّق من المكان الذي اخترته قبل إعادة المحاولة.":"L’enregistrement du fichier n’a pas été confirmé. Vérifiez le dossier choisi avant de réessayer.",
