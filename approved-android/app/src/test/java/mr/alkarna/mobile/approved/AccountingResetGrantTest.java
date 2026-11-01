@@ -34,7 +34,8 @@ public class AccountingResetGrantTest {
  }
  @Test public void expiryAndExtraFieldsCannotAuthorizeFreshConsent() throws Exception {
   denied(()->verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("expiresAt",NOW)),false));
-  denied(()->verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("expiresAt",NOW+86400001L)),false));
+  long issued=payload.getLong("issuedAt");assertEquals(issued+86400000L,verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("expiresAt",issued+86400000L)),false).getLong("expiresAt"));
+  denied(()->verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("expiresAt",issued+86400001L)),false));
   denied(()->verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("scope","everything")),false));
   denied(()->verify(envelope("contatools-accounting-reset",ProtocolJson.copy(payload).put("issuedAt",NOW+60001).put("expiresAt",NOW+120000)),false));
  }
