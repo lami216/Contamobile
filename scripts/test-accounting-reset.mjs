@@ -24,7 +24,7 @@ try{
    if(command==='resume'){native.awaiting=false;return native.prepared||{stage:'idle'}}
    if(command==='prepare'){if(native.failBeforePrepare)throw Error('Synthetic rejection before durable prepare');assert.equal(payload.accepted,true);native.prepares++;native.prepared={...native.target,stage:'prepared',grantId:'synthetic-grant',intentId:'synthetic-intent',accountingResetId:native.target.requestId};if(native.lostClaimOnce){native.lostClaimOnce=false;native.awaiting=true;throw Error('Synthetic lost claim response')}return native.prepared}
    if(command==='decline'){native.declines++;native.enabled=false;return {stage:'declined'}}
-   if(command==='finish'){native.finished=true;native.enabled=false;native.ackPending=true;return {stage:'complete',ackPending:true}}
+   if(command==='finish'){if(native.finishFailOnce){native.finishFailOnce=false;throw Error('Synthetic native journal failure')}native.finished=true;native.enabled=false;native.ackPending=true;return {stage:'complete',ackPending:true}}
    if(command==='ack'){native.acks++;native.ackPending=false;return {stage:'complete'}}
    return {stage:'none'};
   });
@@ -86,6 +86,17 @@ try{
  });
  await check('prepare rejection before any durable intent releases the progress lock without deleting data',async()=>{
   const f=await fixture();try{f.native.failBeforePrepare=true;await enable(f);await dialog(f.page).waitFor();const before=await stored(f.page);await f.page.locator('[name=accountingResetConsent]').check();await f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true}).click();await f.page.locator('[data-accounting-reset=progress]').waitFor();await f.page.locator('[data-accounting-reset=progress]').waitFor({state:'detached'});assert.deepEqual(await stored(f.page),before);assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),false);assert.equal(f.native.prepares,0)}finally{await f.context.close()}
+ });
+ await check('post-commit draft or native-receipt failure blocks stale memory and retries without resurrecting accounting',async()=>{
+  for(const failure of ['draft','receipt']){
+   const f=await fixture();try{
+    if(failure==='receipt')f.native.finishFailOnce=true;
+    else await f.page.evaluate(()=>{localStorage.setItem('alkarna-sensitive-draft','old');const remove=Storage.prototype.removeItem;let failed=false;Storage.prototype.removeItem=function(key){if(key==='alkarna-sensitive-draft'&&!failed){failed=true;throw Error('Synthetic draft cleanup failure')}return remove.call(this,key)}});
+    await enable(f);await dialog(f.page).waitFor();await f.page.locator('[name=accountingResetConsent]').check();await f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true}).click();await f.page.locator('[data-accounting-reset=progress]').waitFor();assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),true);assert.equal((await stored(f.page)).users.length,0);
+    await f.page.evaluate(()=>act('go:home'));assert.equal((await stored(f.page)).snapshots.find(x=>x.id==='shop').state.products.length,0);
+    await f.page.getByRole('button',{name:'إعادة المحاولة',exact:true}).click();await f.page.locator('[data-action="site:setup"]').waitFor();assert.equal((await stored(f.page)).users.length,0);assert.equal((await stored(f.page)).snapshots.find(x=>x.id==='shop').state.products.length,0);assert.equal(await f.page.evaluate(()=>Object.keys(localStorage).filter(x=>x.includes('draft')).length),0);assert(f.native.finished);
+   }finally{await f.context.close()}
+  }
  });
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}
 console.log(JSON.stringify({passed:results.filter(x=>x.passed).length,total:results.length,results},null,2));if(results.some(x=>!x.passed))process.exitCode=1;
