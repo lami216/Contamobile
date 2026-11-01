@@ -39,6 +39,7 @@ public final class MainActivity extends Activity {
     private static volatile boolean webViewWasCreated;
     static boolean hasCreatedWebView(){return webViewWasCreated;}
     private static final java.util.concurrent.ThreadPoolExecutor administrationQueue=createAdministrationQueue();
+    private static final java.util.concurrent.ThreadPoolExecutor backupQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
     private boolean activationPage,activationTransitionPending;
@@ -46,6 +47,8 @@ public final class MainActivity extends Activity {
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
     private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
+    private final java.util.Set<String> backupTransfers=ConcurrentHashMap.newKeySet();
+    private final CloudBackupBridgeScope backupScope=new CloudBackupBridgeScope();
     private static final int PICK_FILE=21, SAVE_FILE=22, SCAN=23, CAMERA=24;
     private static final long MAX_FILE=64L*1024*1024;
     private static final class Export {
@@ -83,6 +86,7 @@ public final class MainActivity extends Activity {
         WebView.setWebContentsDebuggingEnabled(false);
         final WebViewAssetLoader assets=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web.setWebViewClient(new WebViewClient(){
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){cancelBackupTransfers();}
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 String path=request.getUrl().getPath();
                 boolean activationAsset=path!=null&&(path.matches("/assets/approved/activation\\.(html|css|js)")||path.startsWith("/assets/approved/assets/"));
@@ -133,7 +137,7 @@ public final class MainActivity extends Activity {
     }
     private void openApp(){if(!licenseAllowed())return;activationTransitionPending=false;activationPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
     private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
-    private void result(String id,JSONObject value){runOnUiThread(()->web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null));}
+    private void result(String id,JSONObject value){runOnUiThread(()->{if(web!=null&&!isDestroyed())web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null);});}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
     private void error(String id,String message){result(id,value("error",NativeUi.text(this,message)));}
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
@@ -166,8 +170,32 @@ public final class MainActivity extends Activity {
         try{manager.registerDefaultNetworkCallback(networkCallback);}catch(Exception unavailable){networkCallback=null;}
     }
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
+    private interface BackupAction { JSONObject run(CloudBackupManager manager) throws Exception; }
+    private void backupRequest(String id,boolean immediate,BackupAction action){long page=backupScope.page();runOnUiThread(()->{
+        if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){backupScope.cancel(id);error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        Runnable work=()->{try{if(isDestroyed()||activationPage||!backupScope.current(page))throw new IOException("PAGE_CLOSED");CloudBackupManager manager=CloudBackupManager.get(this);JSONObject answer=action.run(manager);if(!backupScope.current(page)){manager.cancelStage(id);backupTransfers.remove(id);throw new IOException("PAGE_CLOSED");}result(id,answer);}catch(Exception failure){backupScope.cancel(id);JSONObject value=value("error",NativeUi.text(this,"تعذّر تجهيز النسخ الاحتياطي. بيانات المحل محفوظة على الجهاز."));try{value.put("code",CloudBackupManager.errorCode(failure));if(failure instanceof ContatoolsClient.ServiceFailure){ContatoolsClient.ServiceFailure service=(ContatoolsClient.ServiceFailure)failure;value.put("status",service.status).put("retryAt",service.retryAt).put("permanent",service.permanent);}}catch(Exception ignored){}result(id,value);}};
+        try{if(immediate)new Thread(work,"AlKarnaBackupPause").start();else backupQueue.execute(work);}catch(java.util.concurrent.RejectedExecutionException full){backupScope.cancel(id);JSONObject value=value("error","هناك طلب نسخ احتياطي جارٍ. أعد المحاولة بعد قليل.");try{value.put("code","STAGE_BUSY");}catch(Exception ignored){}result(id,value);}
+    });}
+    private void cancelBackupTransfers(){backupScope.changed();for(String id:backupTransfers)try{CloudBackupManager.get(this).cancelStage(id);}catch(Exception ignored){}backupTransfers.clear();}
     public final class NativeHost {
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
+        @JavascriptInterface public void cloudBackup(String id,String command,String content){backupRequest(id,"pause".equals(command)||"invalidate".equals(command),manager->{
+            if(content==null||content.length()>16384)throw new IOException("INVALID_BACKUP_REQUEST");JSONObject payload=new JSONObject(content);
+            switch(command){
+                case "status":return manager.status(payload,payload.optBoolean("refresh",false));
+                case "configure":return manager.configure(payload);
+                case "run":return manager.run(payload);
+                case "list":return manager.list(payload);
+                case "download":return manager.download(payload);
+                case "pause":return manager.pause(payload,true);
+                case "invalidate":return manager.pause(payload,true);
+                default:throw new IOException("INVALID_BACKUP_REQUEST");
+            }
+        });}
+        @JavascriptInterface public void cloudBackupBegin(String id,String content){CloudBackupBridgeScope.Ticket ticket=backupScope.reserve(id);backupRequest(id,false,manager->{try{if(!backupScope.allowed(ticket))throw new IOException("PAGE_CLOSED");if(content==null||content.length()>2048)throw new IOException("INVALID_STAGE");JSONObject result=manager.begin(id,new JSONObject(content));backupTransfers.add(id);if(!backupScope.allowed(ticket)){manager.cancelStage(id);backupTransfers.remove(id);throw new IOException("PAGE_CLOSED");}return result;}finally{backupScope.release(ticket);}});}
+        @JavascriptInterface public void cloudBackupAppend(String callbackId,String transferId,String chunk){backupRequest(callbackId,false,manager->{manager.append(transferId,chunk);return value("accepted",true);});}
+        @JavascriptInterface public void cloudBackupFinish(String id){backupRequest(id,false,manager->{try{return manager.finish(id);}finally{backupTransfers.remove(id);}});}
+        @JavascriptInterface public void cloudBackupCancel(String id){backupScope.cancel(id);runOnUiThread(()->{if(trusted())new Thread(()->{try{CloudBackupManager.get(MainActivity.this).cancelStage(id);}catch(Exception ignored){}backupTransfers.remove(id);},"AlKarnaBackupCancel").start();});}
         @JavascriptInterface public void language(String language){runOnUiThread(()->{if(trusted()&&("ar".equals(language)||"fr".equals(language)))getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("language",language).apply();});}
         @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
@@ -237,7 +265,7 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){activityResumed=false;stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
-    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null)dataRescue.probe();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();}
+    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null)dataRescue.probe();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();if(new File(getNoBackupFilesDir(),"cloud-backup-v1/state.bin").exists())new Thread(()->{try{CloudBackupManager.get(this).resume();}catch(Exception ignored){}},"AlKarnaBackupResume").start();}
     @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return true;if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
-    @Override protected void onDestroy(){if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
+    @Override protected void onDestroy(){cancelBackupTransfers();if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

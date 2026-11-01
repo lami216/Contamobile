@@ -3,7 +3,7 @@
  const uncertainExport='لم يتأكد حفظ الملف. تحقّق من المكان الذي اخترته قبل إعادة المحاولة.';
  const bridgeFailure=(code,exporting=false)=>Object.assign(new Error(exporting?uncertainExport:'لم يصل تأكيد من التطبيق. تحقّق من النتيجة ثم أعد المحاولة.'),{code,permanent:false,status:0});
  function settle(id,error,result){const request=waiting.get(id);if(!request)return;waiting.delete(id);window.clearTimeout(request.timer);error?request.reject(error):request.resolve(result)}
- window.__nativeResult=(id,result)=>{if(!waiting.has(id))return;result?.error?settle(id,Object.assign(new Error(result.error),{retryAt:result.retryAt||0,permanent:result.permanent===true,status:result.status||0})):settle(id,null,result)};
+ window.__nativeResult=(id,result)=>{if(!waiting.has(id))return;result?.error?settle(id,Object.assign(new Error(result.error),{code:result.code||'',retryAt:result.retryAt||0,permanent:result.permanent===true,status:result.status||0})):settle(id,null,result)};
  function request(id,timeout,start,exporting=false){return new Promise((resolve,reject)=>{
   if(!pageActive){reject(bridgeFailure('NATIVE_PAGE_HIDDEN',exporting));return;}
   if(waiting.has(id)){reject(bridgeFailure('NATIVE_REQUEST_PENDING',exporting));return;}
@@ -31,6 +31,19 @@
   activation:()=>NativeHost.openActivation()
  };
  window.NativeFiles.ownerRecovery=(command,value='')=>call('ownerRecovery',command,value);
+ window.NativeFiles.cloudBackup=(command,payload={})=>{const id=crypto.randomUUID();return request(id,command==='download'?600000:60000,()=>NativeHost.cloudBackup(id,command,JSON.stringify(payload)))};
+ window.NativeFiles.stageCloudBackup=(context,blob,revision)=>{
+  if(!(blob instanceof Blob)||blob.size<2||blob.size>8*1024*1024)return Promise.reject(Object.assign(new Error('SNAPSHOT_TOO_LARGE'),{code:'SNAPSHOT_TOO_LARGE'}));
+  return new Promise((resolve,reject)=>{
+   const id=crypto.randomUUID(),cancelNative=()=>{try{NativeHost.cloudBackupCancel(id)}catch{}},job={cancelled:false,cancel(){this.cancelled=true;cancelNative();transfers.delete(this);reject(bridgeFailure('NATIVE_PAGE_HIDDEN'))}};transfers.add(job);
+   const check=()=>{if(job.cancelled||!pageActive)throw bridgeFailure('NATIVE_PAGE_HIDDEN')};
+   (async()=>{
+    check();await request(id,30000,()=>NativeHost.cloudBackupBegin(id,JSON.stringify({...context,sizeBytes:blob.size,localRevision:String(revision),snapshotAt:Date.now()})));
+    for(let offset=0;offset<blob.size;offset+=49152){check();const bytes=new Uint8Array(await blob.slice(offset,offset+49152).arrayBuffer());check();let binary='';for(const b of bytes)binary+=String.fromCharCode(b);const chunkId=crypto.randomUUID();await request(chunkId,30000,()=>NativeHost.cloudBackupAppend(chunkId,id,btoa(binary)))}
+    check();return request(id,60000,()=>NativeHost.cloudBackupFinish(id));
+   })().then(resolve,error=>{cancelNative();reject(error)}).finally(()=>transfers.delete(job));
+  });
+ };
  window.print=()=>NativeHost.printDocument();
  let lastTheme='',lastLanguage='';new MutationObserver(()=>{const language=document.documentElement.lang==='fr'?'fr':'ar';if(language!==lastLanguage){lastLanguage=language;NativeHost.language(language)}const theme=document.querySelector('#phone')?.dataset.appearance||'dark';if(theme!==lastTheme){lastTheme=theme;NativeHost.theme(theme)}}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['data-appearance','lang']});
 })();
