@@ -38,6 +38,43 @@ jobs:
           if found:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(f'Exact tested APK retained from [verified run {found}](https://github.com/{repo}/actions/runs/{found}) for commit {sha}.\n')
           PY
+  native_compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare exact pinned runtime and independent test-only license fixtures
+        run: |
+          python3 scripts/prepare-approved-dependencies.py
+          python3 scripts/prepare-approved-android.py
+          node scripts/prepare-license-fixtures.mjs
+      - name: Compile native app and instrumentation and run JVM tests without release credentials
+        run: gradle -p approved-android -PalkarnaAuditDebugTests=true -PalkarnaVersionCode=19 -PalkarnaVersionName=1.0.18 :app:testDebugUnitTest :app:compileDebugAndroidTestJavaWithJavac --no-daemon --stacktrace
+      - name: Retain independent native preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-native-compile-v19-proof
+          path: |
+            approved-android/app/build/reports/tests
+            approved-android/app/build/test-results/testDebugUnitTest
+          retention-days: 30
+          if-no-files-found: warn
   candidate:
     needs: verified_bytes
     if: needs.verified_bytes.outputs.run_id == ''
