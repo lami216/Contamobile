@@ -76,13 +76,14 @@ public class AccountingResetTest {
  }
  @Test public void lostClaimResponseResumesTheIdenticalAcceptedIntent() throws Exception {
   JSONObject pending=client.poll(target);service.dropClaim=true;rejected(()->client.prepare(accepted(pending)));assertEquals(1,service.claims);String intent=service.claim.getJSONObject("payload").getString("intentId");
-  assertEquals("awaiting-network",client.resumeLocal().getString("stage"));assertEquals(0,pauses);recreate();service.dropClaim=false;
+  assertEquals("awaiting-network",client.resumeLocal().getString("stage"));assertEquals("awaiting-network",AccountingResetStore.localResume(context,license).getString("stage"));assertEquals(0,pauses);recreate();service.dropClaim=false;
   service.rejectClaimAuthentication=true;rejected(()->client.resume());assertEquals("awaiting-network",client.resumeLocal().getString("stage"));service.rejectClaimAuthentication=false;
   JSONObject prepared=client.resume();assertEquals("prepared",prepared.getString("stage"));assertEquals(intent,prepared.getString("intentId"));assertEquals(1,service.claims);assertEquals(1,pauses);
   service.offline=true;recreate();assertEquals(intent,client.resumeLocal().getString("intentId"));assertEquals(1,service.claims);activationUnchanged();
  }
  @Test public void completionIsDurableAndLostAcknowledgementCannotRepeatTheReset() throws Exception {
   JSONObject prepared=client.prepare(accepted(client.poll(target))),receipt=receipt(prepared);assertTrue(client.finish(receipt).getBoolean("ackPending"));
+  assertEquals("complete",AccountingResetStore.localResume(context,license).getString("stage"));assertTrue(AccountingResetStore.localResume(context,license).getBoolean("ackPending"));
   recreate();assertEquals("complete",client.resumeLocal().getString("stage"));service.dropComplete=true;assertTrue(client.acknowledge().getBoolean("ackPending"));assertEquals(1,service.completions);
   recreate();service.dropComplete=false;assertEquals("complete",client.acknowledge().getString("stage"));assertEquals(1,service.completions);assertEquals("idle",client.resumeLocal().getString("stage"));assertEquals("complete",client.finish(receipt).getString("stage"));
   assertEquals("none",client.poll(target).getString("stage"));activationUnchanged();
@@ -99,6 +100,9 @@ public class AccountingResetTest {
   for(String suffix:new String[]{"",".bak",".new"}){File f=new File(context.getNoBackupFilesDir(),AccountingResetStore.FILE+suffix);if(f.exists())assertTrue(f.delete());}
   assertFalse("Missing file with a surviving reset key is uncertain, not idle",AccountingResetStore.noLocalState(context));
   KeyStore resetKeys=KeyStore.getInstance("AndroidKeyStore");resetKeys.load(null);resetKeys.deleteEntry(AccountingResetStore.ALIAS);assertTrue(AccountingResetStore.noLocalState(context));
+  assertEquals("idle",AccountingResetStore.localResume(context,license).getString("stage"));assertFalse(new File(context.getNoBackupFilesDir(),AccountingResetStore.FILE).exists());assertFalse(resetKeys.containsAlias(AccountingResetStore.ALIAS));
+  // Merely polling once creates a valid empty journal: that must be equally optional.
+  new AccountingResetStore(context,license.deviceCode(),new InstallationIdentity(false).fingerprint());assertFalse(AccountingResetStore.noLocalState(context));assertEquals("idle",AccountingResetStore.localResume(context,license).getString("stage"));
   try(FileOutputStream out=new FileOutputStream(new File(context.getNoBackupFilesDir(),"contatools-v1.json"))){out.write("intentionally-corrupt-optional-support-journal".getBytes(StandardCharsets.UTF_8));}
   rejected(()->new ContatoolsClient(context,license,service.issuers,service));
   var queueField=MainActivity.class.getDeclaredField("administrationQueue");queueField.setAccessible(true);ThreadPoolExecutor supportQueue=(ThreadPoolExecutor)queueField.get(null);CountDownLatch supportHeld=new CountDownLatch(1),supportStarted=new CountDownLatch(1);

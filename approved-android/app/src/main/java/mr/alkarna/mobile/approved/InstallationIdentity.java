@@ -16,9 +16,10 @@ final class InstallationIdentity {
  private final KeyStore keys;
  final JSONObject publicJwk;
  final String fingerprint,id;
- InstallationIdentity() throws Exception {
+ InstallationIdentity() throws Exception {this(true);}
+ InstallationIdentity(boolean create) throws Exception {
   keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);
-  if(!keys.containsAlias(ALIAS)){KeyPairGenerator generator=KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");generator.initialize(new KeyGenParameterSpec.Builder(ALIAS,KeyProperties.PURPOSE_SIGN|KeyProperties.PURPOSE_VERIFY).setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1")).setDigests(KeyProperties.DIGEST_SHA256).build());generator.generateKeyPair();}
+  if(!keys.containsAlias(ALIAS)){if(!create)throw new java.io.IOException("Installation key is missing");KeyPairGenerator generator=KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC,"AndroidKeyStore");generator.initialize(new KeyGenParameterSpec.Builder(ALIAS,KeyProperties.PURPOSE_SIGN|KeyProperties.PURPOSE_VERIFY).setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1")).setDigests(KeyProperties.DIGEST_SHA256).build());generator.generateKeyPair();}
   ECPublicKey key=(ECPublicKey)keys.getCertificate(ALIAS).getPublicKey();
   publicJwk=new JSONObject().put("kty","EC").put("crv","P-256").put("x",ProtocolJson.base64(coordinate(key.getW().getAffineX()))).put("y",ProtocolJson.base64(coordinate(key.getW().getAffineY())));
   fingerprint=ProtocolJson.fingerprint(publicJwk);byte[] hash=ProtocolJson.sha256(ProtocolJson.canonical(publicJwk));ByteBuffer bytes=ByteBuffer.wrap(hash);long most=bytes.getLong(),least=bytes.getLong();most=(most&0xffffffffffff0fffL)|0x5000L;least=(least&0x3fffffffffffffffL)|0x8000000000000000L;id=new UUID(most,least).toString();

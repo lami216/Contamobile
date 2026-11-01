@@ -173,11 +173,11 @@ public final class MainActivity extends Activity {
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
     private void accountingResetRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
-        // Ordinary offline startup must not depend on the optional support channel,
-        // its journal, endpoint or queue. A key without a file is not absence.
+        // Authenticate local reset state independently of the optional support channel,
+        // its journal, endpoint or queue. Never manufacture an absent journal or key.
         if("resume-local".equals(command))try{
             if(content==null||content.length()>4096||new JSONObject(content).length()!=0)throw new IOException("RESET_REQUEST");
-            if(AccountingResetStore.noLocalState(MainActivity.this)){result(id,value("stage","idle"));return;}
+            JSONObject local=AccountingResetStore.localResume(MainActivity.this,licensing);if(local!=null){result(id,local);return;}
         }catch(Exception failure){JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير."));try{answer.put("code","RESET_LOCAL_STATE_UNAVAILABLE");}catch(Exception ignored){}result(id,answer);return;}
         try{administrationQueue.execute(()->{
             try{

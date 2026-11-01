@@ -25,12 +25,27 @@ final class AccountingResetStore {
   for(String suffix:new String[]{"",".bak",".new"})if(new File(directory,FILE+suffix).exists())return false;
   KeyStore keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);return !keys.containsAlias(ALIAS);
  }
- AccountingResetStore(Context context,String device,String fingerprint) throws Exception {
+ /** Only accepted prepared work requires the separate service client during startup. */
+ static JSONObject localResume(Context context,DeviceLicense license) throws Exception {
+  if(noLocalState(context))return new JSONObject().put("stage","idle");
+  InstallationIdentity identity=new InstallationIdentity(false);AccountingResetStore saved=new AccountingResetStore(context,license.deviceCode(),identity.fingerprint(),false);
+  if(!saved.state.has("pending"))return new JSONObject().put("stage","idle");
+  JSONObject pending=saved.state.getJSONObject("pending");String stage=pending.getString("stage");
+  if("awaiting-claim".equals(stage))return new JSONObject().put("stage","awaiting-network");
+  if("applied".equals(stage)){
+   String grant=pending.getJSONObject("grant").getJSONObject("payload").getString("grantId");if(!saved.used(grant))throw new IOException("RESET_RECEIPT_MISSING");
+   return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",saved.state.optLong("ackNotBefore"));
+  }
+  if("prepared".equals(stage))return null; // Full pinned-grant validation and barriers precede any database write.
+  throw new IOException("RESET_STAGE_INVALID");
+ }
+ AccountingResetStore(Context context,String device,String fingerprint) throws Exception {this(context,device,fingerprint,true);}
+ private AccountingResetStore(Context context,String device,String fingerprint,boolean create) throws Exception {
   binding=device+"|"+fingerprint;keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);
   file=new AtomicFile(new File(context.getNoBackupFilesDir(),FILE));byte[] bytes=null;
   try{bytes=file.readFully();}catch(FileNotFoundException ignored){}
   if(bytes==null){
-   if(keys.containsAlias(ALIAS))throw new IOException("RESET_JOURNAL_MISSING");
+   if(!create||keys.containsAlias(ALIAS))throw new IOException("RESET_JOURNAL_MISSING");
    state=new JSONObject().put("version",1).put("binding",binding).put("usedGrants",new JSONArray());save();
   }else{
    if(bytes.length>2097152||!keys.containsAlias(ALIAS))throw new IOException("RESET_JOURNAL_INVALID");
