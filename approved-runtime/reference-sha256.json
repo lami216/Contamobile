@@ -1,19 +1,19 @@
 {
   "index.html": "f80098dfd87eb39cd8823b254d42c0402ddfa1a4b9142ce5943c8237d0b5e8a3",
-  "engine.js": "3fbb0cee601d86ddc7a61bfc652d4904dce4240f3318c3e08af746a2e9cac55a",
+  "engine.js": "69687671158a6578435a5c62fa22721d46578124a8c1052fdbad8750b4144903",
   "theme.css": "52751cf7ba580769d13aedb4b274049f1762f04f0a0b7c8d32b7ee9c7caf00c3",
   "site.css": "ebaee5579c54d9311f0c862a79339a84cf25153c5bb07f2480cb5be1f2ef72ce",
   "pos.css": "f503e5e69fd21a37f010597c9a64f2019e4a746357f1e631f6b2622154144fe1",
-  "app.js": "cf852029f153c6f755b10a1a581d87dcb57d5b6c015dd3fcd98c2c5e7789a0cb",
-  "database.js": "c96f16310879e01e968d3c93cfc4b895526f62a7f151f56c09f6ec451d36ffe8",
+  "app.js": "739c554112597746dbaeba9b013f73d7e3eed0022eb1c6692edcb24309f8d52a",
+  "database.js": "6b80521da5cc603221a2b90d5c16bca01cf91a36161c3ce9a2fcb04e3db80d8b",
   "product-names.js": "3b3b11bd46db412755892bf8a32283da5e9842a5df057616ea52340e85b113d8",
   "barcode-camera.js": "de26f25e5bf9a3982181655ea874f693d7ea7670b0c00c37188f0c8ef171d95f",
-  "invoice-view.js": "5e94eae855dc98a1ea69a1822562cec51e5bc9fd27af018781cc7b651865f965",
+  "invoice-view.js": "92ce7433000bce2acc1a603db5aaa44742e4114ccb384470ab3fbf7dacd04aff",
   "record-export.js": "16fa32eabe02bc5f90bca6109e2aa342f757d79077000824933183f6bfaa5dbc",
   "report-output.js": "d3e8646cbe57b2e545d0652078d49d981fe559967aa399d2e61785436fca3757",
   "xlsx-format.js": "f7618583e4ec0194eaaca96c31ed49e04cb57467b33065bfb126dd64fa314d57",
   "permissions.js": "f7e79b1a6c701fcc526d0b92656a63096c11aa775858f7832095a0e85ac7e306",
-  "language.js": "e2a08fa6abbefa81807c4d950595850ad22d65e4eed118ea1c46bfe56213e00d",
+  "language.js": "ce6c9f84dd87f749ca32c0af836ab23753f764a69aa841852685cbac05e86b14",
   "party-metrics.js": "fc69d8edfff3050fd6a565c7ff89a9a20d478742566fdc867d6c8d2b1110679b",
   "party-summary.css": "a3e5b128b32aff36442bc443aa04276674069b3efb17a89aedaaa69a8b46f141",
   "account-support.css": "c921307728963a09e8d23550cc0e3044348eb40a6c7e23b4bd2d8aebd2a8b8e1",
@@ -43,5 +43,6 @@
   "owner-recovery.css": "f7bd8b93e222ef3c955eac494407d9d44367b10d0832bd89102decc8e4141f6c",
   "service-contact.js": "4419ab7315b4fcbaa8a773b5374329b314e06da23158dcf753fce71e63574da5",
   "runtime-boot.js": "d8904bbd425bd02c445ebed93a10f60c7b9e35fe21a4f2642063e8bbcbcb08f2",
-  "runtime-boot.css": "0991cca1f64c6dd60789c3d892d89eeae9c82b6ecfb51a3c51306be3fb90cced"
+  "runtime-boot.css": "0991cca1f64c6dd60789c3d892d89eeae9c82b6ecfb51a3c51306be3fb90cced",
+  "cloud-backup.js": "794f0fd21bbc5f06def3c57b52cb8928e7c7f906905111cc167fd30514f3ea05"
 }

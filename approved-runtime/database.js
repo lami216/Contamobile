@@ -46,6 +46,16 @@ export class ShopDatabase {
   }
   async get(store,id){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
   async all(store){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).getAll();request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
+  async cloudSnapshot(){
+    return this.run(['snapshots','users','meta'],'readonly',(tx,result,abort,guard)=>{
+      const values={};let pending=3;
+      const done=guard(()=>{if(--pending)return;const row=values.shop;assertShop(row);validateState(row.state);validateUsers(values.users);
+        const revision=values.version?.value??row.revision;if(!Number.isSafeInteger(revision)||revision<0)throw new StoreError('تعذّر قراءة إصدار النسخ؛ بيانات المحل لم تتغير');
+        result({revision,payload:{format:'alkarna-web-backup',schemaVersion:1,createdAt:new Date().toISOString(),state:row.state,users:values.users}});
+      });
+      for(const [key,request]of [['shop',tx.objectStore('snapshots').get('shop')],['users',tx.objectStore('users').getAll()],['version',tx.objectStore('meta').get('cloud-backup-revision')]])request.onsuccess=()=>{values[key]=request.result;done()};
+    },'تعذّر تجهيز نسخة متسقة؛ بيانات المحل لم تتغير');
+  }
   async put(store,value){const copy=structuredClone(value);return this.run(store,'readwrite',(tx,result)=>{tx.objectStore(store).put(copy);result(copy)})}
   async createSession(user,session){
     // Password verification is asynchronous; recovery may have replaced that
@@ -91,6 +101,7 @@ export class ShopDatabase {
           const owner=users.get(p.ownerId);owner.onsuccess=guard(()=>{
             if(owner.result?.role!=='owner'||owner.result.active===false)return deny('الاستعادة خاصة بحساب المالك الفعال');
             users.put({...owner.result,password:structuredClone(password),updatedAt:new Date().toISOString()});
+            advanceCloudRevision(tx,guard,shop.result.revision);
             meta.put({id:'owner-recovery:'+p.grantId,ownerId:p.ownerId,shopId:p.shopId,intentId:p.intentId,requestId:p.requestId,appliedAt:new Date().toISOString()});
             const cursor=meta.openCursor();cursor.onsuccess=guard(()=>{const c=cursor.result;if(c){if(typeof c.value.id==='string'&&c.value.id.startsWith('session:')&&c.value.user===p.ownerId)c.delete();c.continue()}});
           });
@@ -109,6 +120,7 @@ export class ShopDatabase {
         const finish=()=>{
           if(savedBackup)store.put({id:'before-compact-product-names',state:savedBackup,updatedAt:new Date().toISOString()});
           store.put({id:'shop',revision:expected+1,state:copy,updatedAt:new Date().toISOString()});result(expected+1);
+          advanceCloudRevision(tx,guard,expected);
         };
         if(!changes.length){finish();return}
         const users=tx.objectStore('users'),request=users.getAll();
@@ -150,11 +162,16 @@ export class ShopDatabase {
           snapshots.put({id:'safety-backup',state:old.state,users:[],updatedAt:now});
         }
         snapshots.put({id:'shop',state:copy,revision:expected+1,updatedAt:now});accounts.clear();for(const user of incoming)accounts.put(user);result(expected+1);
+        advanceCloudRevision(tx,guard,expected);
       });
       for(const [key,request]of [['shop',snapshots.get('shop')],['users',accounts.getAll()],['snapshots',snapshots.count()],['meta',meta.count()]])request.onsuccess=()=>{values[key]=request.result;done()};
     },'فشلت الاستعادة؛ بقيت البيانات السابقة');
     this.revision=revision;
   }
+}
+function advanceCloudRevision(tx,guard,fallback=0){
+  const meta=tx.objectStore('meta'),request=meta.get('cloud-backup-revision');
+  request.onsuccess=guard(()=>{const previous=request.result?.value??fallback;if(!Number.isSafeInteger(previous)||previous<0)throw new StoreError('تعذّر قراءة إصدار النسخ؛ لم تُسجّل العملية');meta.put({id:'cloud-backup-revision',value:Math.max(previous,fallback)+1})});
 }
 function incompleteShop(){return new StoreError('سجل المحل مفقود أو غير مكتمل مع وجود بيانات محلية. لا تُنشئ محلاً جديدًا؛ استخدم مدخل دعم استرجاع البيانات.')}
 function revisionConflict(){return new StoreError('تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.')}

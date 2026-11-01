@@ -51,17 +51,34 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
+test "$CANDIDATE_VERSION_CODE" = 19
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
 test -s "$test_apk"
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
+# All six originally distributed versions are mandatory for this candidate.
+# A shortened matrix must fail rather than silently drop preservation checks.
+test "${baselines[*]}" = '13 14 15 16 17 18'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
  test -s "baseline-v$baseline/alkarna-approved.apk"
 done
+# Fail fast on the isolated backup fixture before the full preservation matrix.
+# This fixture is removed completely before the first original-version scenario.
+adb install -r "$candidate" | tee "$proof_dir/cloud-backup-install.txt"
+grep -q Success "$proof_dir/cloud-backup-install.txt"
+adb install -r "$test_apk"
+adb shell pm clear "$app"
+assert_offline cloud-backup-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
+grep -Eq '^OK \(6 tests\)' "$proof_dir/CloudBackupTest.txt"
+test "$(grep -c 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt")" = 6
+assert_offline cloud-backup-network-after
+adb shell am force-stop "$app"
+adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
 # upgrade, a force-stopped offline cold start and a second install-r of the same APK.
 # Reset only BETWEEN scenarios, never between these preservation checks.
@@ -101,7 +118,10 @@ done
 for group in ActivationConcurrencyTest BusyBackNavigationTest; do
  adb shell pm clear "$app"
  adb shell am instrument -w -e class "mr.alkarna.mobile.approved.$group" "$runner" | tee "candidate-proof/$group.txt"
- if [ "$group" = ActivationConcurrencyTest ]; then expected_tests=5; else expected_tests=2; fi
+ case "$group" in
+  ActivationConcurrencyTest) expected_tests=5 ;;
+  BusyBackNavigationTest) expected_tests=2 ;;
+ esac
  grep -Eq "^OK \($expected_tests tests\)" "candidate-proof/$group.txt"
 done
 adb shell pm clear "$app"
@@ -113,7 +133,7 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDe
 grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt

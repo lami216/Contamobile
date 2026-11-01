@@ -1,0 +1,44 @@
+{
+  "format": "alkarna-web-backup",
+  "schemaVersion": 1,
+  "createdAt": "2026-11-01T01:16:44.300Z",
+  "state": {
+    "originId": "cloud-cross-layer-shop",
+    "products": [],
+    "parties": [],
+    "accounts": [
+      {
+        "id": 1,
+        "name": "Cash",
+        "balance": 100
+      }
+    ],
+    "warehouses": [
+      "Main"
+    ],
+    "warehouse": "Main",
+    "records": [],
+    "opening": {
+      "stocks": {},
+      "parties": {},
+      "accounts": {
+        "1": 100
+      }
+    }
+  },
+  "users": [
+    {
+      "id": "cross-owner",
+      "username": "fixture-owner",
+      "name": "Fixture owner",
+      "role": "owner",
+      "active": true,
+      "password": {
+        "algorithm": "PBKDF2-SHA256",
+        "iterations": 210000,
+        "salt": "abababababababababababababababab",
+        "hash": "a867288f752db759ac1e488b87da53eb10e60f365e28f9e651cd4935cfc438fa"
+      }
+    }
+  ]
+}
