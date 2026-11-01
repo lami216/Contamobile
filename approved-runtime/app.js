@@ -130,6 +130,7 @@ function captureViewPosition(){
  return {view:phone?.dataset.view,selected:phone?.dataset.recordOwner,top:content?.scrollTop||0,left:content?.scrollLeft||0,
   lists:[...phone?.querySelectorAll('table[data-window-key]')||[]].map(t=>({key:t.dataset.windowKey,top:t.closest('.register-scroll')?.scrollTop||0,left:t.closest('.register-scroll')?.scrollLeft||0})),
   sheetTitle:sheet?.getAttribute('aria-label'),sheetTop:sheet?.querySelector('.sheet-body')?.scrollTop||0,
+  sheetLists:[...sheet?.querySelectorAll('[data-scroll-key]')||[]].map(pane=>({key:pane.dataset.scrollKey,top:pane.scrollTop,left:pane.scrollLeft})),
   focus:sheet?.contains(active)&&active?.name?{name:active.name,start:active.selectionStart,end:active.selectionEnd}:null};
 }
 function restoreViewPosition(saved){
@@ -140,6 +141,7 @@ function restoreViewPosition(saved){
  }
  listWindowResetScroll=null;
  const sheet=phone.querySelector('.sheet');if(sheet&&sheet.getAttribute('aria-label')===saved.sheetTitle){sheet.classList.add('sheet-update');const body=sheet.querySelector('.sheet-body');if(body)body.scrollTop=saved.sheetTop;
+  for(const old of saved.sheetLists||[]){const pane=[...sheet.querySelectorAll('[data-scroll-key]')].find(element=>element.dataset.scrollKey===old.key);if(pane){pane.scrollTop=old.top;pane.scrollLeft=old.left}}
   if(saved.focus){const input=[...sheet.querySelectorAll('input,textarea,select')].find(e=>e.name===saved.focus.name);if(input){input.focus({preventScroll:true});if(input.setSelectionRange&&saved.focus.start!==null)try{input.setSelectionRange(saved.focus.start,saved.focus.end)}catch{}}}
  }
 }

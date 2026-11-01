@@ -20,7 +20,9 @@ export function installCloudBackup(api){
   return t('تعذّر إكمال النسخ الآن. سنعيد المحاولة عند توفر الاتصال والشروط المختارة؛ بياناتك المحلية محفوظة.','Sauvegarde momentanément impossible. Nouvelle tentative avec la connexion et les conditions choisies ; vos données locales sont conservées.');
  }
  const date=value=>{if(!value)return '—';const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(api.language()==='fr'?'fr-FR':'ar-MR'): '—'};
- function paint(){if(api.isVisible())api.render()}
+ // Passive status updates must not rebuild an open form or another sheet.
+ // The cached status is rendered when that sheet closes or an explicit action renders.
+ function paint(){if(api.isVisible()&&!api.modal())api.render()}
  function update(value){if(value&&typeof value==='object')status={...status,...value,settings:value.settings??status?.settings,server:value.server??status?.server};error='';paint();return value}
  async function call(command,payload={}){if(!supported())throw Object.assign(new Error('unconfigured'),{code:'unconfigured'});return globalThis.NativeFiles.cloudBackup(command,{...base(),...payload})}
  function label(){
@@ -28,9 +30,9 @@ export function installCloudBackup(api){
   if(!loaded)return t('جارٍ قراءة الحالة…','Lecture de l’état…');
   if(error)return error;
   if(status?.paused)return friendly('paused');
+  if(status?.server?.entitlement?.enabled===false||status?.server?.entitlement?.active===false)return t('اشتراك النسخ غير فعال','Abonnement de sauvegarde inactif');
   if(!settings().consent)return t('النسخ التلقائي متوقف على هذا الهاتف','Sauvegarde automatique désactivée sur cet appareil');
   if(/upload|running/.test(String(status?.stage||'')))return t('جارٍ رفع نسخة؛ يمكنك متابعة العمل','Sauvegarde en cours ; vous pouvez continuer à travailler');
-  if(status?.server?.entitlement?.enabled===false||status?.server?.entitlement?.active===false)return t('اشتراك النسخ غير فعال','Abonnement de sauvegarde inactif');
   if(status?.lastError)return friendly(status.lastError);
   if(dirty||status?.changesPending)return t('توجد تغييرات لم تُنسخ بعد','Des modifications restent à sauvegarder');
   if(status?.lastSuccessAt)return t('آخر نسخة ناجحة محفوظة على السيرفر','Dernière sauvegarde confirmée sur le serveur');
@@ -80,7 +82,7 @@ export function installCloudBackup(api){
 <div class="pair"><label class="field"><span>${t('الوقت المفضل','Heure souhaitée')}</span><input type="time" name="cloudTime" value="${esc(s.time||'21:00')}"></label><label class="field"><span>${t('اليوم للنسخ الأسبوعي','Jour de la sauvegarde hebdomadaire')}</span><select name="cloudWeekday">${[[1,'الاثنين','Lundi'],[2,'الثلاثاء','Mardi'],[3,'الأربعاء','Mercredi'],[4,'الخميس','Jeudi'],[5,'الجمعة','Vendredi'],[6,'السبت','Samedi'],[7,'الأحد','Dimanche']].map(([id,ar,fr])=>`<option value="${id}" ${Number(s.weekday)===id?'selected':''}>${t(ar,fr)}</option>`).join('')}</select></label></div></div>
 <label class="feature-check"><input type="checkbox" name="cloudWifi" ${s.wifiOnly?'checked':''}><span>${t('Wi-Fi فقط','Wi-Fi uniquement')}</span></label><p class="muted">${t('الموعد مفضل؛ قد يؤجله Android بسبب الشبكة أو توفير الطاقة. يُستدرك الموعد الفائت عند توفر الشروط. الإيقاف القسري للتطبيق قد يتطلب فتحه مجددًا.','L’heure est souhaitée : Android peut différer le travail selon le réseau et la batterie. Un horaire manqué est rattrapé dès que possible. Après un arrêt forcé, il peut être nécessaire de rouvrir l’application.')}</p>`,'cloud:save',t('حفظ إعداد النسخ','Enregistrer les réglages'));
   }
-  if(api.modal()==='cloud-versions')return api.modalMarkup(t('النسخ المحفوظة','Sauvegardes disponibles'),`<p class="notice">${t('تنزيل النسخة يفتح معاينة؛ لن تُستبدل بياناتك دون تأكيد. الاستعادة لا تعيد مدة التفعيل ولا تنقل تفعيل جهاز آخر.','Le téléchargement ouvre un aperçu. Aucune donnée n’est remplacée sans confirmation. La restauration ne renouvelle pas la licence et ne transfère pas l’activation d’un autre appareil.')}</p>${versions.length?`<div class="feature-admin-list">${versions.map(v=>`<button type="button" class="row" data-action="cloud:download:${esc(v.backupId||v.id)}"><span class="copy"><strong>${esc(date(v.createdAt||v.completedAt))}</strong><small>${esc(v.bytes||v.sizeBytes||v.size||0)} ${t('بايت','octets')}</small></span><span>${t('معاينة','Aperçu')}</span></button>`).join('')}</div>`:`<p>${t('لا توجد نسخ متاحة لهذا الهاتف والمحل.','Aucune sauvegarde disponible pour cet appareil et ce commerce.')}</p>`}${nextCursor!==null?`<button class="secondary" type="button" data-action="cloud:more">${t('عرض المزيد','Afficher plus')}</button>`:''}`);
+  if(api.modal()==='cloud-versions')return api.modalMarkup(t('النسخ المحفوظة','Sauvegardes disponibles'),`<p class="notice">${t('تنزيل النسخة يفتح معاينة؛ لن تُستبدل بياناتك دون تأكيد. الاستعادة لا تعيد مدة التفعيل ولا تنقل تفعيل جهاز آخر.','Le téléchargement ouvre un aperçu. Aucune donnée n’est remplacée sans confirmation. La restauration ne renouvelle pas la licence et ne transfère pas l’activation d’un autre appareil.')}</p>${versions.length?`<div class="feature-admin-list" data-scroll-key="cloud-versions">${versions.map(v=>`<button type="button" class="row" data-action="cloud:download:${esc(v.backupId||v.id)}"><span class="copy"><strong>${esc(date(v.createdAt||v.completedAt))}</strong><small>${esc(v.bytes||v.sizeBytes||v.size||0)} ${t('بايت','octets')}</small></span><span>${t('معاينة','Aperçu')}</span></button>`).join('')}</div>`:`<p>${t('لا توجد نسخ متاحة لهذا الهاتف والمحل.','Aucune sauvegarde disponible pour cet appareil et ce commerce.')}</p>`}${nextCursor!==null?`<button class="secondary" type="button" data-action="cloud:more">${t('عرض المزيد','Afficher plus')}</button>`:''}`);
   return null;
  }
  async function action(action){

@@ -66,6 +66,19 @@ for baseline in "${baselines[@]}"; do
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
  test -s "baseline-v$baseline/alkarna-approved.apk"
 done
+# Fail fast on the isolated backup fixture before the full preservation matrix.
+# This fixture is removed completely before the first original-version scenario.
+adb install -r "$candidate" | tee "$proof_dir/cloud-backup-install.txt"
+grep -q Success "$proof_dir/cloud-backup-install.txt"
+adb install -r "$test_apk"
+adb shell pm clear "$app"
+assert_offline cloud-backup-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
+grep -Eq '^OK \(6 tests\)' "$proof_dir/CloudBackupTest.txt"
+test "$(grep -c 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt")" = 6
+assert_offline cloud-backup-network-after
+adb shell am force-stop "$app"
+adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
 # upgrade, a force-stopped offline cold start and a second install-r of the same APK.
 # Reset only BETWEEN scenarios, never between these preservation checks.
@@ -102,13 +115,12 @@ for baseline in "${baselines[@]}"; do
  done
 done
 # Fresh synthetic data for the independent accounting/activation/support-entry suite.
-for group in ActivationConcurrencyTest BusyBackNavigationTest CloudBackupTest; do
+for group in ActivationConcurrencyTest BusyBackNavigationTest; do
  adb shell pm clear "$app"
  adb shell am instrument -w -e class "mr.alkarna.mobile.approved.$group" "$runner" | tee "candidate-proof/$group.txt"
  case "$group" in
   ActivationConcurrencyTest) expected_tests=5 ;;
   BusyBackNavigationTest) expected_tests=2 ;;
-  CloudBackupTest) expected_tests=6 ;;
  esac
  grep -Eq "^OK \($expected_tests tests\)" "candidate-proof/$group.txt"
 done

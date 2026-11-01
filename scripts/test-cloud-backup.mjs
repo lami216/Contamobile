@@ -9,7 +9,17 @@ const require=createRequire(import.meta.url);let chromium;
 for(const candidate of [process.env.PLAYWRIGHT_MODULE,'playwright',fileURLToPath(new URL('../../Contatools-source/node_modules/playwright',import.meta.url))].filter(Boolean)){try{({chromium}=require(candidate));break}catch{}}
 if(!chromium)throw Error('Playwright is required for cloud-backup browser tests.');
 const runtime=fileURLToPath(new URL('../approved-runtime/',import.meta.url));
-const server=createServer(async(req,res)=>{try{const name=new URL(req.url,'http://localhost').pathname;if(name==='/'){res.setHeader('content-type','text/html');res.end('<!doctype html><html><body>Isolated cloud backup checks</body></html>');return}if(!/^\/[a-z0-9-]+\.js$/i.test(name)){res.writeHead(404).end();return}res.setHeader('content-type','text/javascript');res.end(await readFile(path.join(runtime,name.slice(1))))}catch{res.writeHead(404).end()}});
+const server=createServer(async(req,res)=>{try{
+ const name=new URL(req.url,'http://localhost').pathname;
+ if(name==='/'){res.setHeader('content-type','text/html');res.end('<!doctype html><html><body>Isolated cloud backup checks</body></html>');return}
+ const relative=name.startsWith('/app/')?name.slice(5)||'index.html':name.slice(1),file=path.resolve(runtime,relative);
+ if(!file.startsWith(runtime)){res.writeHead(404).end();return}
+ let bytes=await readFile(file);
+ // Only the disposable HTTP test response exposes this controller.
+ if(relative==='app.js')bytes=Buffer.from(bytes.toString().replace('const localBackupScreen=backupScreen;','globalThis.__cloudAuditController=cloudBackup;\nconst localBackupScreen=backupScreen;'));
+ const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.webmanifest':'application/manifest+json','.png':'image/png','.ttf':'font/ttf'};
+ res.setHeader('content-type',types[path.extname(file)]||'application/octet-stream');res.end(bytes);
+}catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
 try{
  browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:process.env.PLAYWRIGHT_USE_BUNDLED==='1'?{}:{channel:'chrome'})});
@@ -40,6 +50,7 @@ try{
    return {controller:installCloudBackup(api),calls,errors,writes,status,api,setForm:v=>{form=v},preview:()=>preview};
   }
   await check('no snapshot is staged without explicit owner consent',async()=>{const h=harness({consent:false});await h.controller.start();h.controller.committed();await new Promise(r=>setTimeout(r,1600));expect(!h.calls.some(x=>x.command==='stage'),'Snapshot staged before consent');await h.controller.action('cloud:run');expect(h.api.modal()==='cloud-settings'&&!h.calls.some(x=>x.command==='run'),'Manual run bypassed consent')});
+  await check('known inactive subscription takes precedence over disabled automatic consent without inventing unknown entitlement',async()=>{const h=harness({consent:false});h.status.server.entitlement={enabled:false,active:false};await h.controller.start();expect(h.controller.panel().includes('اشتراك النسخ غير فعال'),'Known inactive service hidden by consent copy');h.status.server={};await h.controller.refresh(false);expect(h.controller.panel().includes('النسخ التلقائي متوقف على هذا الهاتف'),'Unknown entitlement invented an inactive subscription')});
   await check('staff cannot configure or download cloud copies',async()=>{const h=harness({role:'sales'});await h.controller.action('cloud:list');expect(h.calls.length===0&&h.errors.length===1,'Staff accessed backup bridge');expect(h.controller.panel()==='','Owner controls exposed to staff')});
   await check('a not-yet-deployed endpoint is explained without altering local accounting or claiming success',async()=>{const h=harness();NativeFiles.cloudBackup=async()=>{throw Object.assign(new Error('service response'),{code:'SERVER_ERROR',status:404})};await h.controller.action('cloud:refresh');expect(h.controller.panel().includes('لم تُجهّز'),'Missing endpoint shown as an unexplained retry');expect(!h.writes.some(x=>x.store==='snapshots'||x.store==='users'),'Unavailable server altered accounting');expect(h.status.lastSuccessAt===0,'Unavailable server claimed a successful copy')});
   await check('manual export failure cannot run an old staged backup or claim success',async()=>{const h=harness({snapshotError:true});await h.controller.start();await h.controller.action('cloud:run');expect(!h.calls.some(x=>x.command==='run'),'Old stage uploaded after current export failed');expect(h.errors.length===1&&!h.controller.panel().includes('آخر نسخة ناجحة محفوظة'),'Failure shown as success')});
@@ -50,6 +61,45 @@ try{
   await check('versions paginate and download opens a preview without replacing local data',async()=>{const h=harness();await h.controller.action('cloud:list');await h.controller.action('cloud:more');const html=h.controller.sheet();expect(html.includes('version-1')&&html.includes('version-2')&&!html.includes('cloud:more'),'Versions lost or cursor not consumed');expect(h.calls.some(x=>x.command==='list'&&x.data.cursor===30),'Next page cursor missing');await h.controller.action('cloud:download:version-2');expect(JSON.parse(h.preview()).state.originId==='backup-shop','Download did not open validated root preview');expect(!h.writes.some(x=>x.store==='snapshots'),'Download overwrote local state')});
   await check('French controls retain the current form classes and separate consent from subscription',async()=>{const h=harness({lang:'fr',consent:false});await h.controller.action('cloud:settings');const html=h.controller.sheet();expect(html.includes('Sauvegarde automatique')&&html.includes('class="feature-check"')&&html.includes('class="field"'),'French existing-style controls missing');expect(!/[\u0600-\u06ff]/.test(html),'Arabic copy in French backup UI');h.setForm({cloudConsent:'on',cloudSchedule:'weekly',cloudTime:'20:45',cloudWeekday:'7',cloudWifi:'on'});await h.controller.action('cloud:save');const call=h.calls.find(x=>x.command==='configure');expect(call.data.consent&&call.data.wifiOnly&&call.data.weekday===7&&call.data.schedule==='weekly','Schedule choices changed');expect(h.status.lastSuccessAt===0,'Consent/staging invented a success timestamp')});
   window.dispatchEvent(new Event('pagehide'));return results;
+ });
+ async function actualFixture(){
+  const context=await browser.newContext({viewport:{width:393,height:851},serviceWorkers:'block'}),page=await context.newPage();
+  await page.addInitScript(()=>{
+   const settings={consent:false,schedule:'daily',time:'21:00',weekday:1,wifiOnly:false};
+   globalThis.__cloudBridgeCalls=[];
+   window.NativeFiles={async cloudBackup(command,data){
+    globalThis.__cloudBridgeCalls.push({command,data});
+    if(command==='configure')Object.assign(settings,data);
+    if(command==='list'){const cursor=data.cursor||0,number=cursor?20:30;return {versions:Array.from({length:number},(_,i)=>({id:'fixture-version-'+(cursor+i),sizeBytes:1024+i,createdAt:1762000000000-(cursor+i)*60000})),nextCursor:cursor?null:30}}
+    return {settings:{...settings},stage:'scheduled',lastSuccessAt:0,server:{entitlement:{enabled:true,active:true}}};
+   },async stageCloudBackup(){throw Error('Unconsented test fixture must not stage a snapshot')}};
+  });
+  await page.goto('http://127.0.0.1:'+server.address().port+'/app/');await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
+  for(const [key,value]of Object.entries({name:'مالك اختبار النسخ',shop:'محل مصطنع',username:'cloud-owner',password:'1234'}))await page.locator('#site-auth-form [name='+key+']').fill(value);
+  await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();await page.evaluate(()=>act('go:backup'));
+  return {context,page};
+ }
+ async function sourceCheck(name,fn){try{await fn();results.push({name,passed:true})}catch(error){results.push({name,passed:false,error:error.message})}}
+ await sourceCheck('actual app passive status refresh preserves unsaved cloud settings and every other open sheet',async()=>{
+  const {context,page}=await actualFixture();try{
+   await page.locator('[data-action="cloud:settings"]').click();await page.locator('[name=cloudSchedule]').selectOption('weekly');await page.locator('[name=cloudTime]').fill('05:45');await page.locator('[name=cloudWeekday]').selectOption('7');await page.locator('[name=cloudConsent]').check();await page.locator('[name=cloudWifi]').check();
+   await page.locator('.sheet').evaluate(element=>{element.dataset.draftMarker='unchanged'});await page.evaluate(()=>globalThis.__cloudAuditController.refresh(false));
+   assert.equal(await page.locator('[name=cloudTime]').inputValue(),'05:45');assert.equal(await page.locator('[name=cloudWeekday]').inputValue(),'7');assert.equal(await page.locator('[name=cloudSchedule]').inputValue(),'weekly');assert.equal(await page.locator('[name=cloudConsent]').isChecked(),true);assert.equal(await page.locator('[name=cloudWifi]').isChecked(),true);assert.equal(await page.locator('.sheet').getAttribute('data-draft-marker'),'unchanged');
+   assert.equal(await page.evaluate(()=>globalThis.__cloudBridgeCalls.filter(call=>call.command==='configure').length),0);
+   await page.evaluate(async()=>{await act('close');await act('site:new-user')});await page.locator('#sheet-form [name=name]').fill('مسودة مستخدم');await page.locator('.sheet').evaluate(element=>{element.dataset.draftMarker='account-sheet'});await page.evaluate(()=>globalThis.__cloudAuditController.refresh(false));
+   assert.equal(await page.locator('#sheet-form [name=name]').inputValue(),'مسودة مستخدم');assert.equal(await page.locator('.sheet').getAttribute('data-draft-marker'),'account-sheet');
+   assert(await page.evaluate(()=>globalThis.__cloudBridgeCalls.filter(call=>call.command==='status').length)>=3);
+  }finally{await context.close()}
+ });
+ await sourceCheck('actual app saved-version pane retains its inner scroll on passive refresh, global render and More',async()=>{
+  const {context,page}=await actualFixture();try{
+   await page.locator('[data-action="cloud:list"]').click();const pane=page.locator('.feature-admin-list');assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),30);
+   const before=await pane.evaluate(element=>{element.scrollTop=240;return element.scrollTop});assert(before>0);
+   await page.evaluate(()=>globalThis.__cloudAuditController.refresh(false));assert.equal(await pane.evaluate(element=>element.scrollTop),before);
+   await page.evaluate(()=>render());assert.equal(await pane.evaluate(element=>element.scrollTop),before);
+   await page.evaluate(()=>act('cloud:more'));assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),50);assert.equal(await pane.evaluate(element=>element.scrollTop),before);assert.equal(await page.locator('[data-action="cloud:more"]').count(),0);
+   assert.equal(await page.evaluate(()=>globalThis.__cloudBridgeCalls.filter(call=>call.command==='list'&&call.data.cursor===30).length),1);
+  }finally{await context.close()}
  });
  for(const r of results)console.log((r.passed?'PASS ':'FAIL ')+r.name+(r.error?': '+r.error:''));console.log(JSON.stringify({tests:results.length,passed:results.filter(x=>x.passed).length,failed:results.filter(x=>!x.passed).length}));assert(results.every(x=>x.passed),'Cloud backup browser regressions remain');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

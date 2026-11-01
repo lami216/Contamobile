@@ -8,6 +8,8 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.*;
 import org.junit.*;
 import org.junit.runner.RunWith;
+import org.junit.runner.Description;
+import org.junit.rules.TestWatcher;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,6 +27,7 @@ public class CloudBackupTest {
  private FakeService service;
  private Object previousSingleton;
  private boolean ownsFixture;
+ @Rule public final TestWatcher executed=new TestWatcher(){@Override protected void succeeded(Description description){android.os.Bundle evidence=new android.os.Bundle();evidence.putString("stream","\nCLOUD BACKUP CASE PASS "+description.getMethodName()+"\n");InstrumentationRegistry.getInstrumentation().sendStatus(0,evidence);}};
  private final JSONObject target=target("cloud-test-shop");
  private static JSONObject target(String shop){try{return new JSONObject().put("shopId",shop).put("ownerId","cloud-test-owner");}catch(Exception e){throw new IllegalStateException(e);}}
  private static JSONObject copy(JSONObject value) throws Exception {return new JSONObject(value.toString());}
@@ -46,9 +49,10 @@ public class CloudBackupTest {
  private static void rejected(String code,Checked action) throws Exception {try{action.run();fail("Expected "+code);}catch(IOException expected){assertEquals(code,expected.getMessage());}}
  @Before public void prepare() throws Exception {
   // Never remove an existing customer's staging area, even if someone installs this test APK.
-  Assume.assumeTrue(Build.FINGERPRINT.startsWith("generic")||Build.FINGERPRINT.contains("emulator")||Build.MODEL.contains("sdk_gphone"));
-  context=InstrumentationRegistry.getInstrumentation().getTargetContext();directory=new File(context.getNoBackupFilesDir(),"cloud-backup-v1");Assume.assumeFalse(directory.exists());
-  previousSingleton=singleton().get(null);Assume.assumeTrue(previousSingleton==null);ownsFixture=true;
+  Assume.assumeTrue("Run only as an explicitly isolated emulator fixture","true".equals(InstrumentationRegistry.getArguments().getString("cloudBackupIsolation")));
+  assertTrue("An isolated Android emulator is required; CI verifies ro.kernel.qemu=1 before this invocation",Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish")||Build.FINGERPRINT.startsWith("generic")||Build.FINGERPRINT.contains("emulator")||Build.MODEL.contains("sdk_gphone"));
+  context=InstrumentationRegistry.getInstrumentation().getTargetContext();directory=new File(context.getNoBackupFilesDir(),"cloud-backup-v1");assertFalse("Isolated fixture must start without existing private cloud-backup state",directory.exists());
+  previousSingleton=singleton().get(null);assertNull("An isolated fixture must start without a live backup manager",previousSingleton);ownsFixture=true;
   jobs().cancel(CloudBackupPolicy.JOB_ID);service=new FakeService();manager=new CloudBackupManager(context,service,true);singleton().set(null,manager);
  }
  @After public void cleanup() throws Exception {
