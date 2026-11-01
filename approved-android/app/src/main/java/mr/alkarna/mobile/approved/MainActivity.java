@@ -34,6 +34,7 @@ public final class MainActivity extends Activity {
     private Export pendingExport;
     private DeviceLicense licensing;
     private ContatoolsClient administration;
+    private AccountingResetClient accountingReset;
     private RecoveryPreflight dataRescue;
     // An Activity recreation must never capture live Chromium storage in this process.
     private static volatile boolean webViewWasCreated;
@@ -170,6 +171,37 @@ public final class MainActivity extends Activity {
         try{manager.registerDefaultNetworkCallback(networkCallback);}catch(Exception unavailable){networkCallback=null;}
     }
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
+    private void accountingResetRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
+        if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        // Ordinary offline startup must not depend on the optional support channel,
+        // its journal, endpoint or queue. A key without a file is not absence.
+        if("resume-local".equals(command))try{
+            if(content==null||content.length()>4096||new JSONObject(content).length()!=0)throw new IOException("RESET_REQUEST");
+            if(AccountingResetStore.noLocalState(MainActivity.this)){result(id,value("stage","idle"));return;}
+        }catch(Exception failure){JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير."));try{answer.put("code","RESET_LOCAL_STATE_UNAVAILABLE");}catch(Exception ignored){}result(id,answer);return;}
+        try{administrationQueue.execute(()->{
+            try{
+                if(isDestroyed()||activationPage||!backupScope.current(page))throw new IOException("RESET_PAGE_CLOSED");
+                if(!activityResumed&&!(command.equals("resume-local")||command.equals("finish"))){result(id,value("stage","paused"));return;}
+                if(content==null||content.length()>4096)throw new IOException("RESET_REQUEST_SIZE");
+                if(administration==null){if(BuildConfig.CONTATOOLS_ORIGIN.isEmpty()){result(id,value("stage","unconfigured"));return;}administration=new ContatoolsClient(MainActivity.this,licensing,BuildConfig.CONTATOOLS_ORIGIN,new JSONObject(BuildConfig.CONTATOOLS_ISSUERS));}
+                if(accountingReset==null)accountingReset=new AccountingResetClient(MainActivity.this,licensing,new JSONObject(BuildConfig.CONTATOOLS_ISSUERS),administration,target->CloudBackupManager.get(MainActivity.this).pauseForAccountingReset());
+                JSONObject payload=new JSONObject(content),answer;
+                switch(command){
+                    case "poll":answer=accountingReset.poll(payload);break;
+                    case "decline":answer=accountingReset.decline(payload);break;
+                    case "prepare":answer=accountingReset.prepare(payload);break;
+                    case "resume-local":if(payload.length()!=0)throw new IOException("RESET_REQUEST");answer=accountingReset.resumeLocal();break;
+                    case "resume":if(payload.length()!=0)throw new IOException("RESET_REQUEST");answer=accountingReset.resume();break;
+                    case "finish":answer=accountingReset.finish(payload);break;
+                    case "ack":if(payload.length()!=0)throw new IOException("RESET_REQUEST");answer=accountingReset.acknowledge();break;
+                    default:throw new IOException("RESET_OPERATION");
+                }
+                if(!isDestroyed()&&backupScope.current(page))result(id,answer);
+            }catch(ContatoolsClient.ServiceFailure failure){JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تعذّر الاتصال بالإدارة. لم تُمسح بيانات المحاسبة؛ أعد المحاولة بعد عودة الاتصال."));try{answer.put("status",failure.status).put("permanent",failure.permanent).put("retryAt",failure.retryAt).put("code","RESET_SERVICE");}catch(Exception ignored){}result(id,answer);}
+            catch(Exception failure){JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير."));try{answer.put("code",failure.getMessage()==null?"RESET_UNAVAILABLE":failure.getMessage());}catch(Exception ignored){}result(id,answer);}
+        });}catch(java.util.concurrent.RejectedExecutionException full){error(id,"هناك طلب جارٍ. أعد المحاولة بعد قليل.");}
+    });}
     private interface BackupAction { JSONObject run(CloudBackupManager manager) throws Exception; }
     private void backupRequest(String id,boolean immediate,BackupAction action){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){backupScope.cancel(id);error(id,"تعذّر التحقق من التفعيل المحلي");return;}
@@ -179,6 +211,7 @@ public final class MainActivity extends Activity {
     private void cancelBackupTransfers(){backupScope.changed();for(String id:backupTransfers)try{CloudBackupManager.get(this).cancelStage(id);}catch(Exception ignored){}backupTransfers.clear();}
     public final class NativeHost {
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
+        @JavascriptInterface public void accountingReset(String id,String command,String content){accountingResetRequest(id,command,content);}
         @JavascriptInterface public void cloudBackup(String id,String command,String content){backupRequest(id,"pause".equals(command)||"invalidate".equals(command),manager->{
             if(content==null||content.length()>16384)throw new IOException("INVALID_BACKUP_REQUEST");JSONObject payload=new JSONObject(content);
             switch(command){

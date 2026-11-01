@@ -31,6 +31,7 @@
   activation:()=>NativeHost.openActivation()
  };
  window.NativeFiles.ownerRecovery=(command,value='')=>call('ownerRecovery',command,value);
+ window.NativeFiles.accountingReset=(command,payload={})=>call('accountingReset',command,JSON.stringify(payload));
  window.NativeFiles.cloudBackup=(command,payload={})=>{const id=crypto.randomUUID();return request(id,command==='download'?600000:60000,()=>NativeHost.cloudBackup(id,command,JSON.stringify(payload)))};
  window.NativeFiles.stageCloudBackup=(context,blob,revision)=>{
   if(!(blob instanceof Blob)||blob.size<2||blob.size>8*1024*1024)return Promise.reject(Object.assign(new Error('SNAPSHOT_TOO_LARGE'),{code:'SNAPSHOT_TOO_LARGE'}));

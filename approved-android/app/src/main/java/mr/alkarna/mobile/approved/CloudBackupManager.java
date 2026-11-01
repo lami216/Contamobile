@@ -66,6 +66,9 @@ final class CloudBackupManager {
   scheduler().cancel(CloudBackupPolicy.JOB_ID);disk.save();
  }
  JSONObject pause(JSONObject p,boolean invalidate) throws Exception {JSONObject t=target(p);synchronized(lock){scope(t);pauseLocked(invalidate);scheduleLocked();return local();}}
+ // A whole-shop accounting reset also invalidates staging that another local owner consented.
+ // Keep that existing target for its revocation; never bind a new target or delete cloud copies.
+ void pauseForAccountingReset() throws Exception {synchronized(lock){pauseLocked(true);scheduleLocked();}}
  JSONObject begin(String id,JSONObject p) throws Exception {
   JSONObject t=target(p);int size=p.getInt("sizeBytes");String revision=p.getString("localRevision");long at=p.getLong("snapshotAt");
   if(!id.matches("[a-f0-9-]{36}")||size<2||size>CloudBackupPolicy.MAX_BYTES||!revision.matches("[0-9]{1,18}")||at<0)throw new IOException("INVALID_SNAPSHOT");

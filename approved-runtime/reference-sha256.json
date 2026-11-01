@@ -4,8 +4,8 @@
   "theme.css": "52751cf7ba580769d13aedb4b274049f1762f04f0a0b7c8d32b7ee9c7caf00c3",
   "site.css": "ebaee5579c54d9311f0c862a79339a84cf25153c5bb07f2480cb5be1f2ef72ce",
   "pos.css": "f503e5e69fd21a37f010597c9a64f2019e4a746357f1e631f6b2622154144fe1",
-  "app.js": "739c554112597746dbaeba9b013f73d7e3eed0022eb1c6692edcb24309f8d52a",
-  "database.js": "6b80521da5cc603221a2b90d5c16bca01cf91a36161c3ce9a2fcb04e3db80d8b",
+  "app.js": "997a31bf2d74ef24419cc2fa9a9088d1015ec3bc29830aa5ac1cfaba1ccfc287",
+  "database.js": "7794563fa7df16709b01cf4ad7cef8bb889ba98faa54de83f39ea212c05fea29",
   "product-names.js": "3b3b11bd46db412755892bf8a32283da5e9842a5df057616ea52340e85b113d8",
   "barcode-camera.js": "de26f25e5bf9a3982181655ea874f693d7ea7670b0c00c37188f0c8ef171d95f",
   "invoice-view.js": "92ce7433000bce2acc1a603db5aaa44742e4114ccb384470ab3fbf7dacd04aff",
@@ -37,12 +37,13 @@
   "feature-french.js": "bd2f5deea0a82dc15c9ce90181dd0c3c0f71f14816f10a72818659b848f4f2c5",
   "import-domain.js": "3c389acd57e1df69548b2c6a416cb76c262e8737375ff81bae3dd77f97392075",
   "legacy-import.js": "287297331067d2e12b898000b076c01713e1fc6e24c9a8668d379e7d7158d62b",
-  "sw.js": "74fbd03f989ffdf51506a1e218ed3615b3d69b0af539fb81328723918b0ff206",
+  "sw.js": "30ba6418bd5191639b6b0b676059de7919bffdc71abbc39a69636d83aa565ea1",
   "manifest.webmanifest": "2dd1b23e5f8bd6ba812b1dce7af81f90ed39687663e60d6efd8240bdb9f1130b",
   "owner-recovery.js": "3419f2da45f93ea45c1f3c3e608f9467f4604f1a2f377457c564f3521eaf6282",
   "owner-recovery.css": "f7bd8b93e222ef3c955eac494407d9d44367b10d0832bd89102decc8e4141f6c",
   "service-contact.js": "4419ab7315b4fcbaa8a773b5374329b314e06da23158dcf753fce71e63574da5",
   "runtime-boot.js": "d8904bbd425bd02c445ebed93a10f60c7b9e35fe21a4f2642063e8bbcbcb08f2",
   "runtime-boot.css": "0991cca1f64c6dd60789c3d892d89eeae9c82b6ecfb51a3c51306be3fb90cced",
-  "cloud-backup.js": "794f0fd21bbc5f06def3c57b52cb8928e7c7f906905111cc167fd30514f3ea05"
+  "cloud-backup.js": "794f0fd21bbc5f06def3c57b52cb8928e7c7f906905111cc167fd30514f3ea05",
+  "accounting-reset.js": "fd16abb76513037b75a43cd66d1749a9841f80d747423ee7b7b60b3c485d1db2"
 }

@@ -27,3 +27,6 @@ signing-private/
 
 # Materialized from the integrity-pinned sql.js package during build.
 approved-runtime/assets/sql-asm.js
+
+# Disposable release verification evidence is attached to CI, not application source.
+candidate-proof/

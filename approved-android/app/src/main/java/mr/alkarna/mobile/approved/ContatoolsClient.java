@@ -58,6 +58,24 @@ final class ContatoolsClient {
   ConnectivityManager manager=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
   if(manager==null)return false;NetworkCapabilities caps=manager.getNetworkCapabilities(manager.getActiveNetwork());return caps!=null&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
  }
+ boolean managedNetwork(){return transport instanceof HttpsTransport;}
+ synchronized JSONObject accountingExchange(String operation,JSONObject payload) throws Exception {
+  if(!java.util.Arrays.asList("accounting-reset.poll","accounting-reset.claim","accounting-reset.decline","accounting-reset.complete").contains(operation)||!identity.id().equals(payload.optString("installationId")))throw new IOException("Invalid accounting reset operation");
+  return dispatch(operation,payload);
+ }
+ private void recoveryAllowed() throws Exception {if(journal.state.has("accountingResetPending"))throw new IOException("Accounting reset is awaiting its final receipt");}
+ synchronized void accountingResetPrepared(String requestId) throws Exception {
+  if(!AccountingResetGrant.uuid(requestId))throw new IOException("Invalid accounting reset barrier");
+  String previous=journal.state.optString("accountingResetPending");if(!previous.isEmpty()&&!requestId.equals(previous))throw new IOException("Another accounting reset is incomplete");
+  // An old signed password grant must not become valid for the newly created local owner.
+  for(String name:new String[]{"grant","pending"}){JSONObject item=journal.state.optJSONObject(name);if(item!=null){JSONObject grant="pending".equals(name)?item.optJSONObject("grant"):item;if(grant!=null){String id=grant.getJSONObject("payload").optString("grantId");if(AccountingResetGrant.uuid(id)&&!journal.used(id))journal.state.getJSONArray("usedGrants").put(id);}}}
+  for(String name:new String[]{"pending","grant","request","ackNextAt","ackFailures","ackBlocked"})journal.state.remove(name);
+  journal.state.put("accountingResetPending",requestId).put("lastAccountingResetId",requestId);journal.save();
+ }
+ synchronized void accountingResetAcknowledged(String requestId) throws Exception {
+  String current=journal.state.optString("accountingResetPending");if(!current.isEmpty()&&!requestId.equals(current))throw new IOException("Accounting reset receipt mismatch");
+  journal.state.put("lastAccountingResetId",requestId);journal.state.remove("accountingResetPending");journal.save();
+ }
  private void saveRegistration() throws Exception {
   journal.state.put("registration",new JSONObject().put("protocol",RegistrationPolicy.VERSION).put("successful",registration.successful).put("pending",registration.pending).put("lastSuccess",registration.lastSuccess).put("lastAttempt",registration.lastAttempt).put("nextAttempt",registration.nextAttempt).put("failures",registration.failures).put("blocked",registration.blocked));journal.save();
  }
@@ -87,12 +105,13 @@ final class ContatoolsClient {
  static boolean permanentRegistrationFailure(Exception failure){return failure instanceof ServiceFailure&&((ServiceFailure)failure).permanent;}
  private JSONObject target(JSONObject request) throws Exception {return new JSONObject().put("installationId",identity.id()).put("shopId",request.getString("shopId")).put("ownerId",request.getString("ownerId")).put("requestId",request.getString("requestId"));}
  synchronized JSONObject request(String ownerId) throws Exception {
+  recoveryAllowed();
   JSONObject pending=journal.state.optJSONObject("pending");if(pending!=null)return resume();
   JSONObject context=journal.state.getJSONObject("context");JSONArray owners=context.getJSONArray("owners");boolean allowed=false;for(int i=0;i<owners.length();i++)if(ownerId.equals(owners.getJSONObject(i).getString("id")))allowed=true;if(!allowed)throw new IOException("Local owner unavailable");
   JSONObject request=journal.state.optJSONObject("request");if(request==null||!ownerId.equals(request.optString("ownerId"))||!context.getString("shopId").equals(request.optString("shopId"))){request=new JSONObject().put("shopId",context.getString("shopId")).put("ownerId",ownerId).put("requestId",UUID.randomUUID().toString());journal.state.put("request",request);journal.save();}
   JSONObject response;try{response=dispatch("recovery.request",target(request));}catch(ServiceFailure failure){if(failure.status==403||failure.status==404){registration.successful="";saveRegistration();}throw failure;}request.put("requestId",response.getString("requestId"));journal.save();return remember(response);
  }
- synchronized JSONObject poll() throws Exception {return remember(dispatch("recovery.poll",target(journal.state.getJSONObject("request"))));}
+ synchronized JSONObject poll() throws Exception {recoveryAllowed();return remember(dispatch("recovery.poll",target(journal.state.getJSONObject("request"))));}
  private JSONObject remember(JSONObject response) throws Exception {
   if("approved".equals(response.optString("status"))){JSONObject grant=response.getJSONObject("grant");validateGrant(grant);journal.state.put("grant",grant);}
   if("expired".equals(response.optString("status"))||"rejected".equals(response.optString("status"))||"used".equals(response.optString("status"))){journal.state.remove("grant");journal.state.remove("request");}
@@ -106,11 +125,13 @@ final class ContatoolsClient {
  }
  private void digest(JSONObject d) throws Exception {if(d.length()!=4||!"PBKDF2-SHA256".equals(d.optString("algorithm"))||d.optInt("iterations")!=210000||!d.optString("salt").matches("[a-f0-9]{32}")||!d.optString("hash").matches("[a-f0-9]{64}"))throw new IOException("Invalid local password derivation");}
  synchronized JSONObject prepare(JSONObject passwordDigest) throws Exception {
+  recoveryAllowed();
   if(journal.state.has("pending"))return resume();digest(passwordDigest);JSONObject grant=journal.state.getJSONObject("grant");JSONObject p=validateGrant(grant);
   JSONObject pending=new JSONObject().put("stage","awaiting-claim").put("grant",grant).put("intentId",UUID.randomUUID().toString()).put("password",passwordDigest);
   journal.state.put("pending",pending);journal.save();return resume();
  }
  synchronized JSONObject resumeLocal() throws Exception {
+  if(journal.state.has("accountingResetPending"))return new JSONObject().put("stage","paused");
   JSONObject pending=journal.state.optJSONObject("pending");if(pending==null)return new JSONObject().put("stage","idle");
   if("applied".equals(pending.optString("stage")))return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",journal.state.optLong("ackNextAt"));
   if("awaiting-claim".equals(pending.optString("stage")))return new JSONObject().put("stage","awaiting-network");
@@ -120,6 +141,7 @@ final class ContatoolsClient {
   JSONObject pending=journal.state.optJSONObject("pending");return pending!=null&&"applied".equals(pending.optString("stage"))?acknowledge(pending):new JSONObject().put("stage","idle");
  }
  synchronized JSONObject resume() throws Exception {
+  recoveryAllowed();
   JSONObject pending=journal.state.optJSONObject("pending");if(pending==null)return new JSONObject().put("stage","idle");
   if("applied".equals(pending.optString("stage")))return acknowledge(pending);
   JSONObject p=validateGrant(pending.getJSONObject("grant"));JSONObject wire=target(journal.state.getJSONObject("request")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId"));
@@ -136,7 +158,8 @@ final class ContatoolsClient {
    validateClaim(pending,p,claim);pending.put("claim",claim).put("stage","prepared");journal.save();
   }
   validateClaim(pending,p,pending.getJSONObject("claim"));digest(pending.getJSONObject("password"));
-  return new JSONObject().put("stage","prepared").put("shopId",p.getString("shopId")).put("ownerId",p.getString("ownerId")).put("requestId",p.getString("requestId")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId")).put("password",pending.getJSONObject("password"));
+  JSONObject prepared=new JSONObject().put("stage","prepared").put("shopId",p.getString("shopId")).put("ownerId",p.getString("ownerId")).put("requestId",p.getString("requestId")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId")).put("password",pending.getJSONObject("password"));
+  if(journal.state.has("lastAccountingResetId"))prepared.put("accountingResetId",journal.state.getString("lastAccountingResetId"));return prepared;
  }
  private void validateClaim(JSONObject pending,JSONObject grant,JSONObject claim) throws Exception {
   JSONObject c=ProtocolJson.verifyEnvelope(claim,issuers,"contatools-reset-claim");if(c.length()!=grant.length()+2)throw new IOException("Invalid claim");java.util.Iterator<String> names=grant.keys();while(names.hasNext()){String name=names.next();if(!ProtocolJson.canonical(grant.get(name)).equals(ProtocolJson.canonical(c.get(name))))throw new IOException("Claim scope mismatch");}
@@ -144,6 +167,7 @@ final class ContatoolsClient {
  }
  synchronized JSONObject finish(String grantId,String intentId) throws Exception {finishLocally(grantId,intentId);return acknowledge(journal.state.getJSONObject("pending"));}
  synchronized JSONObject finishLocally(String grantId,String intentId) throws Exception {
+  recoveryAllowed();
   JSONObject p=journal.state.getJSONObject("pending");JSONObject grant=p.getJSONObject("grant").getJSONObject("payload");if(!grantId.equals(grant.getString("grantId"))||!intentId.equals(p.getString("intentId"))||!("prepared".equals(p.getString("stage"))||"applied".equals(p.getString("stage"))))throw new IOException("Recovery completion mismatch");
   p.put("stage","applied");p.remove("password");journal.consume(grantId);return new JSONObject().put("stage","complete").put("ackPending",true);
  }

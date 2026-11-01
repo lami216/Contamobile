@@ -72,6 +72,7 @@ public class CloudBackupTest {
   manager.pause(target,true);assertTrue(manager.status(target,false).getBoolean("paused"));assertNull(disk().state.optJSONObject("latest"));assertNull(disk().state.optJSONObject("pending"));
   rejected("CONSENT_REQUIRED",()->stage(3,bytes));manager.process(new AtomicBoolean(false),true);assertFalse(service.consent);assertEquals(0,service.versions.size());
   configured(false);due(System.currentTimeMillis()+3600000);stage(3,bytes);assertFalse(manager.status(target,false).getBoolean("paused"));
+  manager.pauseForAccountingReset();JSONObject resetPaused=manager.status(target,false);assertTrue(resetPaused.getBoolean("paused"));assertFalse(resetPaused.getJSONObject("settings").getBoolean("consent"));assertEquals("cloud-test-owner",resetPaused.getJSONObject("context").getString("ownerId"));assertNull(disk().state.optJSONObject("latest"));assertNull(disk().state.optJSONObject("pending"));
   System.out.println("CLOUD BACKUP PASS: explicit consent, bound shop, stale revision rejected, encrypted snapshot, persisted Wi-Fi job and immediate restore pause.");
  }
  @Test public void lostCommitResponseResumesSameImmutableVersionAfterRecreation() throws Exception {

@@ -51,16 +51,16 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 19
+test "$CANDIDATE_VERSION_CODE" = 20
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
 test -s "$test_apk"
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All six originally distributed versions are mandatory for this candidate.
+# All seven originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18'
+test "${baselines[*]}" = '13 14 15 16 17 18 19'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -77,6 +77,12 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -
 grep -Eq '^OK \(6 tests\)' "$proof_dir/CloudBackupTest.txt"
 test "$(grep -c 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt")" = 6
 assert_offline cloud-backup-network-after
+adb shell pm clear "$app"
+assert_offline accounting-reset-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountingResetTest -e accountingResetIsolation true "$runner" | tee "$proof_dir/AccountingResetTest.txt"
+grep -Eq '^OK \(6 tests\)' "$proof_dir/AccountingResetTest.txt"
+test "$(grep -c 'ACCOUNTING RESET CASE PASS ' "$proof_dir/AccountingResetTest.txt")" = 6
+assert_offline accounting-reset-network-after
 adb shell am force-stop "$app"
 adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
@@ -133,7 +139,7 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDe
 grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt

@@ -87,6 +87,46 @@ export class ShopDatabase {
     },'تعذّر قراءة المحل؛ لم تتغير البيانات المحلية');
     this.revision=loaded.revision;return loaded.state;
   }
+  async accountingResetBootstrap(){
+    return this.run(['snapshots','users','meta'],'readonly',(tx,result,abort,guard)=>{
+      const values={};let pending=3;
+      const done=guard(()=>{if(--pending)return;const b=values.bootstrap;if(!b){result(null);return}
+        if(values.users!==0||values.shop?.state?.originId!==b.shopId||!validResetTarget(b))throw incompleteShop();
+        result(structuredClone(b));
+      });
+      for(const [key,request]of [['shop',tx.objectStore('snapshots').get('shop')],['users',tx.objectStore('users').count()],['bootstrap',tx.objectStore('meta').get('accounting-reset-bootstrap')]])request.onsuccess=()=>{values[key]=request.result;done()};
+    });
+  }
+  async resetAccounting(prepared,emptyState){
+    const p=structuredClone(prepared),copy=structuredClone(emptyState),expected=this.revision;
+    if(p?.stage!=='prepared'||!validResetTarget(p)||p.accountingResetId!==p.requestId)throw new StoreError('تفويض تهيئة المحاسبة غير صالح');
+    validateState(copy);
+    if(copy.originId!==p.shopId||copy.products.length||copy.parties.length||copy.records.length||copy.users?.length||copy.accounts.some(a=>a.balance!==0))throw new StoreError('بيانات بداية المحاسبة غير صالحة');
+    const outcome=await this.run(['snapshots','users','meta'],'readwrite',(tx,result,abort,guard)=>{
+      const snapshots=tx.objectStore('snapshots'),users=tx.objectStore('users'),meta=tx.objectStore('meta'),values={};let pending=4;
+      const done=guard(()=>{
+        if(--pending)return;const receipt=values.meta.find(x=>x.id==='accounting-reset:'+p.requestId),row=values.shop;
+        if(receipt){if(!sameResetTarget(receipt,p))throw new StoreError('تعارض في إيصال تهيئة المحاسبة');assertShop(row);result({alreadyApplied:true,revision:row.revision});return}
+        assertShop(row);if(row.revision!==expected)throw revisionConflict();
+        if(row.state.originId!==p.shopId||!values.owner||values.owner.role!=='owner'||values.owner.active===false)throw new StoreError('التفويض لا يخص مالك هذا المحل');
+        const oldCloud=values.meta.find(x=>x.id==='cloud-backup-revision')?.value??expected;
+        if(!Number.isSafeInteger(oldCloud)||oldCloud<0)throw new StoreError('إصدار النسخ غير صالح؛ لم تتغير البيانات');
+        const now=new Date().toISOString(),target={requestId:p.requestId,grantId:p.grantId,intentId:p.intentId,shopId:p.shopId,ownerId:p.ownerId};
+        // Only non-secret single-use receipts survive. No business rollback snapshot,
+        // user verifier, session, import, cached recovery intent or cloud consent remains.
+        const receipts=values.meta.filter(x=>typeof x.id==='string'&&(x.id.startsWith('accounting-reset:')||x.id.startsWith('owner-recovery:')));
+        snapshots.clear();users.clear();meta.clear();for(const receipt of receipts)meta.put(receipt);
+        snapshots.put({id:'shop',state:copy,revision:expected+1,updatedAt:now});
+        meta.put({id:'accounting-reset:'+p.requestId,...target,appliedAt:now});
+        meta.put({id:'accounting-reset-barrier',requestId:p.requestId});
+        meta.put({id:'accounting-reset-bootstrap',...target});
+        meta.put({id:'cloud-backup-revision',value:Math.max(oldCloud,expected)+1});
+        result({alreadyApplied:false,revision:expected+1});
+      });
+      for(const [key,request]of [['shop',snapshots.get('shop')],['owner',users.get(p.ownerId)],['receipt',meta.get('accounting-reset:'+p.requestId)],['meta',meta.getAll()]])request.onsuccess=()=>{values[key]=request.result;done()};
+    },'لم تكتمل التهيئة؛ بقيت بياناتك السابقة');
+    this.revision=outcome.revision;return outcome;
+  }
   async recoverOwner(prepared){
     const p=structuredClone(prepared),password=p?.password;
     if(p?.stage!=='prepared'||!['shopId','ownerId','requestId','grantId','intentId'].every(k=>typeof p[k]==='string'&&/^[A-Za-z0-9_.:-]{1,160}$/.test(p[k]))||password?.algorithm!=='PBKDF2-SHA256'||password.iterations!==210000||! /^[a-f0-9]{32}$/.test(password.salt)||! /^[a-f0-9]{64}$/.test(password.hash))throw new StoreError('تفويض الاستعادة غير صالح');
@@ -98,12 +138,15 @@ export class ShopDatabase {
         if(receipt.result){const r=receipt.result;if(r.ownerId!==p.ownerId||r.shopId!==p.shopId||r.intentId!==p.intentId||r.requestId!==p.requestId)return deny('تعارض في إيصال الاستعادة');result.alreadyApplied=true;return}
         const shop=tx.objectStore('snapshots').get('shop');shop.onsuccess=guard(()=>{
           if(shop.result?.state?.originId!==p.shopId)return deny('هذا التفويض يخص محلاً آخر');
+          const barrier=meta.get('accounting-reset-barrier');barrier.onsuccess=guard(()=>{
+          if(barrier.result&&p.accountingResetId!==barrier.result.requestId)return deny('انتهى تفويض الاستعادة بعد تهيئة المحاسبة؛ اطلب تفويضًا جديدًا');
           const owner=users.get(p.ownerId);owner.onsuccess=guard(()=>{
             if(owner.result?.role!=='owner'||owner.result.active===false)return deny('الاستعادة خاصة بحساب المالك الفعال');
             users.put({...owner.result,password:structuredClone(password),updatedAt:new Date().toISOString()});
             advanceCloudRevision(tx,guard,shop.result.revision);
             meta.put({id:'owner-recovery:'+p.grantId,ownerId:p.ownerId,shopId:p.shopId,intentId:p.intentId,requestId:p.requestId,appliedAt:new Date().toISOString()});
             const cursor=meta.openCursor();cursor.onsuccess=guard(()=>{const c=cursor.result;if(c){if(typeof c.value.id==='string'&&c.value.id.startsWith('session:')&&c.value.user===p.ownerId)c.delete();c.continue()}});
+          });
           });
         });
       });
@@ -151,24 +194,28 @@ export class ShopDatabase {
     // IDs are invalid IDB keys and must never throw only AFTER users.clear() was queued.
     const copy=structuredClone(state),incoming=structuredClone(users),expected=this.revision;validateState(copy);validateUsers(incoming);
     const revision=await this.run(['snapshots','users','meta'],'readwrite',(tx,result,abort,guard)=>{
-      const snapshots=tx.objectStore('snapshots'),accounts=tx.objectStore('users'),meta=tx.objectStore('meta'),values={};let pending=4;
+      const snapshots=tx.objectStore('snapshots'),accounts=tx.objectStore('users'),meta=tx.objectStore('meta'),values={};let pending=5;
       const done=guard(()=>{
         if(--pending)return;const old=values.shop;
         if(old)assertShop(old);else if(values.users.length||values.snapshots||values.meta)throw incompleteShop();
         if((old?.revision??0)!==expected)throw revisionConflict();
+        if(values.bootstrap&&(values.users.length||copy.originId!==values.bootstrap.shopId||incoming.length!==1||incoming[0].id!==values.bootstrap.ownerId||incoming[0].role!=='owner'))throw new StoreError('أنشئ حساب المالك لبدء المحاسبة الجديدة');
         const now=new Date().toISOString();
-        if(old){
+        if(old&&!values.bootstrap){
           meta.put({id:'safety-backup',backup:{state:old.state,users:values.users},savedAt:now});
           snapshots.put({id:'safety-backup',state:old.state,users:[],updatedAt:now});
         }
         snapshots.put({id:'shop',state:copy,revision:expected+1,updatedAt:now});accounts.clear();for(const user of incoming)accounts.put(user);result(expected+1);
+        if(values.bootstrap)meta.delete('accounting-reset-bootstrap');
         advanceCloudRevision(tx,guard,expected);
       });
-      for(const [key,request]of [['shop',snapshots.get('shop')],['users',accounts.getAll()],['snapshots',snapshots.count()],['meta',meta.count()]])request.onsuccess=()=>{values[key]=request.result;done()};
+      for(const [key,request]of [['shop',snapshots.get('shop')],['users',accounts.getAll()],['snapshots',snapshots.count()],['meta',meta.count()],['bootstrap',meta.get('accounting-reset-bootstrap')]])request.onsuccess=()=>{values[key]=request.result;done()};
     },'فشلت الاستعادة؛ بقيت البيانات السابقة');
     this.revision=revision;
   }
 }
+function validResetTarget(value){return ['shopId','ownerId','requestId','grantId','intentId'].every(k=>typeof value?.[k]==='string'&&/^[A-Za-z0-9_.:-]{1,160}$/.test(value[k]))}
+function sameResetTarget(a,b){return ['shopId','ownerId','requestId','grantId','intentId'].every(k=>a[k]===b[k])}
 function advanceCloudRevision(tx,guard,fallback=0){
   const meta=tx.objectStore('meta'),request=meta.get('cloud-backup-revision');
   request.onsuccess=guard(()=>{const previous=request.result?.value??fallback;if(!Number.isSafeInteger(previous)||previous<0)throw new StoreError('تعذّر قراءة إصدار النسخ؛ لم تُسجّل العملية');meta.put({id:'cloud-backup-revision',value:Math.max(previous,fallback)+1})});

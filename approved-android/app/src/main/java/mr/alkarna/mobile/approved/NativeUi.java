@@ -35,5 +35,9 @@ final class NativeUi {
  case "ملف الترخيص أكبر من 64 كيلوبايت":return "Le fichier de licence dépasse 64 Ko";
  case "ملف الترخيص غير صالح أو تم تغييره":return "Le fichier de licence est invalide ou a été modifié";
  case "هذا الترخيص مخصص لجهاز آخر":return "Cette licence est destinée à un autre appareil";
+ case "تعذّر الاتصال بالإدارة. لم تُمسح بيانات المحاسبة؛ أعد المحاولة بعد عودة الاتصال.":return "Administration indisponible. Les données comptables n’ont pas été effacées ; réessayez après le rétablissement de la connexion.";
+ case "تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير.":return "Réinitialisation non confirmée. Vérifiez le résultat avant de réessayer ; l’activation reste inchangée.";
+ case "هناك طلب جارٍ. أعد المحاولة بعد قليل.":return "Une demande est en cours. Réessayez dans un instant.";
+ case "تعذّر التحقق من التفعيل المحلي":return "Impossible de vérifier l’activation locale.";
  default:return source;}}
 }
