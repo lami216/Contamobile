@@ -70,16 +70,16 @@ try{
    window.NativeFiles={async cloudBackup(command,data){
     globalThis.__cloudBridgeCalls.push({command,data});
     if(command==='configure')Object.assign(settings,data);
-    if(command==='list'){const cursor=data.cursor||0,number=cursor?20:30;return {versions:Array.from({length:number},(_,i)=>({id:'fixture-version-'+(cursor+i),sizeBytes:1024+i,createdAt:1762000000000-(cursor+i)*60000})),nextCursor:cursor?null:30}}
+    if(command==='list'){if(globalThis.__holdCloudList)await new Promise(resolve=>{globalThis.__releaseCloudList=resolve});const cursor=data.cursor||0,number=cursor?20:30;return {versions:Array.from({length:number},(_,i)=>({id:'fixture-version-'+(cursor+i),sizeBytes:1024+i,createdAt:1762000000000-(cursor+i)*60000})),nextCursor:cursor?null:30}}
     return {settings:{...settings},stage:'scheduled',lastSuccessAt:0,server:{entitlement:{enabled:true,active:true}}};
    },async stageCloudBackup(){throw Error('Unconsented test fixture must not stage a snapshot')}};
   });
   await page.goto('http://127.0.0.1:'+server.address().port+'/app/');await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
   for(const [key,value]of Object.entries({name:'مالك اختبار النسخ',shop:'محل مصطنع',username:'cloud-owner',password:'1234'}))await page.locator('#site-auth-form [name='+key+']').fill(value);
-  await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();await page.evaluate(()=>act('go:backup'));
+  await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());await page.evaluate(()=>act('go:backup'));await page.waitForFunction(()=>document.querySelector('#phone')?.dataset.view==='backup'&&!globalThis.karnaPersistenceBusy());
   return {context,page};
  }
- async function sourceCheck(name,fn){try{await fn();results.push({name,passed:true})}catch(error){results.push({name,passed:false,error:error.message})}}
+ async function sourceCheck(name,fn){try{await fn();results.push({name,passed:true})}catch(error){results.push({name,passed:false,error:error.stack||error.message})}}
  await sourceCheck('actual app passive status refresh preserves unsaved cloud settings and every other open sheet',async()=>{
   const {context,page}=await actualFixture();try{
    await page.locator('[data-action="cloud:settings"]').click();await page.locator('[name=cloudSchedule]').selectOption('weekly');await page.locator('[name=cloudTime]').fill('05:45');await page.locator('[name=cloudWeekday]').selectOption('7');await page.locator('[name=cloudConsent]').check();await page.locator('[name=cloudWifi]').check();
@@ -93,11 +93,15 @@ try{
  });
  await sourceCheck('actual app saved-version pane retains its inner scroll on passive refresh, global render and More',async()=>{
   const {context,page}=await actualFixture();try{
-   await page.locator('[data-action="cloud:list"]').click();const pane=page.locator('.feature-admin-list');assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),30);
+   await page.evaluate(()=>{globalThis.__holdCloudList=true});await page.locator('[data-action="cloud:list"]').click();await page.waitForFunction(()=>typeof globalThis.__releaseCloudList==='function');assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),true);
+   // A native response may still be pending when click() returns. Exercise that
+   // boundary explicitly; no navigation or request is retried to make it pass.
+   const pane=page.locator('[data-scroll-key="cloud-versions"]');assert.equal(await pane.count(),0);
+   await page.evaluate(()=>{globalThis.__holdCloudList=false;globalThis.__releaseCloudList();delete globalThis.__releaseCloudList});await pane.waitFor({state:'visible'});await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),30);
    const before=await pane.evaluate(element=>{element.scrollTop=240;return element.scrollTop});assert(before>0);
    await page.evaluate(()=>globalThis.__cloudAuditController.refresh(false));assert.equal(await pane.evaluate(element=>element.scrollTop),before);
    await page.evaluate(()=>render());assert.equal(await pane.evaluate(element=>element.scrollTop),before);
-   await page.evaluate(()=>act('cloud:more'));assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),50);assert.equal(await pane.evaluate(element=>element.scrollTop),before);assert.equal(await page.locator('[data-action="cloud:more"]').count(),0);
+   await page.locator('[data-action="cloud:more"]').click();await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());assert.equal(await pane.locator('[data-action^="cloud:download:"]').count(),50);assert.equal(await pane.evaluate(element=>element.scrollTop),before);assert.equal(await page.locator('[data-action="cloud:more"]').count(),0);
    assert.equal(await page.evaluate(()=>globalThis.__cloudBridgeCalls.filter(call=>call.command==='list'&&call.data.cursor===30).length),1);
   }finally{await context.close()}
  });
