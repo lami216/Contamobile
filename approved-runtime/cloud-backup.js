@@ -8,11 +8,12 @@ export function installCloudBackup(api){
  const base=()=>context||{shopId:api.state()?.originId,ownerId:api.actor()?.id};
  const sameShop=()=>context?.shopId===api.state()?.originId&&api.users().some(u=>u.id===context.ownerId&&u.role==='owner'&&u.active!==false);
  function friendly(value){
-  const key=String(value?.code||value?.message||value||'').toLowerCase();
+  const key=[value?.code,value?.status,value?.message,typeof value==='string'?value:''].filter(Boolean).join(' ').toLowerCase();
   if(/quota|storage.full/.test(key))return t('مساحة النسخ ممتلئة. تواصل مع الإدارة لزيادة المساحة؛ بيانات الهاتف محفوظة.','Espace de sauvegarde plein. Contactez l’administration ; les données locales sont conservées.');
   if(/size|too.large|413/.test(key))return t('تجاوز الرفع حد حجم النسخة أو مساحة الاشتراك المتاحة. احتفظ بنسخة ملف وراجع المساحة مع الدعم.','L’envoi dépasse la taille autorisée ou l’espace disponible de l’abonnement. Conservez une copie fichier et vérifiez l’espace avec l’assistance.');
   if(/expired|entitlement|not.enabled|disabled|403/.test(key))return t('اشتراك النسخ غير متاح. راجع حالة الخدمة مع الإدارة.','Service de sauvegarde indisponible. Vérifiez l’abonnement avec l’administration.');
   if(/unconfigured|not.configured|404/.test(key))return t('خدمة النسخ لم تُجهّز لهذه النسخة أو على السيرفر بعد.','Le service de sauvegarde n’est pas encore configuré pour cette version ou sur le serveur.');
+  if(/server.error|503/.test(key))return t('خدمة النسخ غير متاحة الآن أو لم تُجهّز على السيرفر بعد. بيانات الهاتف محفوظة والعمل دون إنترنت متاح.','Le service de sauvegarde est indisponible ou pas encore préparé sur le serveur. Les données locales sont conservées et le travail hors connexion reste disponible.');
   if(/wifi|unmetered/.test(key))return t('بانتظار Wi-Fi حسب اختيارك.','En attente du Wi-Fi selon votre choix.');
   if(/pause|restore|review/.test(key))return t('الرفع متوقف للمراجعة بعد استعادة أو دمج بيانات. راجع الإعدادات قبل استئنافه.','Envoi suspendu après restauration ou fusion. Vérifiez les réglages avant de reprendre.');
   if(/owner|registered|registration/.test(key))return t('يلزم ربط هذا المالك والهاتف في كونتا تولز أولًا.','Ce propriétaire et cet appareil doivent être associés dans Contatools.');

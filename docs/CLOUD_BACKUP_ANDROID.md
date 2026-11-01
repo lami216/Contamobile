@@ -45,8 +45,12 @@ version; its late response cannot reactivate the locally paused upload.
 
 Android `JobScheduler` persists one network-constrained job through process death
 and reboot. The user may choose upload after changes become staged and connectivity
-is available, a daily or weekly preferred local time, and an unmetered/Wi-Fi-only
-constraint. New changes are coalesced; there is no periodic HTTP status heartbeat
+is available, a daily or weekly preferred local time, and a Wi-Fi-only constraint.
+Wi-Fi-only conservatively requires both Wi-Fi transport and an unmetered network;
+unmetered cellular is rejected, and metered Wi-Fi waits. Android 9+ jobs include
+both requirements; Android 8 jobs use the unmetered scheduling constraint plus the
+same explicit transport check before every upload request. New changes are coalesced;
+there is no periodic HTTP status heartbeat
 or full-database polling. Network errors retry with bounded exponential backoff,
 jitter and applicable server retry deadlines. Manual backup uses the same durable
 upload and does not create duplicate versions when nothing changed.
@@ -80,10 +84,11 @@ invented envelope.
 
 `CloudBackupTest` is an emulator-only instrumentation fixture that skips an existing
 backup staging area. It uses a signed in-memory service and real Keystore, private
-encrypted files and JobScheduler. Its five scenarios cover consent/scope/stale
+encrypted files and JobScheduler. Its six scenarios cover consent/scope/stale
 staging and pause, lost commit responses across manager recreation with a newer
 snapshot, verified transferred downloads and tamper rejection, server generation
-invalidation without losing local staging, and an actual
+invalidation without losing local staging, Wi-Fi/cellular transport restrictions,
+and an actual
 operating-system JobService run without an Activity or WebView. It makes no request
 to the production service. Instrumentation results must be taken from the candidate
 build's emulator run; the existence of the tests is not execution evidence.

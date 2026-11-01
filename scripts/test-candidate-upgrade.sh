@@ -108,7 +108,7 @@ for group in ActivationConcurrencyTest BusyBackNavigationTest CloudBackupTest; d
  case "$group" in
   ActivationConcurrencyTest) expected_tests=5 ;;
   BusyBackNavigationTest) expected_tests=2 ;;
-  CloudBackupTest) expected_tests=5 ;;
+  CloudBackupTest) expected_tests=6 ;;
  esac
  grep -Eq "^OK \($expected_tests tests\)" "candidate-proof/$group.txt"
 done

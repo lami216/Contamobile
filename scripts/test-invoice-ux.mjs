@@ -41,7 +41,11 @@ try{
    await page.evaluate(async id=>{await act('void:'+id);await act('confirm-void')},purchase);
    const error=await page.locator('#form-error').textContent();assert.match(error,/زيت/);assert.match(error,/المخزن الرئيسي/);assert.match(error,/النقص 1/);assert.equal(await page.evaluate(id=>S.records.find(r=>r.id===id).voided||false,purchase),false);
    assert.equal(await page.locator('#form-error [data-action="source-location:'+sale+'"]').count(),1);
-   await page.locator('#form-error [data-action="source-location:'+sale+'"]').click();assert.equal(await page.evaluate(()=>view),'sale-source');assert.equal(await page.evaluate(()=>editingId),null);assert.equal(await page.locator('.source-record-focus').count(),1);
+   await page.locator('#form-error [data-action="source-location:'+sale+'"]').click();assert.equal(await page.evaluate(()=>view),'sale-source');assert.equal(await page.evaluate(()=>editingId),null);
+   // Highlighting is intentionally applied in render's next animation frame.
+   // count() is instantaneous and can precede that frame on bundled Chromium.
+   await page.locator('tr.source-record-focus[data-action="invoice:'+sale+'"]').waitFor({state:'visible'});
+   assert.equal(await page.locator('.source-record-focus').count(),1);
    await page.evaluate(async({sale,purchase})=>{await act('void:'+sale);await act('confirm-void');await act('void:'+purchase);await act('confirm-void')},{sale,purchase});
    const ending=await page.evaluate(id=>({stock:S.products.find(p=>p.id===id).stocks[S.warehouse],cash:S.accounts[0].balance,cancelled:S.records.filter(r=>r.kind==='sale'||r.kind==='purchase').every(r=>r.voided),actors:S.records.filter(r=>r.voided).map(r=>r.voidedByName)}),product);
    assert.equal(ending.stock,3);assert.equal(ending.cash,1000);assert.equal(ending.cancelled,true);assert(ending.actors.every(name=>name==='مالك التدقيق'));

@@ -99,15 +99,18 @@ final class CloudBackupManager {
   // snapshot waits for this immutable upload to finish, then gets one new job.
   if(running&&!revoke)return;
   long due=revoke?System.currentTimeMillis():disk.state.optLong("dueAt",System.currentTimeMillis());due=Math.max(due,disk.state.optLong("retryAt"));
-  int network=!revoke&&settings().optBoolean("wifiOnly")?JobInfo.NETWORK_TYPE_UNMETERED:JobInfo.NETWORK_TYPE_ANY;JobInfo old=scheduler().getPendingJob(CloudBackupPolicy.JOB_ID);
-  if(old!=null&&old.getExtras().getLong("dueAt",-1)==due&&old.getNetworkType()==network)return;
-  android.os.PersistableBundle extras=new android.os.PersistableBundle();extras.putLong("dueAt",due);
-  JobInfo job=new JobInfo.Builder(CloudBackupPolicy.JOB_ID,new ComponentName(context,CloudBackupJobService.class)).setPersisted(true).setExtras(extras).setRequiredNetworkType(network).setMinimumLatency(Math.max(0,due-System.currentTimeMillis())).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build();
+  boolean wifi=!revoke&&settings().optBoolean("wifiOnly");int network=wifi?JobInfo.NETWORK_TYPE_UNMETERED:JobInfo.NETWORK_TYPE_ANY;JobInfo old=scheduler().getPendingJob(CloudBackupPolicy.JOB_ID);
+  if(old!=null&&old.getExtras().getLong("dueAt",-1)==due&&old.getExtras().getBoolean("wifiOnly",false)==wifi)return;
+  android.os.PersistableBundle extras=new android.os.PersistableBundle();extras.putLong("dueAt",due);extras.putBoolean("wifiOnly",wifi);
+  JobInfo.Builder builder=new JobInfo.Builder(CloudBackupPolicy.JOB_ID,new ComponentName(context,CloudBackupJobService.class)).setPersisted(true).setExtras(extras).setRequiredNetworkType(network).setMinimumLatency(Math.max(0,due-System.currentTimeMillis())).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL);
+  if(wifi&&android.os.Build.VERSION.SDK_INT>=28)builder.setRequiredNetwork(new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED).build());
+  JobInfo job=builder.build();
   if(scheduler().schedule(job)!=JobScheduler.RESULT_SUCCESS)throw new IOException("SCHEDULER_UNAVAILABLE");
  }
  void resume(){synchronized(lock){try{scheduleLocked();}catch(Exception ignored){}}}
  void launch(){if(!manualQueued.compareAndSet(false,true))return;Thread thread=new Thread(()->{try{process(new AtomicBoolean(false));}finally{manualQueued.set(false);}},"AlKarnaBackupManual");thread.start();}
- private void ensureNetwork(boolean wifi) throws Exception {if(injected)return;ConnectivityManager manager=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);NetworkCapabilities caps=manager==null?null:manager.getNetworkCapabilities(manager.getActiveNetwork());if(caps==null||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))throw new IOException("NETWORK");if(wifi&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)==false)throw new IOException("WIFI_REQUIRED");}
+ static boolean unmeteredWifi(NetworkCapabilities caps){return caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);}
+ private void ensureNetwork(boolean wifi) throws Exception {if(injected)return;ConnectivityManager manager=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);NetworkCapabilities caps=manager==null?null:manager.getNetworkCapabilities(manager.getActiveNetwork());if(caps==null||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))throw new IOException("NETWORK");if(wifi&&!unmeteredWifi(caps))throw new IOException("WIFI_REQUIRED");}
  private void revokeIfNeeded() throws Exception {JSONObject revoke;synchronized(lock){revoke=disk.state.optJSONObject("revocation");if(revoke==null)return;revoke=ProtocolJson.copy(revoke);}try{client.call("consent",revoke.put("enabled",false).put("consentVersion",1));}catch(ContatoolsClient.ServiceFailure error){if(error.status!=403&&error.status!=404)throw error;}synchronized(lock){JSONObject current=disk.state.optJSONObject("revocation");if(same(current,revoke)){disk.state.remove("revocation");disk.save();}}}
  private void live(long epoch,JSONObject target,AtomicBoolean stopped) throws Exception {if(stopped.get())throw new IOException("STOPPED");synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!settings().optBoolean("consent")||!same(disk.state.optJSONObject("context"),target))throw new IOException("PAUSED");ensureNetwork(settings().optBoolean("wifiOnly"));}}
  void process(AtomicBoolean stopped){process(stopped,false);}
