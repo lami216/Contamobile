@@ -1,17 +1,22 @@
-name: Contatools distribution candidate v20
+name: Contatools distribution candidate v21
 on:
   push:
-    branches: [feat/remote-reset-admin-20261101]
-    paths: ['approved-android/**', 'approved-runtime/**', 'scripts/**', '.github/workflows/contatools-candidate.yml']
+    branches: [main, feat/remote-reset-admin-20261101]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: candidate-v20-${{ github.ref }}
+  group: candidate-v21-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verified_bytes:
+    if: >-
+      github.repository == 'lami216/Contamobile' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/remote-reset-admin-20261101')
     runs-on: ubuntu-latest
     outputs:
       run_id: ${{ steps.prior.outputs.run_id }}
@@ -26,14 +31,14 @@ jobs:
           def api(path):
               return json.loads(subprocess.check_output(['gh','api',path],text=True))
           repo=os.environ['GITHUB_REPOSITORY'];sha=os.environ['GITHUB_SHA'];found=''
-          if os.environ['GITHUB_EVENT_NAME']!='workflow_dispatch':
-              runs=api(f'repos/{repo}/actions/workflows/contatools-candidate.yml/runs?head_sha={sha}&status=completed&per_page=30')['workflow_runs']
-              for run in runs:
-                  if run['head_sha']!=sha or run['conclusion']!='success':continue
-                  artifacts=api(f'repos/{repo}/actions/runs/{run["id"]}/artifacts')['artifacts']
-                  names={a['name'] for a in artifacts if not a['expired'] and a['size_in_bytes']>0}
-                  if {'alkarna-candidate-v20','alkarna-candidate-v20-proof'}<=names:
-                      found=str(run['id']);break
+          runs=api(f'repos/{repo}/actions/workflows/contatools-candidate.yml/runs?head_sha={sha}&status=completed&per_page=30')['workflow_runs']
+          for run in runs:
+              if run['head_sha']!=sha or run['conclusion']!='success':continue
+              if run['event'] not in ['push','workflow_dispatch'] or run['head_branch'] not in ['main','feat/remote-reset-admin-20261101']:continue
+              artifacts=api(f'repos/{repo}/actions/runs/{run["id"]}/artifacts')['artifacts']
+              names={a['name'] for a in artifacts if not a['expired'] and a['size_in_bytes']>0}
+              if {'alkarna-candidate-v21','alkarna-candidate-v21-proof'}<=names:
+                  found=str(run['id']);break
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('run_id='+found+'\n')
           if found:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(f'Exact tested APK retained from [verified run {found}](https://github.com/{repo}/actions/runs/{found}) for commit {sha}.\n')
@@ -41,8 +46,12 @@ jobs:
   native_compile:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -64,30 +73,36 @@ jobs:
           python3 scripts/prepare-approved-android.py
           node scripts/prepare-license-fixtures.mjs
       - name: Compile native app and instrumentation and run JVM tests without release credentials
-        run: gradle -p approved-android -PalkarnaAuditDebugTests=true -PalkarnaVersionCode=20 -PalkarnaVersionName=1.0.19 :app:testDebugUnitTest :app:compileDebugAndroidTestJavaWithJavac --no-daemon --stacktrace
+        run: gradle -p approved-android -PalkarnaAuditDebugTests=true -PalkarnaVersionCode=21 -PalkarnaVersionName=1.0.20 :app:testDebugUnitTest :app:compileDebugAndroidTestJavaWithJavac --no-daemon --stacktrace
       - name: Retain independent native preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-native-compile-v20-proof
+          name: alkarna-native-compile-v21-proof
           path: |
             approved-android/app/build/reports/tests
             approved-android/app/build/test-results/testDebugUnitTest
           retention-days: 30
           if-no-files-found: warn
   candidate:
-    needs: verified_bytes
-    if: needs.verified_bytes.outputs.run_id == ''
+    needs: [verified_bytes, native_compile]
+    if: >-
+      github.repository == 'lami216/Contamobile' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/remote-reset-admin-20261101') &&
+      needs.verified_bytes.outputs.run_id == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      CANDIDATE_VERSION_CODE: '20'
-      CANDIDATE_APK: candidate-output/alkarna-1.0.19-v20.apk
-      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19'
-      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '19'
-      ALKARNA_PREVIOUS_APK_SHA256: c5558a074e48c5705f10ef20b233d39d33ee1ccc3b91d5c0bfe1c745d0153f3e
+      CANDIDATE_VERSION_CODE: '21'
+      CANDIDATE_APK: candidate-output/alkarna-1.0.20-v21.apk
+      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19 20'
+      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '20'
+      ALKARNA_PREVIOUS_APK_SHA256: 94848194716a6a794182ae4eb86d29af471899b79bc3a6c011903e58613c52e4
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -130,9 +145,14 @@ jobs:
           gh run download 41264015644 --repo lami216/Contamobile --name alkarna-candidate-v19 --dir baseline-v19
           mv baseline-v19/alkarna-1.0.18-v19.apk baseline-v19/alkarna-approved.apk
           echo "c5558a074e48c5705f10ef20b233d39d33ee1ccc3b91d5c0bfe1c745d0153f3e  baseline-v19/alkarna-approved.apk" | sha256sum --check
-          python3 scripts/verify-candidate-apk.py baseline baseline-v19/alkarna-approved.apk > candidate-output/baseline-verified.json
+          test "$(gh api repos/lami216/Contamobile/actions/runs/41344455418 --jq .head_sha)" = 69fff273bc3dea02fd0780e97f31510a6948aecd
+          test "$(gh api repos/lami216/Contamobile/actions/runs/41344455418 --jq .conclusion)" = success
+          gh run download 41344455418 --repo lami216/Contamobile --name alkarna-candidate-v20 --dir baseline-v20
+          mv baseline-v20/alkarna-1.0.19-v20.apk baseline-v20/alkarna-approved.apk
+          echo "94848194716a6a794182ae4eb86d29af471899b79bc3a6c011903e58613c52e4  baseline-v20/alkarna-approved.apk" | sha256sum --check
+          python3 scripts/verify-candidate-apk.py baseline baseline-v20/alkarna-approved.apk > candidate-output/baseline-verified.json
       - name: Verify every original baseline retains the permanent identity
-        run: python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk
+        run: python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk
       - name: Existing source checks and deterministic scheduling policy
         run: |
           bash -n scripts/test-candidate-upgrade.sh
@@ -162,25 +182,25 @@ jobs:
           node scripts/test-cloud-backup.mjs
           node scripts/test-user-integrity.mjs
           node scripts/test-import-html-escaping.mjs
-          node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs
+          node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs scripts/test-accounting-reset-lock.mjs
       - name: Existing permanent release identity only
         env:
           ALKARNA_SIGNING_BUNDLE: ${{ secrets.ALKARNA_SIGNING_BUNDLE }}
         run: python3 scripts/prepare-approved-signing.py
       - name: Build ONCE with actual public production settings and explicit version
         run: |
-          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=20 -PalkarnaVersionName=1.0.19 --no-daemon --stacktrace
-          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.19-v20.apk
-          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.19-v20.apk > candidate-output/candidate-verified.json
-          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.19-v20.apk
-          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk candidate-output/alkarna-1.0.19-v20.apk
-          sha256sum candidate-output/alkarna-1.0.19-v20.apk > candidate-output/SHA256SUMS.txt
+          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=21 -PalkarnaVersionName=1.0.20 --no-daemon --stacktrace
+          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.20-v21.apk
+          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.20-v21.apk > candidate-output/candidate-verified.json
+          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.20-v21.apk
+          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk candidate-output/alkarna-1.0.20-v21.apk
+          sha256sum candidate-output/alkarna-1.0.20-v21.apk > candidate-output/SHA256SUMS.txt
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact original v13, v14, v15, v16, v17 v18 and v19 to v20 updates, temporary and perpetual, and native launcher shortcut
+      - name: Exact original v13 through v20 to v21 updates, temporary and perpetual, and native launcher shortcut
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -191,8 +211,8 @@ jobs:
       - name: Preserve exact tested customer bytes
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-candidate-v20
-          path: candidate-output/alkarna-1.0.19-v20.apk
+          name: alkarna-candidate-v21
+          path: candidate-output/alkarna-1.0.20-v21.apk
           compression-level: 0
           retention-days: 90
       - name: Separate integration-test APK and public inspection evidence
@@ -204,7 +224,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: alkarna-candidate-v20-proof
+          name: alkarna-candidate-v21-proof
           path: |
             candidate-proof
             candidate-output/*.json

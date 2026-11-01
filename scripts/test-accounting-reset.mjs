@@ -25,11 +25,26 @@ try{
    if(command==='prepare'){if(native.failBeforePrepare)throw Error('Synthetic rejection before durable prepare');assert.equal(payload.accepted,true);native.prepares++;native.prepared={...native.target,stage:'prepared',grantId:'synthetic-grant',intentId:'synthetic-intent',accountingResetId:native.target.requestId};if(native.lostClaimOnce){native.lostClaimOnce=false;native.awaiting=true;throw Error('Synthetic lost claim response')}return native.prepared}
    if(command==='decline'){native.declines++;native.enabled=false;return {stage:'declined'}}
    if(command==='finish'){if(native.finishFailOnce){native.finishFailOnce=false;throw Error('Synthetic native journal failure')}native.finished=true;native.enabled=false;native.ackPending=true;return {stage:'complete',ackPending:true}}
-   if(command==='ack'){native.acks++;native.ackPending=false;return {stage:'complete'}}
+   if(command==='ack'){
+    native.acks++;
+    if(native.holdAck){
+     native.ackWaiting=true;
+     await new Promise(resolve=>{native.releaseAck=resolve});
+    }
+    native.ackPending=false;
+    return {stage:'complete'};
+   }
    return {stage:'none'};
   });
   await page.exposeFunction('syntheticResetStats',()=>({acks:native.acks,prepares:native.prepares}));
-  await page.addInitScript(()=>{window.NativeFiles={licenseStatus:()=>window.syntheticResetNative('license',{}),accountingReset:(command,payload)=>window.syntheticResetNative(command,payload)}});
+  await page.addInitScript(()=>{window.NativeFiles={
+   licenseStatus:()=>window.syntheticResetNative('license',{}),
+   async accountingReset(command,payload){
+    const result=await window.syntheticResetNative(command,payload);
+    if(command==='ack')window.__resetAckReturned=true;
+    return result;
+   }
+  }});
   await page.goto(origin+'/?lang='+lang);await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
   await page.locator('#site-auth-form [name=username]').fill('old-owner');await page.locator('#site-auth-form [name=password]').fill('1234');await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();
   await page.evaluate(async()=>{await act('go:inventory');await act('open:product')});
@@ -40,6 +55,13 @@ try{
  const enable=async fixture=>{fixture.native.enabled=true;await fixture.page.evaluate(()=>dispatchEvent(new Event('online')))};
  const dialog=page=>page.locator('[data-accounting-reset=review]');
  const stored=page=>page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),d=await new ShopDatabase().open();return {snapshots:await d.all('snapshots'),users:await d.all('users'),meta:await d.all('meta')}});
+ async function waitForAck(native){
+  const deadline=Date.now()+10000;
+  while(!native.ackWaiting){
+   if(Date.now()>deadline)throw Error('ACK did not start: '+JSON.stringify(native.trace));
+   await new Promise(resolve=>setTimeout(resolve,25));
+  }
+ }
  await check('receiving a signed request never wipes; refusal retains business data, credentials and activation',async()=>{
   const f=await fixture();try{const before=await stored(f.page);await enable(f);await dialog(f.page).waitFor();assert.equal(f.native.prepares,0);assert.deepEqual(await stored(f.page),before);await f.page.getByRole('button',{name:'رفض الطلب',exact:true}).click();await dialog(f.page).waitFor({state:'detached'});assert.equal(f.native.declines,1);assert.deepEqual(await stored(f.page),before);assert((await f.page.evaluate(()=>NativeFiles.licenseStatus())).valid)}finally{await f.context.close()}
  });
@@ -96,6 +118,108 @@ try{
     await f.page.evaluate(()=>act('go:home'));assert.equal((await stored(f.page)).snapshots.find(x=>x.id==='shop').state.products.length,0);
     await f.page.getByRole('button',{name:'إعادة المحاولة',exact:true}).click();await f.page.locator('[data-action="site:setup"]').waitFor();assert.equal((await stored(f.page)).users.length,0);assert.equal((await stored(f.page)).snapshots.find(x=>x.id==='shop').state.products.length,0);assert.equal(await f.page.evaluate(()=>Object.keys(localStorage).filter(x=>x.includes('draft')).length),0);assert(f.native.finished);
    }finally{await f.context.close()}
+  }
+ });
+ for(const kind of ['financial sale','user account'])await check('delayed reset ACK cannot release an in-flight '+kind+' save or admit a second action',async()=>{
+  const f=await fixture();
+  try{
+   // Complete a real browser reset and recreate its owner while the native ACK
+   // remains outstanding. Only the native transport is synthetic; the action,
+   // IndexedDB save, user verifiers and business state are the packaged runtime.
+   f.native.holdAck=true;
+   await enable(f);
+   await dialog(f.page).waitFor();
+   await f.page.locator('[name=accountingResetConsent]').check();
+   await f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true}).click();
+   await f.page.locator('[data-action="site:setup"]').waitFor();
+   await f.page.locator('#site-auth-form [name=username]').fill('fresh-owner');
+   await f.page.locator('#site-auth-form [name=password]').fill('4321');
+   await f.page.locator('[data-action="site:setup"]').click();
+   await f.page.locator('.nav').waitFor();
+   await waitForAck(f.native);
+
+   let action;
+   if(kind==='financial sale'){
+    await f.page.evaluate(async()=>{
+     await act('go:inventory');
+     await act('open:product');
+     for(const [key,value]of Object.entries({name:'منتج محفوظ',price:'50',cost:'30',qty:'3',openingWarehouse:S.warehouse})){
+      const input=document.querySelector('#sheet-form [name="'+key+'"]');
+      if(input)input.value=value;
+     }
+     await act('save-product');
+     await act('new:sale');
+     await act('pos:add:'+S.products.at(-1).id);
+     await act('pos:checkout');
+    });
+    action='post-sale';
+   }else{
+    await f.page.evaluate(()=>act('site:new-user'));
+    for(const [key,value]of Object.entries({name:'موظف محفوظ',username:'saved-worker',password:'worker123'})){
+     await f.page.locator('#sheet-form [name='+key+']').fill(value);
+    }
+    action='site:feature:user-save';
+   }
+   const before=await stored(f.page);
+   await f.page.evaluate(async action=>{
+    const {ShopDatabase}=await import('/database.js'),save=ShopDatabase.prototype.save;
+    globalThis.__heldSaveCount=0;
+    ShopDatabase.prototype.save=function(...args){
+     globalThis.__heldSaveCount++;
+     return new Promise((resolve,reject)=>{
+      globalThis.__releaseResetOverlapSave=()=>save.apply(this,args).then(resolve,reject);
+     });
+    };
+    const task=globalThis.__resetOverlapAction={settled:false};
+    task.promise=act(action).finally(()=>{task.settled=true});
+   },action);
+   await f.page.waitForFunction(()=>typeof __releaseResetOverlapSave==='function');
+   assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),true);
+   assert.deepEqual(await stored(f.page),before,'No durable save before releasing the gate');
+
+   f.native.releaseAck();
+   await f.page.waitForFunction(()=>globalThis.__resetAckReturned===true);
+   const during=await f.page.evaluate(async()=>{
+    // Observe after the ACK continuation, then attempt an actual second action.
+    await new Promise(resolve=>setTimeout(resolve,0));
+    await act('open:product');
+    return {
+     busy:karnaPersistenceBusy(),settled:__resetOverlapAction.settled,
+     saveCount:__heldSaveCount,view,productForm:!!document.querySelector('#sheet-form [name=cost]'),
+     disabled:[...document.querySelectorAll('#phone button')].every(button=>button.disabled)
+    };
+   });
+   assert.equal(during.busy,true,'ACK must not release the business/user save lock');
+   assert.equal(during.settled,false);
+   assert.equal(during.saveCount,1);
+   assert.equal(during.productForm,false,'Second action must stay blocked');
+   assert.equal(during.disabled,true);
+   assert.deepEqual(await stored(f.page),before);
+
+   await f.page.evaluate(()=>globalThis.__releaseResetOverlapSave());
+   await f.page.waitForFunction(()=>globalThis.__resetOverlapAction.settled);
+   assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),false);
+   const after=await stored(f.page),shop=after.snapshots.find(row=>row.id==='shop');
+   assert.equal(shop.revision,before.snapshots.find(row=>row.id==='shop').revision+1);
+   if(kind==='financial sale'){
+    const sales=shop.state.records.filter(record=>record.kind==='sale');
+    assert.equal(sales.length,1);
+    assert.equal(sales[0].total,50);
+    assert.equal(shop.state.products[0].stocks[shop.state.warehouse],2);
+    assert.equal(after.users.length,1);
+   }else{
+    assert.equal(after.users.length,2);
+    assert.equal(after.users.filter(user=>user.username==='saved-worker').length,1);
+    assert.equal(shop.state.records.length,0);
+    assert.equal(await f.page.evaluate(async()=>{
+     const {ShopDatabase,verifyPassword}=await import('/database.js'),db=await new ShopDatabase().open();
+     return verifyPassword('worker123',(await db.all('users')).find(user=>user.username==='saved-worker').password);
+    }),true);
+   }
+   assert((await f.page.evaluate(()=>NativeFiles.licenseStatus())).valid);
+  }finally{
+   f.native.releaseAck?.();
+   await f.context.close();
   }
  });
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

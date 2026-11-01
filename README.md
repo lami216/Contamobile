@@ -1,5 +1,27 @@
 # الكرنه — Contamobile
 
+## Distributed Android app
+
+The current seller-approved application is `approved-runtime/` inside the native
+Android host in `approved-android/`. It uses IndexedDB for accounting and the
+existing Android Keystore-backed activation and service identity. The Expo tree
+under `src/` is retained as historical source; it is not the v20/v21 APK runtime.
+
+Use `.github/workflows/contatools-candidate.yml` for the permanent signed APK.
+It tests the original distributed versions before retaining the exact APK bytes.
+On pull requests to `main`, the runtime/browser and native compile gates run
+without release signing secrets. A signed candidate is built only on a trusted
+push or an explicitly selected trusted dispatch. No workflow deploys Contatools.
+
+See `docs/ANDROID_ACCOUNTING_RESET.md` for consent, interruption and preservation
+guarantees. Reset changes must keep the normal accounting save lock independent
+from reset/acknowledgement state. CSS and the accepted Arabic/French layouts are
+unchanged by the v21 correctness cleanup.
+
+## Historical Expo implementation
+
+The following documents the retained prototype, not the distributed APK build.
+
 Android-first, offline-first mobile edition of the desktop **الكرنه** accounting and shop-management application.
 
 The mobile application is a React Native / Expo rewrite of the desktop behavior. It does **not** embed the Next.js/Electron UI and does not require the desktop server at runtime.

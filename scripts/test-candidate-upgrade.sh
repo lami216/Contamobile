@@ -51,16 +51,17 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 20
+test "$CANDIDATE_VERSION_CODE" = 21
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
 test -s "$test_apk"
+sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All seven originally distributed versions are mandatory for this candidate.
+# All eight originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -76,12 +77,14 @@ assert_offline cloud-backup-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
 grep -Eq '^OK \(6 tests\)' "$proof_dir/CloudBackupTest.txt"
 test "$(grep -c 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt")" = 6
+test "$(grep 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt" | sort -u | wc -l)" = 6
 assert_offline cloud-backup-network-after
 adb shell pm clear "$app"
 assert_offline accounting-reset-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountingResetTest -e accountingResetIsolation true "$runner" | tee "$proof_dir/AccountingResetTest.txt"
 grep -Eq '^OK \(6 tests\)' "$proof_dir/AccountingResetTest.txt"
 test "$(grep -c 'ACCOUNTING RESET CASE PASS ' "$proof_dir/AccountingResetTest.txt")" = 6
+test "$(grep 'ACCOUNTING RESET CASE PASS ' "$proof_dir/AccountingResetTest.txt" | sort -u | wc -l)" = 6
 assert_offline accounting-reset-network-after
 adb shell am force-stop "$app"
 adb uninstall "$app"
@@ -143,4 +146,25 @@ adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersist
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
+if grep -q 'FATAL EXCEPTION' candidate-proof/runtime-errors.txt; then
+ cat candidate-proof/runtime-errors.txt
+ exit 1
+fi
+python3 - <<'PY'
+import json,re
+from pathlib import Path
+root=Path('candidate-proof')
+checks=[]
+for baseline in range(13,21):
+ for activation in ('temporary','perpetual'):
+  for phase in ('after','cold-restart','repeat-after'):
+   filename=root/f'v{baseline}-{activation}-{phase}.txt'
+   text=filename.read_text()
+   assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
+   assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
+   checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
+assert len(checks)==48
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':21,'upgradeScenarios':16,'preservationChecks':48,'checks':checks},indent=2)+'\n')
+PY
+sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt

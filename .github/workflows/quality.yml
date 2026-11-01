@@ -15,7 +15,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  approved-runtime:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/runtime-tests" --no-package-lock --ignore-scripts playwright@1.62.1
+          node "$RUNNER_TEMP/runtime-tests/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Check the shipped runtime and storage contracts
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/runtime-tests/node_modules/playwright
+          PLAYWRIGHT_USE_BUNDLED: '1'
+        run: |
+          node scripts/verify-approved-source-navigation.mjs
+          node scripts/verify-invoice-ux.mjs
+          node scripts/verify-report-sources.mjs
+          node scripts/verify-party-summaries.mjs
+          node scripts/verify-french-locale.mjs
+          node scripts/verify-feature-domains.mjs
+          node scripts/verify-import-features.mjs
+          node scripts/test-storage-integrity.mjs
+          node scripts/test-runtime-integrity.mjs
+          node scripts/test-invoice-ux.mjs
+          node scripts/test-accounting-reset.mjs
+          node scripts/test-cloud-backup.mjs
+          node scripts/test-user-integrity.mjs
+          node scripts/test-import-html-escaping.mjs
+          node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs scripts/test-accounting-reset-lock.mjs
+
   quality:
+    # This tree is retained for provenance. It is not the distributed Android app.
+    if: github.ref == 'refs/heads/mobile-v1' || github.ref == 'refs/heads/ui-redesign-v2' || github.base_ref == 'mobile-v1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
