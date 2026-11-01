@@ -40,8 +40,8 @@ export function installAccountingReset(api){
   const later=()=>{deferred=request?.requestId;remove()};
   header.append(button(t('ليس الآن','Plus tard'),later));
   if(api.actor()?.id===request.ownerId&&api.actor()?.role==='owner'){
-   const label=node('label',t('أفهم أن الفواتير والأرصدة والمنتجات والعملاء والموردين والمستخدمين ستُحذف من هذا الهاتف.','Je comprends que les factures, soldes, produits, clients, fournisseurs et utilisateurs seront supprimés de ce téléphone.'));
-   const consent=node('input');consent.type='checkbox';consent.name='accountingResetConsent';label.prepend(consent);actions.append(label);
+   const label=node('label',t('أفهم أن الفواتير والأرصدة والمنتجات والعملاء والموردين والمستخدمين ستُحذف من هذا الهاتف.','Je comprends que les factures, soldes, produits, clients, fournisseurs et utilisateurs seront supprimés de ce téléphone.'),'feature-check');
+   const consent=node('input');consent.type='checkbox';consent.name='accountingResetConsent';consent.style.flexShrink='0';label.prepend(consent);body.append(label);
    const accept=button(t('مسح البيانات وبدء محاسبة جديدة','Effacer et recommencer'),async()=>{
     if(!consent.checked||flight||api.isBusy()||!online())return;
     if(request.expiresAt<=Date.now()){request=null;remove();schedule(1000);return}
