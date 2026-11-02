@@ -149,6 +149,14 @@ try{
    await page.evaluate(()=>{const now=Date.now;Date.now=()=>now()+61000;window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('alkarna-network-available'))});
    await page.waitForFunction(()=>globalThis.__backupCalls.filter(x=>x.command==='status'&&x.data.refresh).length===2);
    assert(!/جارٍ قراءة الحالة/.test(await page.locator('#content').innerText()));
+   await page.locator('[data-action="cloud:overview"]').click();
+   assert.equal(await page.locator('[data-action="cloud:refresh"]').count(),0,'Retry must not be a permanent extra action');
+   const beforeRetry=await page.evaluate(()=>globalThis.__backupCalls.filter(x=>x.command==='status'&&x.data.refresh).length);
+   await page.evaluate(async()=>{globalThis.__backupOffline=true;await globalThis.__backupUxController.refresh(true)});
+   assert.equal(await page.locator('[data-action="cloud:refresh"]').innerText(),'إعادة المحاولة');
+   await page.evaluate(()=>{globalThis.__backupOffline=false});await page.locator('[data-action="cloud:refresh"]').click();await idle(page);
+   assert.equal(await page.locator('[data-action="cloud:refresh"]').count(),0,'Successful retry clears its error action');
+   assert.equal(await page.evaluate(()=>globalThis.__backupCalls.filter(x=>x.command==='status'&&x.data.refresh).length),beforeRetry+2);
   }finally{await context.close()}
  });
  await check('exit reminder explicitly concerns an external file and keeps server copies separate',async()=>{
