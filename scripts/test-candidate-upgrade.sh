@@ -51,7 +51,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 22
+test "$CANDIDATE_VERSION_CODE" = 23
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -59,9 +59,9 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All nine originally distributed versions are mandatory for this candidate.
+# All ten originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -79,12 +79,17 @@ assert_offline cloud-backup-network-after
 adb shell pm clear "$app"
 assert_offline accounting-reset-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountingResetTest -e accountingResetIsolation true "$runner" | tee "$proof_dir/AccountingResetTest.txt"
+assert_offline accounting-reset-network-after
+adb shell pm clear "$app"
+assert_offline owner-username-recovery-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest -e ownerUsernameRecoveryIsolation true "$runner" | tee "$proof_dir/OwnerUsernameRecoveryTest.txt"
+assert_offline owner-username-recovery-network-after
 python3 - <<'PY'
 import json,re
 from pathlib import Path
 sources=Path('approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved')
 proof=Path('candidate-proof');suites=[]
-for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS')]:
+for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS'),('OwnerUsernameRecoveryTest','OWNER USERNAME RECOVERY CASE PASS')]:
  source=(sources/f'{suite}.java').read_text(encoding='utf-8')
  expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
  assert len(expected)>=6 and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
@@ -99,7 +104,6 @@ for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingRe
  suites.append({'suite':suite,'executed':len(executed),'cases':sorted(executed),'passed':True})
 (proof/'native-scenario-summary.json').write_text(json.dumps({'suites':suites},indent=2)+'\n',encoding='utf-8')
 PY
-assert_offline accounting-reset-network-after
 adb shell am force-stop "$app"
 adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
@@ -156,7 +160,7 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDe
 grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
@@ -169,7 +173,7 @@ import json,re
 from pathlib import Path
 root=Path('candidate-proof')
 checks=[]
-for baseline in range(13,22):
+for baseline in range(13,23):
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
@@ -177,8 +181,8 @@ for baseline in range(13,22):
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==54
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':22,'upgradeScenarios':18,'preservationChecks':54,'checks':checks},indent=2)+'\n',encoding='utf-8')
+assert len(checks)==60
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':23,'upgradeScenarios':20,'preservationChecks':60,'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt
