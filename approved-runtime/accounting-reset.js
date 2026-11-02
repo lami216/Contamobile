@@ -63,8 +63,30 @@ export function installAccountingReset(api){
   remotePending=completed?.ackPending?'ack':null;
   request=null;
   remove();
-  await api.onApplied(outcome,completed);
+  const receipt=Object.fromEntries(['requestId','grantId','intentId','shopId','ownerId'].map(key=>[key,prepared[key]]));
+  await api.onApplied(outcome,completed,receipt);
   return true;
+ }
+ async function exitAfterReset(receipt){
+  if(typeof globalThis.NativeFiles?.closeAfterAccountingReset!=='function')return false;
+  try{
+   // Never close for a mere poll, an ACK, or a historical receipt after the new
+   // owner has completed setup. Both records are committed by the reset's IDB
+   // transaction before native finish durably consumes its grant.
+   const saved=await api.database.get('meta','accounting-reset:'+receipt.requestId);
+   const bootstrap=await api.database.accountingResetBootstrap();
+   const keys=['requestId','grantId','intentId','shopId','ownerId'];
+   if(!keys.every(key=>typeof receipt[key]==='string'&&receipt[key]===saved?.[key]&&receipt[key]===bootstrap?.[key]))return false;
+   const result=await globalThis.NativeFiles.closeAfterAccountingReset(receipt);
+   if(result?.stage!=='closing')return false;
+   stopped=true;
+   clearTimeout(timer);
+   return true;
+  }catch{
+   // The caller reopens the committed empty shop in this document instead of
+   // relying on a WebView navigation that the Android host deliberately blocks.
+   return false;
+  }
  }
  function canPresent(){
   return !api.isBusy()&&!api.hasModal()&&
@@ -244,7 +266,9 @@ export function installAccountingReset(api){
     request=null;
     remove();
    }
-   schedule(result.retryAt?result.retryAt-Date.now():60000);
+   // An in-place browser fallback has no new document/start event to wake its
+   // freshly consumed receipt. Deliver that ACK promptly, retaining native backoff.
+   schedule(result.retryAt?result.retryAt-Date.now():remotePending==='ack'?1000:60000);
   }catch{
    if(remotePending==='resume')progress();
    schedule(120000);
@@ -288,5 +312,5 @@ export function installAccountingReset(api){
   stopped=true;
   clearTimeout(timer);
  },{once:true});
- return {resume,start:wake,wake,cleanupDrafts};
+ return {resume,start:wake,wake,cleanupDrafts,exitAfterReset};
 }

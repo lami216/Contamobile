@@ -30,3 +30,4 @@ approved-runtime/assets/sql-asm.js
 
 # Disposable release verification evidence is attached to CI, not application source.
 candidate-proof/
+test-results/

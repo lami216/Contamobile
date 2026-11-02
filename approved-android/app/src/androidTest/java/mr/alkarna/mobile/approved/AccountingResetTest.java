@@ -1,6 +1,9 @@
 package mr.alkarna.mobile.approved;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.ComponentName;
+import android.app.ActivityManager;
 import android.os.Build;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -31,6 +34,7 @@ public class AccountingResetTest {
  private ActivityScenario<MainActivity> activity;
  private Map<String,PublicKey> originalKeys;
  private boolean ownsFixture;
+ private File backupDirectory;
  private int pauses;
  private String originalLicense;
  private double originalRemaining;
@@ -50,6 +54,9 @@ public class AccountingResetTest {
   assertTrue("The shell additionally verifies ro.kernel.qemu=1",Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish")||Build.FINGERPRINT.startsWith("generic")||Build.FINGERPRINT.contains("emulator")||Build.MODEL.contains("sdk_gphone"));
   context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   for(String name:new String[]{"activation-v2.json","contatools-v1.json",AccountingResetStore.FILE})assertFalse("Never replace an existing customer's private state",new File(context.getNoBackupFilesDir(),name).exists());
+  backupDirectory=new File(context.getNoBackupFilesDir(),"cloud-backup-v1");
+  assertFalse("Never replace an existing customer's backup staging",backupDirectory.exists());
+  assertNull("Disposable reset fixture needs an unused backup singleton",backupSingleton().get(null));
   assertFalse(context.getSharedPreferences("activation-v2",Context.MODE_PRIVATE).contains("state"));
   originalKeys=new HashMap<>(LicenseCompatibilityTest.keys());ownsFixture=true;license=new DeviceLicense(context);license.install(TestLicenseIssuer.issue(license.deviceCode(),"temporary",600));
   originalLicense=license.status().getJSONObject("license").getString("licenseId");originalRemaining=license.status().getJSONObject("license").getDouble("remainingSeconds");
@@ -58,9 +65,22 @@ public class AccountingResetTest {
  @After public void cleanup() throws Exception {
   if(!ownsFixture)return;
   if(activity!=null){async("if(window.__resetDb)__resetDb.db?.close();await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('alkarna-site-v1');r.onsuccess=resolve;r.onerror=reject;r.onblocked=resolve});");activity.close();}
+  ((android.app.job.JobScheduler)context.getSystemService(Context.JOB_SCHEDULER_SERVICE)).cancel(CloudBackupPolicy.JOB_ID);
+  Object backup=backupSingleton().get(null);
+  if(backup!=null){
+   var running=CloudBackupManager.class.getDeclaredField("running");running.setAccessible(true);long deadline=System.currentTimeMillis()+5000;
+   while(running.getBoolean(backup)&&System.currentTimeMillis()<deadline)Thread.sleep(20);
+   assertFalse("Disposable backup work must finish before cleanup",running.getBoolean(backup));
+  }
+  backupSingleton().set(null,null);
+  if(backupDirectory.exists()){
+   File[] files=backupDirectory.listFiles();assertNotNull(files);
+   for(File file:files){assertTrue(file.isFile());assertTrue(file.delete());}
+   assertTrue(backupDirectory.delete());
+  }
   for(String name:new String[]{"activation-v2.json","contatools-v1.json",AccountingResetStore.FILE})for(String suffix:new String[]{"",".bak",".new"}){File file=new File(context.getNoBackupFilesDir(),name+suffix);if(file.exists())assertTrue(file.delete());}
   assertTrue(context.getSharedPreferences("activation-v2",Context.MODE_PRIVATE).edit().clear().commit());
-  KeyStore keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);for(String alias:new String[]{"alkarna.activation.state.v2","alkarna.contatools.journal.v1",InstallationIdentity.ALIAS,AccountingResetStore.ALIAS})if(keys.containsAlias(alias))keys.deleteEntry(alias);
+  KeyStore keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);for(String alias:new String[]{"alkarna.activation.state.v2","alkarna.contatools.journal.v1","alkarna.cloud.backup.v1",InstallationIdentity.ALIAS,AccountingResetStore.ALIAS})if(keys.containsAlias(alias))keys.deleteEntry(alias);
   LicenseCompatibilityTest.keys().clear();LicenseCompatibilityTest.keys().putAll(originalKeys);
  }
  private void activationUnchanged() throws Exception {JSONObject status=new DeviceLicense(context).status();assertTrue(status.getBoolean("valid"));assertEquals(originalLicense,status.getJSONObject("license").getString("licenseId"));assertTrue(status.getJSONObject("license").getDouble("remainingSeconds")<=originalRemaining);}
@@ -93,6 +113,105 @@ public class AccountingResetTest {
   journal.state.put("grant",new JSONObject().put("payload",new JSONObject().put("grantId",oldGrant))).put("request",new JSONObject().put("requestId",UUID.randomUUID().toString()));journal.save();recreate();
   JSONObject waiting=client.poll(target);JSONObject wrong=accepted(waiting).put("ownerId","different-owner");rejected(()->client.prepare(wrong));assertEquals(0,service.claims);
   JSONObject prepared=client.prepare(accepted(waiting));journal=new RecoveryJournal(context,license.deviceCode(),new InstallationIdentity().fingerprint());assertTrue(journal.used(oldGrant));assertFalse(journal.state.has("grant"));assertFalse(journal.state.has("request"));assertEquals(prepared.getString("requestId"),journal.state.getString("lastAccountingResetId"));assertEquals("paused",channel.resumeLocal().getString("stage"));rejected(()->channel.request(target.getString("ownerId")));activationUnchanged();
+ }
+ @Test public void resetExitRequiresConsumedScopedReceiptAndIsOneShot() throws Exception {
+  JSONObject prepared=client.prepare(accepted(client.poll(target)));
+  JSONObject exit=receipt(prepared).put("shopId",target.getString("shopId")).put("ownerId",target.getString("ownerId")).put("purpose","accounting-reset-exit");
+  rejected(()->client.authorizeExit(exit)); // A signed prepared grant is not a consumed receipt.
+  client.finish(receipt(prepared));
+  rejected(()->client.authorizeExit(copy(exit).put("purpose","password-recovery")));
+  rejected(()->client.authorizeExit(copy(exit).put("shopId","other-shop")));
+  rejected(()->client.authorizeExit(copy(exit).put("ownerId","other-owner")));
+  rejected(()->client.authorizeExit(copy(exit).put("intentId",UUID.randomUUID().toString())));
+  assertTrue(client.authorizeExit(exit));
+  assertFalse(client.authorizeExit(exit));
+  recreate();
+  assertFalse("A restart must retain the one-shot close receipt",client.authorizeExit(exit));
+  assertEquals(0,service.completions); // No network ACK was needed to authorize the exit.
+  assertEquals("complete",client.resumeLocal().getString("stage"));
+  activationUnchanged();
+ }
+ @Test public void ownerConsentExitsTaskBeforeAckAndLauncherReopensFreshSetupWithoutClosingAgain() throws Exception {
+  // A real pause/job may be reached through the UI; never send fixture data to
+  // the deployment origin, even while exercising the production native bridge.
+  backupSingleton().set(null,new CloudBackupManager(context,(path,body)->{throw new IOException("Isolated backup outage");},true));
+  Intent launcher=Intent.makeMainActivity(new ComponentName(context,MainActivity.class));
+  activity=ActivityScenario.launch(launcher);
+  injectResetTransport();
+  until("!!document.querySelector('[data-action=\"site:setup\"]')");
+  // Keep polling paused only while the disposable owner is created and registered.
+  // The tested consent, transaction, native receipt and close use production paths.
+  js("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.querySelector('[name=username]').value='old-owner';document.querySelector('[name=password]').value='1234';document.querySelector('[data-action=\"site:setup\"]').click();true");
+  until("!!document.querySelector('.nav')");
+  async("const {ShopDatabase}=await import('https://appassets.androidplatform.net/assets/approved/database.js');window.__resetDb=await new ShopDatabase().open();window.__uiResetOwner=(await __resetDb.all('users'))[0].id;window.__uiResetShop=(await __resetDb.load()).originId;");
+  target.put("shopId",text("__uiResetShop")).put("ownerId",text("__uiResetOwner"));
+  channel.register(new JSONObject().put("shopId",target.getString("shopId")).put("owners",new JSONArray().put(new JSONObject().put("id",target.getString("ownerId")).put("name","مالك الفحص").put("role","owner"))));
+  async("await act('go:inventory');await act('open:product');document.querySelector('#sheet-form [name=name]').value='منتج قديم';document.querySelector('#sheet-form [name=price]').value='50';document.querySelector('#sheet-form [name=cost]').value='30';await act('save-product');");
+  assertEquals("1",js("S.products.length"));
+  final MainActivity[] completedActivity={null};final int[] taskId={-1};
+  activity.onActivity(a->{completedActivity[0]=a;taskId[0]=a.getTaskId();assertTrue("The launcher Activity must own its task",a.isTaskRoot());});
+  service.offlineAfterClaim=true;
+  js("delete document.hidden;dispatchEvent(new Event('online'));true");
+  until("!!document.querySelector('[data-accounting-reset=review]')");
+  assertEquals("true",js("document.querySelector('[data-accounting-reset=review] .recovery-primary').disabled"));
+  // Actual consent UI, not a direct database reset or a manual Activity close.
+  js("document.querySelector('[name=accountingResetConsent]').click();document.querySelector('[data-accounting-reset=review] .recovery-primary').click();true");
+  long deadline=System.currentTimeMillis()+15000;
+  while(activity.getState()!=androidx.lifecycle.Lifecycle.State.DESTROYED&&System.currentTimeMillis()<deadline)Thread.sleep(50);
+  assertEquals("The live reset UI must finish without waiting for server ACK",androidx.lifecycle.Lifecycle.State.DESTROYED,activity.getState());
+  assertTrue(completedActivity[0].isFinishing());
+  assertTrue(completedActivity[0].isDestroyed());
+  assertTaskRemoved(taskId[0]);
+  activity=null; // It finished itself; no test close may mask a broken exit path.
+  assertEquals(1,service.claims);
+  assertEquals(0,service.completions);
+  assertTrue(AccountingResetStore.localResume(context,license).getBoolean("ackPending"));
+  activationUnchanged();
+
+  activity=ActivityScenario.launch(Intent.makeMainActivity(new ComponentName(context,MainActivity.class)));
+  injectResetTransport();
+  until("!!document.querySelector('[data-action=\"site:setup\"]')");
+  assertEquals("false",js("!!document.querySelector('[name=name], [name=shop]')"));
+  assertEquals("true",js("!!document.querySelector('[name=username]')&&!!document.querySelector('[name=password]')"));
+  async("await new Promise(resolve=>setTimeout(resolve,1500));");
+  assertEquals("A pending or lost ACK cannot close the reopened app",androidx.lifecycle.Lifecycle.State.RESUMED,activity.getState());
+  js("document.querySelector('[name=username]').value='fresh-owner';document.querySelector('[name=password]').value='4321';document.querySelector('[data-action=\"site:setup\"]').click();true");
+  until("!!document.querySelector('.nav')");
+  async("const {ShopDatabase,verifyPassword}=await import('https://appassets.androidplatform.net/assets/approved/database.js');window.__resetDb=await new ShopDatabase().open();window.__resetAfter=await __resetDb.load();window.__resetOwners=await __resetDb.all('users');window.__resetPassword=await verifyPassword('4321',__resetOwners[0].password);");
+  assertEquals(target.getString("shopId"),text("__resetAfter.originId"));
+  assertEquals(target.getString("ownerId"),text("__resetOwners[0].id"));
+  assertEquals("true",js("__resetPassword"));
+  assertEquals("0",js("__resetAfter.products.length+__resetAfter.records.length+__resetAfter.parties.length"));
+  service.offline=false;
+  js("dispatchEvent(new Event('online'));true");
+  deadline=System.currentTimeMillis()+10000;
+  while(service.completions!=1&&System.currentTimeMillis()<deadline)Thread.sleep(50);
+  assertEquals(1,service.completions);
+  async("await new Promise(resolve=>setTimeout(resolve,300));");
+  assertEquals("A successful later ACK must not trigger another exit",androidx.lifecycle.Lifecycle.State.RESUMED,activity.getState());
+  assertEquals(1,service.claims);
+  activationUnchanged();
+ }
+ private void injectResetTransport(){
+  activity.onActivity(a->{try{
+   var channelField=MainActivity.class.getDeclaredField("administration");channelField.setAccessible(true);channelField.set(a,channel);
+   var resetField=MainActivity.class.getDeclaredField("accountingReset");resetField.setAccessible(true);resetField.set(a,client);
+  }catch(Exception error){throw new AssertionError(error);}});
+ }
+ private static java.lang.reflect.Field backupSingleton() throws Exception {
+  var field=CloudBackupManager.class.getDeclaredField("singleton");field.setAccessible(true);return field;
+ }
+ private void assertTaskRemoved(int taskId) throws Exception {
+  ActivityManager manager=(ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+  assertNotNull(manager);
+  long deadline=System.currentTimeMillis()+5000;
+  while(System.currentTimeMillis()<deadline){
+   boolean present=false;
+   for(ActivityManager.AppTask task:manager.getAppTasks())try{if(task.getTaskInfo().id==taskId)present=true;}catch(IllegalArgumentException removed){}
+   if(!present)return;
+   Thread.sleep(50);
+  }
+  fail("Completed reset task remains in recent tasks");
  }
  @Test public void atomicDatabaseResetReopensOwnerSetupAndKeepsActivation() throws Exception {
   // A never-used accounting-reset feature must not turn optional support damage into
@@ -128,8 +247,8 @@ public class AccountingResetTest {
   final Map<String,JSONObject> challenges=new HashMap<>();
   JSONObject registration,grant,claim;
   String status="waiting";
-  boolean offline,dropClaim,dropComplete,denyUnclaimed,rejectClaimAuthentication;
-  int claims,completions;
+  volatile boolean offline,dropClaim,dropComplete,denyUnclaimed,rejectClaimAuthentication,offlineAfterClaim;
+  volatile int claims,completions;
   FakeService() throws Exception {KeyPairGenerator generator=KeyPairGenerator.getInstance("EC");generator.initialize(new ECGenParameterSpec("secp256r1"));pair=generator.generateKeyPair();ECPublicKey key=(ECPublicKey)pair.getPublic();issuers=new JSONObject().put("reset-fixture",new JSONObject().put("kty","EC").put("crv","P-256").put("x",coordinate(key.getW().getAffineX())).put("y",coordinate(key.getW().getAffineY())));}
   JSONObject envelope(String purpose,JSONObject value) throws Exception {JSONObject result=new JSONObject().put("schema",purpose).put("version",1).put("kid","reset-fixture").put("payload",copy(value));Signature signer=Signature.getInstance("SHA256withECDSA");signer.initSign(pair.getPrivate());signer.update(ProtocolJson.canonical(result).getBytes(StandardCharsets.UTF_8));return result.put("signature",ProtocolJson.base64(ProtocolJson.rawSignature(signer.sign())));}
   public synchronized JSONObject post(String path,JSONObject body) throws Exception {
@@ -142,7 +261,7 @@ public class AccountingResetTest {
    switch(operation){
     case "accounting-reset.poll":return new JSONObject().put("status",status).put("requestId",g.getString("requestId")).put("expiresAt",g.getLong("expiresAt")).put("reason","طلب صاحب المحل بدء المحاسبة من جديد").put("grant",grant);
     case "accounting-reset.decline":assertEquals("waiting",status);status="declined";return new JSONObject().put("ok",true).put("status",status);
-    case "accounting-reset.claim":assertTrue(p.getBoolean("accepted"));if(rejectClaimAuthentication)throw new ContatoolsClient.ServiceFailure(403,true,0);if(denyUnclaimed){assertNull(claim);return new JSONObject().put("status","unavailable").put("denial",envelope("contatools-accounting-reset-denial",copy(g).put("intentId",p.getString("intentId")).put("deniedAt",System.currentTimeMillis()).put("status","cancelled")));}if(claim==null){assertEquals("waiting",status);claim=envelope("contatools-accounting-reset-claim",copy(g).put("intentId",p.getString("intentId")).put("claimedAt",System.currentTimeMillis()));claims++;status="claimed";}else assertEquals(claim.getJSONObject("payload").getString("intentId"),p.getString("intentId"));if(dropClaim)throw new IOException("Lost signed claim response");return new JSONObject().put("status",status).put("claim",claim);
+    case "accounting-reset.claim":assertTrue(p.getBoolean("accepted"));if(rejectClaimAuthentication)throw new ContatoolsClient.ServiceFailure(403,true,0);if(denyUnclaimed){assertNull(claim);return new JSONObject().put("status","unavailable").put("denial",envelope("contatools-accounting-reset-denial",copy(g).put("intentId",p.getString("intentId")).put("deniedAt",System.currentTimeMillis()).put("status","cancelled")));}if(claim==null){assertEquals("waiting",status);claim=envelope("contatools-accounting-reset-claim",copy(g).put("intentId",p.getString("intentId")).put("claimedAt",System.currentTimeMillis()));claims++;status="claimed";}else assertEquals(claim.getJSONObject("payload").getString("intentId"),p.getString("intentId"));if(dropClaim)throw new IOException("Lost signed claim response");if(offlineAfterClaim)offline=true;return new JSONObject().put("status",status).put("claim",claim);
     case "accounting-reset.complete":assertEquals(claim.getJSONObject("payload").getString("intentId"),p.getString("intentId"));if(!"completed".equals(status)){completions++;status="completed";}if(dropComplete)throw new IOException("Lost complete response");return new JSONObject().put("status",status).put("ok",true);
     default:throw new IOException("Unexpected fixture operation "+operation);
    }
