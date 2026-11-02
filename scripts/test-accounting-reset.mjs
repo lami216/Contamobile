@@ -68,9 +68,11 @@ try{
  await check('explicit owner consent clears local accounting and old snapshots, then recreates only username/PIN with the same activation/shop/owner',async()=>{
   const f=await fixture();try{
    const before=await stored(f.page),shopId=before.snapshots.find(x=>x.id==='shop').state.originId,ownerId=before.users[0].id;
+   const documentId=await f.page.evaluate(()=>window.__resetDocumentId=crypto.randomUUID());
    await f.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),d=await new ShopDatabase().open();await d.put('meta',{id:'safety-backup',backup:{secret:'old credentials'}});await d.put('snapshots',{id:'old-import',state:{secret:'old business'}});localStorage.setItem('alkarna-pos-draft:old','sensitive');localStorage.setItem('alkarna-workflow-draft:old:expense','sensitive');localStorage.setItem('alkarna-site-appearance','light')});
    await enable(f);await dialog(f.page).waitFor();const confirm=f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true});assert.equal(await confirm.isEnabled(),false);await f.page.locator('[name=accountingResetConsent]').check();await confirm.click();await f.page.locator('[data-action="site:setup"]').waitFor();
    const blank=await stored(f.page);assert.equal(blank.users.length,0);assert.equal(blank.snapshots.length,1);const state=blank.snapshots[0].state;assert.equal(state.originId,shopId);assert.equal(state.records.length,0);assert.equal(state.products.length,0);assert.equal(state.parties.length,0);assert(state.accounts.every(a=>a.balance===0));assert(!blank.meta.some(x=>x.id==='safety-backup'||x.id.startsWith('session:')));assert.equal(blank.meta.find(x=>x.id==='accounting-reset-bootstrap').ownerId,ownerId);assert(f.native.finished);assert((await f.page.evaluate(()=>NativeFiles.licenseStatus())).valid);
+   assert.equal(await f.page.evaluate(()=>window.__resetDocumentId),documentId,'Browser fallback must reopen the committed shop without relying on a page reload');
    assert.deepEqual(await f.page.locator('#site-auth-form input').evaluateAll(inputs=>inputs.map(x=>x.name)),['username','password']);assert.equal(await f.page.evaluate(()=>Object.keys(localStorage).filter(k=>k.includes('draft')).length),0);
    await f.page.locator('#site-auth-form [name=username]').fill('fresh-owner');await f.page.locator('#site-auth-form [name=password]').fill('4321');await f.page.locator('[data-action="site:setup"]').click();await f.page.locator('.nav').waitFor();const fresh=await stored(f.page);assert.equal(fresh.users[0].id,ownerId);assert.equal(fresh.users[0].username,'fresh-owner');assert.equal(fresh.snapshots[0].state.originId,shopId);assert(!fresh.meta.some(x=>x.id==='accounting-reset-bootstrap'));assert.equal(fresh.snapshots[0].state.products.length,0);
    await f.page.evaluate(()=>sessionStorage.clear());await f.page.reload();await f.page.locator('[data-action="site:login"]').waitFor();await f.page.locator('#site-auth-form [name=username]').fill('fresh-owner');await f.page.locator('#site-auth-form [name=password]').fill('4321');await f.page.locator('[data-action="site:login"]').click();await f.page.locator('.nav').waitFor();assert.equal(f.native.prepares,1);
@@ -108,6 +110,28 @@ try{
  });
  await check('prepare rejection before any durable intent releases the progress lock without deleting data',async()=>{
   const f=await fixture();try{f.native.failBeforePrepare=true;await enable(f);await dialog(f.page).waitFor();const before=await stored(f.page);await f.page.locator('[name=accountingResetConsent]').check();await f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true}).click();await f.page.locator('[data-accounting-reset=progress]').waitFor();await f.page.locator('[data-accounting-reset=progress]').waitFor({state:'detached'});assert.deepEqual(await stored(f.page),before);assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),false);assert.equal(f.native.prepares,0)}finally{await f.context.close()}
+ });
+ await check('an unavailable native close reopens the committed setup in place and keeps activation',async()=>{
+  const f=await fixture();
+  try{
+   const documentId=await f.page.evaluate(()=>{
+    window.NativeFiles.closeAfterAccountingReset=async()=>{throw Error('Synthetic native close unavailable')};
+    return window.__resetDocumentId=crypto.randomUUID();
+   });
+   await enable(f);
+   await dialog(f.page).waitFor();
+   await f.page.locator('[name=accountingResetConsent]').check();
+   await f.page.getByRole('button',{name:'مسح البيانات وبدء محاسبة جديدة',exact:true}).click();
+   await f.page.locator('[data-action="site:setup"]').waitFor();
+   assert.equal(await f.page.evaluate(()=>window.__resetDocumentId),documentId);
+   assert.equal(await f.page.evaluate(()=>karnaPersistenceBusy()),false);
+   const blank=await stored(f.page);
+   assert.equal(blank.users.length,0);
+   assert.equal(blank.snapshots.find(row=>row.id==='shop').state.products.length,0);
+   assert(blank.meta.some(row=>row.id==='accounting-reset-bootstrap'));
+   assert((await f.page.evaluate(()=>NativeFiles.licenseStatus())).valid);
+   assert(f.native.finished);
+  }finally{await f.context.close()}
  });
  await check('post-commit draft or native-receipt failure blocks stale memory and retries without resurrecting accounting',async()=>{
   for(const failure of ['draft','receipt']){

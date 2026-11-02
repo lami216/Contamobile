@@ -105,3 +105,64 @@ test('a failed ACK retains retry bookkeeping without acquiring a destructive loc
  assert.deepEqual(h.locks,[]);
  assert.deepEqual(h.calls,['resume-local','ack']);
 });
+
+const receipt={requestId:'request-fixture',grantId:'grant-fixture',intentId:'intent-fixture',shopId:'shop',ownerId:'owner'};
+test('reset exit requires both committed IDB records and cannot use a historical receipt after setup',async()=>{
+ const h=harness();let closes=0,bootstrap={...receipt},saved={...receipt};
+ h.scope.api.database={get:async()=>saved,accountingResetBootstrap:async()=>bootstrap};
+ h.scope.NativeFiles.closeAfterAccountingReset=async value=>{closes++;assert.deepEqual(value,receipt);return {stage:'closing'}};
+ saved={...receipt,intentId:'different-intent'};
+ assert.equal(await h.controller.exitAfterReset(receipt),false);
+ saved={...receipt};bootstrap=null;
+ assert.equal(await h.controller.exitAfterReset(receipt),false);
+ assert.equal(closes,0);
+ bootstrap={...receipt};
+ assert.equal(await h.controller.exitAfterReset(receipt),true);
+ assert.equal(closes,1);
+});
+
+test('a browser or unavailable native close falls back without a navigation or receipt mutation',async()=>{
+ const h=harness();
+ assert.equal(await h.controller.exitAfterReset(receipt),false);
+ h.scope.api.database={get:async()=>({...receipt}),accountingResetBootstrap:async()=>({...receipt})};
+ h.scope.NativeFiles.closeAfterAccountingReset=async()=>{throw Error('Synthetic host unavailable')};
+ assert.equal(await h.controller.exitAfterReset(receipt),false);
+});
+
+test('startup and retries for a consumed receipt never automatically close the app',async()=>{
+ const h=harness();let closes=0;
+ h.scope.NativeFiles.closeAfterAccountingReset=async()=>{closes++;return {stage:'closing'}};
+ h.scope.native=async command=>command==='resume-local'?{stage:'complete',ackPending:true}:{stage:'complete'};
+ await h.controller.resume();
+ h.controller.start();
+ await h.tick();
+ assert.equal(closes,0);
+ assert.deepEqual(h.calls,['resume-local','ack']);
+});
+
+test('the live close callback follows IDB commit, draft cleanup and local native consumption without awaiting ACK',async()=>{
+ const h=harness(),order=[];
+ const prepared={...receipt,stage:'prepared',accountingResetId:receipt.requestId};
+ h.scope.localStorage={};
+ h.scope.sessionStorage={clear(){order.push('draft-cleanup')}};
+ h.scope.api.pauseBackup=async()=>{};
+ h.scope.api.emptyState=()=>({});
+ h.scope.api.database={
+  async resetAccounting(){order.push('idb-commit');return {alreadyApplied:false}},
+  async get(){return {...receipt}},async accountingResetBootstrap(){return {...receipt}}
+ };
+ h.scope.native=async command=>{
+  if(command==='resume-local')return prepared;
+  assert.equal(command,'finish');
+  order.push('native-consumed');
+  return {stage:'complete',ackPending:true};
+ };
+ h.scope.NativeFiles.closeAfterAccountingReset=async()=>{order.push('close');return {stage:'closing'}};
+ h.scope.api.onApplied=async(outcome,completed,value)=>{
+  assert.equal(completed.ackPending,true);
+  assert.equal(await h.controller.exitAfterReset(value),true);
+ };
+ await h.controller.resume();
+ assert.deepEqual(order,['idb-commit','draft-cleanup','native-consumed','close']);
+ assert.deepEqual(h.calls,['resume-local','finish']);
+});

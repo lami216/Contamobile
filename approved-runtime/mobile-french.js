@@ -447,3 +447,20 @@ Object.assign(mobileFrench,{
 });
 
 Object.assign(mobileFrench,{"حجم الملف أكبر من الحد المتاح":"Le fichier dépasse la taille autorisée","تعذر تجهيز صفحة PDF":"Impossible de préparer une page PDF"});
+
+Object.assign(mobileFrench,{
+ "حفظ نسخة في ملف":"Enregistrer une sauvegarde fichier",
+ "نسخة كاملة خارج التطبيق، متاحة دون إنترنت":"Copie complète hors de l’application, disponible hors connexion",
+ "استعادة نسخة احتياطية":"Restaurer une sauvegarde",
+ "مراجعة الملف قبل استبدال بيانات المحل":"Vérifier le fichier avant de remplacer les données du magasin",
+ "نسخة الكرنه أو نسخة كونتا أوفلاين الرسمية.":"Sauvegarde AlKarna ou sauvegarde officielle Conta Offline.",
+ "نسخة الأمان السابقة":"Copie de sécurité précédente",
+ "حفظ نسخة الأمان في ملف":"Enregistrer la copie de sécurité",
+ "خيارات متقدمة":"Options avancées",
+ "إضافة بيانات سابقة مع الحفاظ على المحل والحسابات":"Ajouter des données existantes en conservant le magasin et les comptes",
+ "لا تسمح صلاحيات حسابك باستيراد النظام السابق":"Votre compte n’autorise pas l’import de l’ancien système",
+ "تذكير بحفظ ملف قبل الخروج":"Rappel de sauvegarde fichier avant de quitter",
+ "لديك تغييرات بعد آخر ملف احتياطي حفظته خارج التطبيق. هذا التذكير مستقل عن النسخ على السيرفر.":"Des modifications suivent le dernier fichier sauvegardé hors de l’application. Ce rappel est indépendant des sauvegardes serveur.",
+ "حفظ ملف والخروج":"Enregistrer un fichier et quitter",
+ "خروج دون حفظ ملف الآن":"Quitter sans enregistrer de fichier maintenant"
+});

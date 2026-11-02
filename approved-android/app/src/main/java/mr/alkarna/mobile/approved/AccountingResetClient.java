@@ -97,6 +97,24 @@ final class AccountingResetClient {
   pending.put("stage","applied");disk.state.put("lastReceipt",receipt).put("lastAccountingResetId",p.getString("requestId"));disk.consume(p.getString("grantId"));return new JSONObject().put("stage","complete").put("ackPending",true);
  }
  private static boolean sameReceipt(JSONObject a,JSONObject b){for(String key:new String[]{"requestId","grantId","intentId"})if(!a.optString(key).equals(b.optString(key)))return false;return true;}
+ /** A one-shot local UI transition, never a network acknowledgement or a second
+  * reset authority. The trusted page calls it only after its committed IDB receipt. */
+ synchronized boolean authorizeExit(JSONObject value) throws Exception {
+  if(value.length()!=6||!"accounting-reset-exit".equals(value.optString("purpose")))throw new IOException("RESET_EXIT_PURPOSE");
+  JSONObject pending=disk.state.optJSONObject("pending"),receipt=disk.state.optJSONObject("lastReceipt");
+  if(pending==null||!"applied".equals(pending.optString("stage"))||receipt==null||!sameReceipt(receipt,value))throw new IOException("RESET_EXIT_RECEIPT");
+  JSONObject p=payload(pending,true);
+  AccountingResetGrant.verifyClaim(pending.getJSONObject("claim"),issuers,p,pending.getString("intentId"));
+  if(!sameReceipt(receipt,new JSONObject().put("requestId",p.getString("requestId")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId")))||
+    !p.getString("shopId").equals(value.optString("shopId"))||!p.getString("ownerId").equals(value.optString("ownerId"))||!disk.used(p.getString("grantId")))throw new IOException("RESET_EXIT_SCOPE");
+  JSONObject exited=disk.state.optJSONObject("lastExitReceipt");
+  if(exited!=null&&sameReceipt(exited,receipt))return false;
+  // Persist before finishing the Activity. A process interruption cannot make a
+  // reopened phone repeatedly close merely because the server ACK is pending.
+  disk.state.put("lastExitReceipt",ProtocolJson.copy(receipt));
+  disk.save();
+  return true;
+ }
  synchronized JSONObject acknowledge() throws Exception {
   JSONObject pending=disk.state.optJSONObject("pending");if(pending==null)return acknowledgeDecline();if(!"applied".equals(pending.optString("stage")))return resumeLocal();
   long now=System.currentTimeMillis(),deadline=disk.state.optLong("ackNotBefore");if(channel.managedNetwork()&&now<deadline)return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",deadline);

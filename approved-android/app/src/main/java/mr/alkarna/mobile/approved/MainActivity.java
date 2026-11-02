@@ -173,6 +173,25 @@ public final class MainActivity extends Activity {
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
     private void accountingResetRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        // No support queue, server response or ACK is needed to close after a
+        // locally committed reset. Never expose a general remote close command.
+        if("exit-after-reset".equals(command)){
+            try{
+                if(!activityResumed||accountingReset==null||content==null||content.length()>4096)throw new IOException("RESET_EXIT_UNAVAILABLE");
+                boolean close=accountingReset.authorizeExit(new JSONObject(content));
+                if(!close){result(id,value("stage","already-closed"));return;}
+                WebView completedPage=web;
+                String reply="window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+",{stage:'closing'})";
+                completedPage.evaluateJavascript(reply,ignored->{
+                    if(!isDestroyed()&&!isFinishing()&&web==completedPage&&backupScope.current(page))finishAndRemoveTask();
+                });
+            }catch(Exception failure){
+                JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تم حفظ بداية المحاسبة الجديدة. أعد فتح التطبيق للمتابعة؛ التفعيل محفوظ."));
+                try{answer.put("code","RESET_EXIT_UNAVAILABLE");}catch(Exception ignored){}
+                result(id,answer);
+            }
+            return;
+        }
         // Authenticate local reset state independently of the optional support channel,
         // its journal, endpoint or queue. Never manufacture an absent journal or key.
         if("resume-local".equals(command))try{

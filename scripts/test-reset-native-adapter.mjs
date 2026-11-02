@@ -34,3 +34,24 @@ test('service errors keep permanent and retry information without claiming a loc
  const h=harness(),result=h.scope.NativeFiles.accountingReset('poll',{shopId:'shop',ownerId:'owner'});const check=assert.rejects(result,error=>error.status===503&&error.retryAt===99&&!error.permanent&&error.code==='RESET_SERVICE');
  h.scope.__nativeResult(h.calls[0][0],{error:'Service unavailable',code:'RESET_SERVICE',status:503,retryAt:99,permanent:false});await check;assert.equal(h.timers.size,0);
 });
+
+test('reset exit has a separate purpose and preserves the committed receipt and target',async()=>{
+ const h=harness(),receipt={requestId:'request-fixture',grantId:'grant-fixture',intentId:'intent-fixture',shopId:'shop-fixture',ownerId:'owner-fixture'};
+ const result=h.scope.NativeFiles.closeAfterAccountingReset(receipt);
+ const [id,command,json]=h.calls[0];
+ assert.equal(command,'exit-after-reset');
+ assert.deepEqual(JSON.parse(json),{...receipt,purpose:'accounting-reset-exit'});
+ h.scope.__nativeResult(id,{stage:'closing'});
+ assert.equal((await result).stage,'closing');
+ assert.equal(h.timers.size,0);
+});
+
+test('a departed page cannot request a reset exit or complete an earlier exit reply',async()=>{
+ const h=harness(),result=h.scope.NativeFiles.closeAfterAccountingReset({requestId:'r',grantId:'g',intentId:'i',shopId:'s',ownerId:'o'});
+ const rejection=assert.rejects(result,error=>error.code==='NATIVE_PAGE_HIDDEN');
+ h.events.get('pagehide')();
+ await rejection;
+ h.scope.__nativeResult(h.calls[0][0],{stage:'closing'});
+ await assert.rejects(h.scope.NativeFiles.closeAfterAccountingReset({}),error=>error.code==='NATIVE_PAGE_HIDDEN');
+ assert.equal(h.calls.length,1);
+});

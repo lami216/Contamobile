@@ -51,7 +51,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 21
+test "$CANDIDATE_VERSION_CODE" = 22
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -59,9 +59,9 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All eight originally distributed versions are mandatory for this candidate.
+# All nine originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -75,16 +75,30 @@ adb install -r "$test_apk"
 adb shell pm clear "$app"
 assert_offline cloud-backup-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
-grep -Eq '^OK \(6 tests\)' "$proof_dir/CloudBackupTest.txt"
-test "$(grep -c 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt")" = 6
-test "$(grep 'CLOUD BACKUP CASE PASS ' "$proof_dir/CloudBackupTest.txt" | sort -u | wc -l)" = 6
 assert_offline cloud-backup-network-after
 adb shell pm clear "$app"
 assert_offline accounting-reset-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountingResetTest -e accountingResetIsolation true "$runner" | tee "$proof_dir/AccountingResetTest.txt"
-grep -Eq '^OK \(6 tests\)' "$proof_dir/AccountingResetTest.txt"
-test "$(grep -c 'ACCOUNTING RESET CASE PASS ' "$proof_dir/AccountingResetTest.txt")" = 6
-test "$(grep 'ACCOUNTING RESET CASE PASS ' "$proof_dir/AccountingResetTest.txt" | sort -u | wc -l)" = 6
+python3 - <<'PY'
+import json,re
+from pathlib import Path
+sources=Path('approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved')
+proof=Path('candidate-proof');suites=[]
+for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS')]:
+ source=(sources/f'{suite}.java').read_text(encoding='utf-8')
+ expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
+ assert len(expected)>=6 and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
+ if suite=='AccountingResetTest':
+  required={'resetExitRequiresConsumedScopedReceiptAndIsOneShot','ownerConsentExitsTaskBeforeAckAndLauncherReopensFreshSetupWithoutClosingAgain'}
+  assert required<=set(expected),'Native owner-consent exit and one-shot receipt scenarios are mandatory'
+ text=(proof/f'{suite}.txt').read_text(encoding='utf-8')
+ assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!|INSTRUMENTATION_RESULT: shortMsg=',text,re.I),f'Incomplete execution: {suite}'
+ executed=re.findall(r'^'+re.escape(prefix)+r' (\w+)\s*$',text,re.M)
+ assert len(executed)==len(set(executed)) and set(executed)==set(expected),f'Missing, duplicate or unexpected executed {suite} cases: {executed}; expected {expected}'
+ assert re.search(r'^OK \('+str(len(expected))+r' tests?\)',text,re.M),f'Executed JUnit count differs from scenario manifest: {suite}'
+ suites.append({'suite':suite,'executed':len(executed),'cases':sorted(executed),'passed':True})
+(proof/'native-scenario-summary.json').write_text(json.dumps({'suites':suites},indent=2)+'\n',encoding='utf-8')
+PY
 assert_offline accounting-reset-network-after
 adb shell am force-stop "$app"
 adb uninstall "$app"
@@ -155,16 +169,16 @@ import json,re
 from pathlib import Path
 root=Path('candidate-proof')
 checks=[]
-for baseline in range(13,21):
+for baseline in range(13,22):
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
-   text=filename.read_text()
+   text=filename.read_text(encoding='utf-8')
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==48
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':21,'upgradeScenarios':16,'preservationChecks':48,'checks':checks},indent=2)+'\n')
+assert len(checks)==54
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':22,'upgradeScenarios':18,'preservationChecks':54,'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt

@@ -82,7 +82,7 @@ try{
  async function sourceCheck(name,fn){try{await fn();results.push({name,passed:true})}catch(error){results.push({name,passed:false,error:error.stack||error.message})}}
  await sourceCheck('actual app passive status refresh preserves unsaved cloud settings and every other open sheet',async()=>{
   const {context,page}=await actualFixture();try{
-   await page.locator('[data-action="cloud:settings"]').click();await page.locator('[name=cloudSchedule]').selectOption('weekly');await page.locator('[name=cloudTime]').fill('05:45');await page.locator('[name=cloudWeekday]').selectOption('7');await page.locator('[name=cloudConsent]').check();await page.locator('[name=cloudWifi]').check();
+   await page.locator('[data-action="cloud:overview"]').click();await page.locator('[data-action="cloud:settings"]').click();await page.locator('[name=cloudSchedule]').selectOption('weekly');await page.locator('[name=cloudTime]').fill('05:45');await page.locator('[name=cloudWeekday]').selectOption('7');await page.locator('[name=cloudConsent]').check();await page.locator('[name=cloudWifi]').check();
    await page.locator('.sheet').evaluate(element=>{element.dataset.draftMarker='unchanged'});await page.evaluate(()=>globalThis.__cloudAuditController.refresh(false));
    assert.equal(await page.locator('[name=cloudTime]').inputValue(),'05:45');assert.equal(await page.locator('[name=cloudWeekday]').inputValue(),'7');assert.equal(await page.locator('[name=cloudSchedule]').inputValue(),'weekly');assert.equal(await page.locator('[name=cloudConsent]').isChecked(),true);assert.equal(await page.locator('[name=cloudWifi]').isChecked(),true);assert.equal(await page.locator('.sheet').getAttribute('data-draft-marker'),'unchanged');
    assert.equal(await page.evaluate(()=>globalThis.__cloudBridgeCalls.filter(call=>call.command==='configure').length),0);
@@ -93,7 +93,7 @@ try{
  });
  await sourceCheck('actual app saved-version pane retains its inner scroll on passive refresh, global render and More',async()=>{
   const {context,page}=await actualFixture();try{
-   await page.evaluate(()=>{globalThis.__holdCloudList=true});await page.locator('[data-action="cloud:list"]').click();await page.waitForFunction(()=>typeof globalThis.__releaseCloudList==='function');assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),true);
+   await page.locator('[data-action="cloud:overview"]').click();await page.evaluate(()=>{globalThis.__holdCloudList=true});await page.locator('[data-action="cloud:list"]').click();await page.waitForFunction(()=>typeof globalThis.__releaseCloudList==='function');assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),true);
    // A native response may still be pending when click() returns. Exercise that
    // boundary explicitly; no navigation or request is retried to make it pass.
    const pane=page.locator('[data-scroll-key="cloud-versions"]');assert.equal(await pane.count(),0);

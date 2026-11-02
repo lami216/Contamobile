@@ -2,7 +2,7 @@ name: Mobile quality
 
 on:
   push:
-    branches: [mobile-v1, main, ui-redesign-v2]
+    branches: [mobile-v1, main, ui-redesign-v2, feat/backup-cleanup-reset-exit-20261102]
   pull_request:
     branches: [main, mobile-v1]
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   approved-runtime:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/backup-cleanup-reset-exit-20261102'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -51,6 +51,7 @@ jobs:
           node scripts/test-invoice-ux.mjs
           node scripts/test-accounting-reset.mjs
           node scripts/test-cloud-backup.mjs
+          node scripts/test-backup-ux.mjs
           node scripts/test-user-integrity.mjs
           node scripts/test-import-html-escaping.mjs
           node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs scripts/test-accounting-reset-lock.mjs
