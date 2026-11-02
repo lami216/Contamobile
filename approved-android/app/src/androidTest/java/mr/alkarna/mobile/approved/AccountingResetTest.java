@@ -139,6 +139,7 @@ public class AccountingResetTest {
   activity=ActivityScenario.launch(launcher);
   injectResetTransport();
   until("!!document.querySelector('[data-action=\"site:setup\"]')");
+  connectSyntheticResetEndpoint();
   // Keep polling paused only while the disposable owner is created and registered.
   // The tested consent, transaction, native receipt and close use production paths.
   js("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.querySelector('[name=username]').value='old-owner';document.querySelector('[name=password]').value='1234';document.querySelector('[data-action=\"site:setup\"]').click();true");
@@ -148,11 +149,19 @@ public class AccountingResetTest {
   channel.register(new JSONObject().put("shopId",target.getString("shopId")).put("owners",new JSONArray().put(new JSONObject().put("id",target.getString("ownerId")).put("name","مالك الفحص").put("role","owner"))));
   async("await act('go:inventory');await act('open:product');document.querySelector('#sheet-form [name=name]').value='منتج قديم';document.querySelector('#sheet-form [name=price]').value='50';document.querySelector('#sheet-form [name=cost]').value='30';await act('save-product');");
   assertEquals("1",js("S.products.length"));
+  async("await act('go:home');document.activeElement?.blur();");
+  assertEquals("No accounting write may still be pending before a reset review", "false",js("karnaPersistenceBusy()"));
+  assertEquals("The fixture must leave product entry before reviewing the request", "false",js("!!modal"));
   final MainActivity[] completedActivity={null};final int[] taskId={-1};
   activity.onActivity(a->{completedActivity[0]=a;taskId[0]=a.getTaskId();assertTrue("The launcher Activity must own its task",a.isTaskRoot());});
   service.offlineAfterClaim=true;
-  js("delete document.hidden;dispatchEvent(new Event('online'));true");
-  until("!!document.querySelector('[data-accounting-reset=review]')");
+  js("delete document.hidden;document.activeElement?.blur();true");
+  assertEquals("The signed local fixture is available despite the emulator's external firewall", "true",js("navigator.onLine"));
+  assertEquals("The launcher page must actually be visible", "false",js("document.hidden"));
+  assertEquals("A completed product form must not keep the reset review deferred", "false",js("!!document.activeElement?.matches('input,textarea,select')"));
+  js("dispatchEvent(new Event('online'));true");
+  untilResetReview();
+  assertTrue("The real controller must have polled the signed native fixture",service.polls>0);
   assertEquals("true",js("document.querySelector('[data-accounting-reset=review] .recovery-primary').disabled"));
   // Actual consent UI, not a direct database reset or a manual Activity close.
   js("document.querySelector('[name=accountingResetConsent]').click();document.querySelector('[data-accounting-reset=review] .recovery-primary').click();true");
@@ -171,6 +180,8 @@ public class AccountingResetTest {
   activity=ActivityScenario.launch(Intent.makeMainActivity(new ComponentName(context,MainActivity.class)));
   injectResetTransport();
   until("!!document.querySelector('[data-action=\"site:setup\"]')");
+  connectSyntheticResetEndpoint();
+  js("document.activeElement?.blur();dispatchEvent(new Event('online'));true");
   assertEquals("false",js("!!document.querySelector('[name=name], [name=shop]')"));
   assertEquals("true",js("!!document.querySelector('[name=username]')&&!!document.querySelector('[name=password]')"));
   async("await new Promise(resolve=>setTimeout(resolve,1500));");
@@ -197,6 +208,23 @@ public class AccountingResetTest {
    var channelField=MainActivity.class.getDeclaredField("administration");channelField.setAccessible(true);channelField.set(a,channel);
    var resetField=MainActivity.class.getDeclaredField("accountingReset");resetField.setAccessible(true);resetField.set(a,client);
   }catch(Exception error){throw new AssertionError(error);}});
+ }
+ private void connectSyntheticResetEndpoint() throws Exception {
+  // The signed Java transport is deliberately local; CI blocks external egress.
+  // Model availability of THAT endpoint instead of borrowing the emulator's
+  // navigator.onLine value. Keep the real controller, NativeHost, signatures,
+  // consent UI and durable receipts; no poll/prepare/close shortcut is installed.
+  js("Object.defineProperty(navigator,'onLine',{value:true,configurable:true});window.__resetUiNativeTrace=[];const resetCall=NativeFiles.accountingReset.bind(NativeFiles);NativeFiles.accountingReset=async(command,payload)=>{try{const value=await resetCall(command,payload);__resetUiNativeTrace.push({command,stage:value?.stage});return value}catch(error){__resetUiNativeTrace.push({command,code:error.code,message:error.message});throw error}};true");
+  assertEquals("true",js("navigator.onLine"));
+ }
+ private void untilResetReview() throws Exception {
+  long deadline=System.currentTimeMillis()+45000;
+  while(System.currentTimeMillis()<deadline){
+   if("true".equals(js("!!document.querySelector('[data-accounting-reset=review]')")))return;
+   Thread.sleep(50);
+  }
+  fail("Reset review missing; signed fixture polls="+service.polls+", claims="+service.claims+", status="+service.status+", lastOperation="+service.lastOperation+"; UI="+
+    js("JSON.stringify({online:navigator.onLine,hidden:document.hidden,busy:window.karnaPersistenceBusy?.(),active:document.activeElement?.tagName,field:document.activeElement?.name,modal:typeof modal==='undefined'?null:modal,overlays:document.querySelectorAll('.owner-recovery-overlay').length,trace:window.__resetUiNativeTrace,body:document.body.innerText})"));
  }
  private static java.lang.reflect.Field backupSingleton() throws Exception {
   var field=CloudBackupManager.class.getDeclaredField("singleton");field.setAccessible(true);return field;
@@ -246,20 +274,20 @@ public class AccountingResetTest {
   final JSONObject issuers;
   final Map<String,JSONObject> challenges=new HashMap<>();
   JSONObject registration,grant,claim;
-  String status="waiting";
+  volatile String status="waiting",lastOperation="none";
   volatile boolean offline,dropClaim,dropComplete,denyUnclaimed,rejectClaimAuthentication,offlineAfterClaim;
-  volatile int claims,completions;
+  volatile int polls,claims,completions;
   FakeService() throws Exception {KeyPairGenerator generator=KeyPairGenerator.getInstance("EC");generator.initialize(new ECGenParameterSpec("secp256r1"));pair=generator.generateKeyPair();ECPublicKey key=(ECPublicKey)pair.getPublic();issuers=new JSONObject().put("reset-fixture",new JSONObject().put("kty","EC").put("crv","P-256").put("x",coordinate(key.getW().getAffineX())).put("y",coordinate(key.getW().getAffineY())));}
   JSONObject envelope(String purpose,JSONObject value) throws Exception {JSONObject result=new JSONObject().put("schema",purpose).put("version",1).put("kid","reset-fixture").put("payload",copy(value));Signature signer=Signature.getInstance("SHA256withECDSA");signer.initSign(pair.getPrivate());signer.update(ProtocolJson.canonical(result).getBytes(StandardCharsets.UTF_8));return result.put("signature",ProtocolJson.base64(ProtocolJson.rawSignature(signer.sign())));}
   public synchronized JSONObject post(String path,JSONObject body) throws Exception {
-   if(offline)throw new IOException("Isolated outage");String operation=body.getString("operation");JSONObject p=body.getJSONObject("payload");
+   String operation=body.getString("operation");lastOperation=operation;if(offline)throw new IOException("Isolated outage");JSONObject p=body.getJSONObject("payload");
    if(path.endsWith("/challenge")){String id=UUID.randomUUID().toString();JSONObject proof=new JSONObject().put("schema","contatools-device-proof").put("version",1).put("id",id).put("nonce",UUID.randomUUID().toString()).put("installationId",p.getString("installationId")).put("operation",operation).put("payloadHash",ProtocolJson.hash(p)).put("expiresAt",System.currentTimeMillis()+60000);challenges.put(id,proof);return new JSONObject().put("id",id).put("message",ProtocolJson.canonical(proof));}
    JSONObject proof=challenges.remove(body.getString("challengeId"));assertNotNull(proof);assertEquals(operation,proof.getString("operation"));assertEquals(ProtocolJson.hash(p),proof.getString("payloadHash"));JSONObject jwk="register".equals(operation)?p.getJSONObject("publicJwk"):registration.getJSONObject("publicJwk");Signature verifier=Signature.getInstance("SHA256withECDSA");verifier.initVerify(LicenseVerifier.key(jwk.getString("x"),jwk.getString("y")));verifier.update(ProtocolJson.canonical(proof).getBytes(StandardCharsets.UTF_8));assertTrue(verifier.verify(LicenseVerifier.der(ProtocolJson.decode(body.getString("signature")))));
    if("register".equals(operation)){registration=copy(p);return new JSONObject().put("registered",true);}
    if(grant==null){JSONObject doc=new JSONObject(registration.getString("licenseDocument"));long now=System.currentTimeMillis();grant=envelope("contatools-accounting-reset",new JSONObject().put("grantId",UUID.randomUUID().toString()).put("requestId",UUID.randomUUID().toString()).put("installationId",registration.getString("installationId")).put("keyFingerprint",ProtocolJson.fingerprint(registration.getJSONObject("publicJwk"))).put("deviceCode",registration.getString("deviceCode")).put("licenseDocumentHash",ProtocolJson.hash(doc)).put("licenseId",doc.getJSONObject("payload").getString("licenseId")).put("shopId",registration.getString("localShopId")).put("ownerId",registration.getJSONArray("owners").getJSONObject(0).getString("id")).put("issuedAt",now).put("expiresAt",now+86400000));}
    JSONObject g=grant.getJSONObject("payload");assertEquals(g.getString("shopId"),p.getString("shopId"));assertEquals(g.getString("ownerId"),p.getString("ownerId"));
    switch(operation){
-    case "accounting-reset.poll":return new JSONObject().put("status",status).put("requestId",g.getString("requestId")).put("expiresAt",g.getLong("expiresAt")).put("reason","طلب صاحب المحل بدء المحاسبة من جديد").put("grant",grant);
+    case "accounting-reset.poll":polls++;return new JSONObject().put("status",status).put("requestId",g.getString("requestId")).put("expiresAt",g.getLong("expiresAt")).put("reason","طلب صاحب المحل بدء المحاسبة من جديد").put("grant",grant);
     case "accounting-reset.decline":assertEquals("waiting",status);status="declined";return new JSONObject().put("ok",true).put("status",status);
     case "accounting-reset.claim":assertTrue(p.getBoolean("accepted"));if(rejectClaimAuthentication)throw new ContatoolsClient.ServiceFailure(403,true,0);if(denyUnclaimed){assertNull(claim);return new JSONObject().put("status","unavailable").put("denial",envelope("contatools-accounting-reset-denial",copy(g).put("intentId",p.getString("intentId")).put("deniedAt",System.currentTimeMillis()).put("status","cancelled")));}if(claim==null){assertEquals("waiting",status);claim=envelope("contatools-accounting-reset-claim",copy(g).put("intentId",p.getString("intentId")).put("claimedAt",System.currentTimeMillis()));claims++;status="claimed";}else assertEquals(claim.getJSONObject("payload").getString("intentId"),p.getString("intentId"));if(dropClaim)throw new IOException("Lost signed claim response");if(offlineAfterClaim)offline=true;return new JSONObject().put("status",status).put("claim",claim);
     case "accounting-reset.complete":assertEquals(claim.getJSONObject("payload").getString("intentId"),p.getString("intentId"));if(!"completed".equals(status)){completions++;status="completed";}if(dropComplete)throw new IOException("Lost complete response");return new JSONObject().put("status",status).put("ok",true);
