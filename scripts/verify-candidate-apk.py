@@ -12,10 +12,10 @@ match=re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^'
 assert match,'Missing APK identity'
 app,code,name=match.groups();code=int(code)
 assert app=='mr.alkarna.mobile.approved'
-# The baseline is the exact signed v21 from successful run 41358801608,
-# source b74e053a6b42c367d93577ab7c71612be12b4dd0; it must never be rebuilt.
-assert (code,name)==((21,'1.0.20') if mode=='baseline' else (22,'1.0.21'))
-if mode=='baseline':assert actual=='8c662cc4b98578bacf04b60fbe302a4222a5aba8f4578d181dcb961c13554f90'
+# The baseline is the exact signed v22 from successful run 41450759327,
+# source 21efba6a5c3772ba4b4a568a8b17f6d70728690c; it must never be rebuilt.
+assert (code,name)==((22,'1.0.21') if mode=='baseline' else (23,'1.0.22'))
+if mode=='baseline':assert actual=='88e85413785a0a969f96a7545ae0d3eaf3f0dfce2b99373199610df0a84266cd'
 signature=subprocess.check_output([str(sdk/'apksigner'),'verify','--verbose','--print-certs',str(apk)],text=True)
 certs=re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]+)',signature)
 assert certs==[expected_cert],'Permanent signing identity changed'

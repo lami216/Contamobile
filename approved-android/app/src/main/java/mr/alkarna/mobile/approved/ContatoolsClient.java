@@ -111,29 +111,58 @@ final class ContatoolsClient {
   JSONObject request=journal.state.optJSONObject("request");if(request==null||!ownerId.equals(request.optString("ownerId"))||!context.getString("shopId").equals(request.optString("shopId"))){request=new JSONObject().put("shopId",context.getString("shopId")).put("ownerId",ownerId).put("requestId",UUID.randomUUID().toString());journal.state.put("request",request);journal.save();}
   JSONObject response;try{response=dispatch("recovery.request",target(request));}catch(ServiceFailure failure){if(failure.status==403||failure.status==404){registration.successful="";saveRegistration();}throw failure;}request.put("requestId",response.getString("requestId"));journal.save();return remember(response);
  }
- synchronized JSONObject poll() throws Exception {recoveryAllowed();return remember(dispatch("recovery.poll",target(journal.state.getJSONObject("request"))));}
+ synchronized JSONObject poll() throws Exception {recoveryAllowed();if(journal.state.has("pending"))return resumeLocal();return remember(dispatch("recovery.poll",target(journal.state.getJSONObject("request"))));}
  private JSONObject remember(JSONObject response) throws Exception {
-  if("approved".equals(response.optString("status"))){JSONObject grant=response.getJSONObject("grant");validateGrant(grant);journal.state.put("grant",grant);}
+  if("approved".equals(response.optString("status"))){JSONObject grant=response.getJSONObject("grant");validateGrant(grant);journal.state.put("grant",grant);journal.save();return approved(grant);}
   if("expired".equals(response.optString("status"))||"rejected".equals(response.optString("status"))||"used".equals(response.optString("status"))){journal.state.remove("grant");journal.state.remove("request");}
   journal.save();return response;
  }
- private JSONObject validateGrant(JSONObject grant) throws Exception {
+ private JSONObject approved(JSONObject grant) throws Exception {
+  JSONObject p=validateGrant(grant);
+  // Only an unclaimed approval reaches this method. A saved, timely signed
+  // claim still resumes after expiry so an interrupted commit can finish.
+  if(p.getLong("expiresAt")<=System.currentTimeMillis()){journal.state.remove("grant");journal.state.remove("request");journal.save();return new JSONObject().put("status","expired");}
+  return new JSONObject().put("status","approved").put("shopId",p.getString("shopId")).put("ownerId",p.getString("ownerId"));
+ }
+ private JSONObject verifyGrantScope(JSONObject grant) throws Exception {
   JSONObject p=ProtocolJson.verifyEnvelope(grant,issuers,"contatools-owner-reset"),r=journal.state.getJSONObject("request"),snapshot=license.registrationSnapshot();JSONObject doc=new JSONObject(snapshot.getString("licenseDocument"));
   String[][] expected={{"installationId",identity.id()},{"keyFingerprint",identity.fingerprint()},{"deviceCode",license.deviceCode()},{"shopId",r.getString("shopId")},{"ownerId",r.getString("ownerId")},{"requestId",r.getString("requestId")},{"licenseDocumentHash",ProtocolJson.hash(doc)},{"licenseId",doc.getJSONObject("payload").getString("licenseId")}};
   for(String[] binding:expected)if(!binding[1].equals(p.optString(binding[0])))throw new IOException("Recovery scope mismatch");
-  if(p.length()!=11||p.getLong("expiresAt")<=p.getLong("issuedAt")||p.getLong("expiresAt")-p.getLong("issuedAt")>900000||journal.used(p.getString("grantId")))throw new IOException("Recovery authorization already consumed or invalid");return p;
+  if(p.length()!=11||p.getLong("expiresAt")<=p.getLong("issuedAt")||p.getLong("expiresAt")-p.getLong("issuedAt")>900000)throw new IOException("Recovery authorization invalid");return p;
+ }
+ private JSONObject validateGrant(JSONObject grant) throws Exception {JSONObject p=verifyGrantScope(grant);if(journal.used(p.getString("grantId")))throw new IOException("Recovery authorization already consumed");return p;}
+ private JSONObject completion(JSONObject pending) throws Exception {
+  if(!"applied".equals(pending.optString("stage")))throw new IOException("Recovery receipt not completed");
+  JSONObject p=verifyGrantScope(pending.getJSONObject("grant"));
+  if(!journal.used(p.getString("grantId")))throw new IOException("Recovery receipt not consumed");
+  validateClaim(pending,p,pending.getJSONObject("claim"));
+  return new JSONObject().put("stage","complete").put("shopId",p.getString("shopId")).put("ownerId",p.getString("ownerId")).put("requestId",p.getString("requestId")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId"));
  }
  private void digest(JSONObject d) throws Exception {if(d.length()!=4||!"PBKDF2-SHA256".equals(d.optString("algorithm"))||d.optInt("iterations")!=210000||!d.optString("salt").matches("[a-f0-9]{32}")||!d.optString("hash").matches("[a-f0-9]{64}"))throw new IOException("Invalid local password derivation");}
- synchronized JSONObject prepare(JSONObject passwordDigest) throws Exception {
+ private String username(JSONObject value) throws Exception {
+  if(!(value.opt("username") instanceof String))throw new IOException("Invalid local username");
+  String name=value.getString("username").trim().toLowerCase(java.util.Locale.ROOT);
+  if(name.isEmpty())throw new IOException("Invalid local username");return name;
+ }
+ synchronized JSONObject prepare(JSONObject input) throws Exception {
   recoveryAllowed();
-  if(journal.state.has("pending"))return resume();digest(passwordDigest);JSONObject grant=journal.state.getJSONObject("grant");JSONObject p=validateGrant(grant);
+  boolean credentials=input.has("password");if(credentials&&input.length()!=2)throw new IOException("Invalid local credentials");
+  JSONObject passwordDigest=credentials?input.getJSONObject("password"):input;digest(passwordDigest);String name=credentials?username(input):null;
+  if(journal.state.has("pending")){
+   // Retry a locally rejected username under the identical signed claim/intent.
+   // IndexedDB's durable receipt prevents this branch from ever applying twice.
+   JSONObject result=resume();if(!"prepared".equals(result.optString("stage"))||!credentials)return result;
+   JSONObject saved=journal.state.getJSONObject("pending");saved.put("username",name).put("password",ProtocolJson.copy(passwordDigest));journal.save();return resumeLocal();
+  }
+  JSONObject grant=journal.state.getJSONObject("grant");validateGrant(grant);
   JSONObject pending=new JSONObject().put("stage","awaiting-claim").put("grant",grant).put("intentId",UUID.randomUUID().toString()).put("password",passwordDigest);
+  if(credentials)pending.put("username",name);
   journal.state.put("pending",pending);journal.save();return resume();
  }
  synchronized JSONObject resumeLocal() throws Exception {
   if(journal.state.has("accountingResetPending"))return new JSONObject().put("stage","paused");
   JSONObject pending=journal.state.optJSONObject("pending");if(pending==null)return new JSONObject().put("stage","idle");
-  if("applied".equals(pending.optString("stage")))return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",journal.state.optLong("ackNextAt"));
+  if("applied".equals(pending.optString("stage")))return completion(pending).put("ackPending",true).put("retryAt",journal.state.optLong("ackNextAt"));
   if("awaiting-claim".equals(pending.optString("stage")))return new JSONObject().put("stage","awaiting-network");
   return resume(); // A saved signed claim is verified locally; no HTTP in the prepared stage.
  }
@@ -142,7 +171,7 @@ final class ContatoolsClient {
  }
  synchronized JSONObject resume() throws Exception {
   recoveryAllowed();
-  JSONObject pending=journal.state.optJSONObject("pending");if(pending==null)return new JSONObject().put("stage","idle");
+  JSONObject pending=journal.state.optJSONObject("pending");if(pending==null)return journal.state.has("grant")?approved(journal.state.getJSONObject("grant")):new JSONObject().put("stage","idle");
   if("applied".equals(pending.optString("stage")))return acknowledge(pending);
   JSONObject p=validateGrant(pending.getJSONObject("grant"));JSONObject wire=target(journal.state.getJSONObject("request")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId"));
   if("awaiting-claim".equals(pending.optString("stage"))){
@@ -159,6 +188,7 @@ final class ContatoolsClient {
   }
   validateClaim(pending,p,pending.getJSONObject("claim"));digest(pending.getJSONObject("password"));
   JSONObject prepared=new JSONObject().put("stage","prepared").put("shopId",p.getString("shopId")).put("ownerId",p.getString("ownerId")).put("requestId",p.getString("requestId")).put("grantId",p.getString("grantId")).put("intentId",pending.getString("intentId")).put("password",pending.getJSONObject("password"));
+  if(pending.has("username"))prepared.put("username",username(pending));
   if(journal.state.has("lastAccountingResetId"))prepared.put("accountingResetId",journal.state.getString("lastAccountingResetId"));return prepared;
  }
  private void validateClaim(JSONObject pending,JSONObject grant,JSONObject claim) throws Exception {
@@ -169,15 +199,16 @@ final class ContatoolsClient {
  synchronized JSONObject finishLocally(String grantId,String intentId) throws Exception {
   recoveryAllowed();
   JSONObject p=journal.state.getJSONObject("pending");JSONObject grant=p.getJSONObject("grant").getJSONObject("payload");if(!grantId.equals(grant.getString("grantId"))||!intentId.equals(p.getString("intentId"))||!("prepared".equals(p.getString("stage"))||"applied".equals(p.getString("stage"))))throw new IOException("Recovery completion mismatch");
-  p.put("stage","applied");p.remove("password");journal.consume(grantId);return new JSONObject().put("stage","complete").put("ackPending",true);
+  if("prepared".equals(p.getString("stage"))){JSONObject verified=validateGrant(p.getJSONObject("grant"));validateClaim(p,verified,p.getJSONObject("claim"));}else completion(p);
+  p.put("stage","applied");p.remove("password");p.remove("username");journal.consume(grantId);return completion(p).put("ackPending",true);
  }
  private JSONObject acknowledge(JSONObject pending) throws Exception {
-  JSONObject grant=pending.getJSONObject("grant").getJSONObject("payload");
-  if(journal.state.optBoolean("ackBlocked"))return new JSONObject().put("stage","complete").put("ackPending",true).put("permanent",true);
+  JSONObject completed=completion(pending),grant=pending.getJSONObject("grant").getJSONObject("payload");
+  if(journal.state.optBoolean("ackBlocked"))return completed.put("ackPending",true).put("permanent",true);
   long now=System.currentTimeMillis(),deadline=Math.max(journal.state.optLong("ackNextAt"),journal.state.optLong("networkNotBefore"));
-  if(!online()||now<deadline)return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",deadline);
-  try{dispatch("recovery.complete",target(journal.state.getJSONObject("request")).put("grantId",grant.getString("grantId")).put("intentId",pending.getString("intentId")));journal.state.remove("pending");journal.state.remove("grant");journal.state.remove("request");journal.state.remove("ackNextAt");journal.state.remove("ackFailures");journal.state.remove("ackBlocked");journal.save();return new JSONObject().put("stage","complete");}
-  catch(Exception e){if(e instanceof ServiceFailure&&((ServiceFailure)e).permanent){journal.state.put("ackBlocked",true);journal.save();return new JSONObject().put("stage","complete").put("ackPending",true).put("permanent",true);}long retry=0;if(transport instanceof HttpsTransport){int count=Math.min(16,journal.state.optInt("ackFailures")+1);long ceiling=Math.min(6*3600000L,30000L*(1L<<Math.min(count-1,10)));retry=Math.max(journal.state.optLong("networkNotBefore"),now+(long)(ceiling*(0.5+random.nextDouble()*0.5)));journal.state.put("ackFailures",count).put("ackNextAt",retry);journal.save();}return new JSONObject().put("stage","complete").put("ackPending",true).put("retryAt",retry);}
+  if(!online()||now<deadline)return completed.put("ackPending",true).put("retryAt",deadline);
+  try{dispatch("recovery.complete",target(journal.state.getJSONObject("request")).put("grantId",grant.getString("grantId")).put("intentId",pending.getString("intentId")));journal.state.remove("pending");journal.state.remove("grant");journal.state.remove("request");journal.state.remove("ackNextAt");journal.state.remove("ackFailures");journal.state.remove("ackBlocked");journal.save();return completed;}
+  catch(Exception e){if(e instanceof ServiceFailure&&((ServiceFailure)e).permanent){journal.state.put("ackBlocked",true);journal.save();return completed.put("ackPending",true).put("permanent",true);}long retry=0;if(transport instanceof HttpsTransport){int count=Math.min(16,journal.state.optInt("ackFailures")+1);long ceiling=Math.min(6*3600000L,30000L*(1L<<Math.min(count-1,10)));retry=Math.max(journal.state.optLong("networkNotBefore"),now+(long)(ceiling*(0.5+random.nextDouble()*0.5)));journal.state.put("ackFailures",count).put("ackNextAt",retry);journal.save();}return completed.put("ackPending",true).put("retryAt",retry);}
  }
  static final class HttpsTransport implements Transport {
   private final String base;

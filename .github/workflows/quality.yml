@@ -2,7 +2,7 @@ name: Mobile quality
 
 on:
   push:
-    branches: [mobile-v1, main, ui-redesign-v2, feat/backup-cleanup-reset-exit-20261102]
+    branches: [mobile-v1, main, ui-redesign-v2, feat/owner-username-recovery-20261102]
   pull_request:
     branches: [main, mobile-v1]
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   approved-runtime:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/backup-cleanup-reset-exit-20261102'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/owner-username-recovery-20261102'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -52,9 +52,20 @@ jobs:
           node scripts/test-accounting-reset.mjs
           node scripts/test-cloud-backup.mjs
           node scripts/test-backup-ux.mjs
+          node scripts/test-owner-recovery-ux.mjs
           node scripts/test-user-integrity.mjs
           node scripts/test-import-html-escaping.mjs
           node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs scripts/test-accounting-reset-lock.mjs
+      - name: Retain the approved recovery interaction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-recovery-ux-proof
+          path: |
+            candidate-proof/owner-recovery-ux-proof.json
+            candidate-proof/owner-recovery-ux-*.png
+          retention-days: 30
+          if-no-files-found: warn
 
   quality:
     # This tree is retained for provenance. It is not the distributed Android app.
