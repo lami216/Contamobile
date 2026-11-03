@@ -9,10 +9,10 @@ engine=engine.replace(/const form=[^\r\n]*/,"const form=()=>({}),error=t=>{lastE
 const context={assert,console,structuredClone,crypto,lastError:null,document:{addEventListener(){},querySelector(){return null}},localStorage:{getItem(){return null}},matchMedia:()=>({matches:true}),karnaCurrentActor:()=>({id:7,name:'مستخدم التدقيق'}),karnaLocale:{text:value=>translateText(value,'ar'),tag:()=> 'en-US'}};
 vm.createContext(context);vm.runInContext(engine+'\nrender=()=>{};reset();',context);
 vm.runInContext(`
-// A failed new purchase must identify its actual payment constraint and leave all balances unchanged.
-S.accounts[0].balance=0;const beforePurchase=JSON.stringify(S);
+// Desktop parity: a paid purchase can take its payment account below zero.
+S.accounts[0].balance=0;
 const purchase={...newRecord('purchase'),id:900,total:800,paid:800,due:0,warehouse:S.warehouse,account:1,lines:[{product:1,name:S.products[0].name,qty:2,price:400}]};
-assert.equal(commitRecord(purchase),false);assert.equal(JSON.stringify(S),beforePurchase);assert.match(lastError,/نقدي/);assert.match(lastError,/800/);assert.match(lastError,/المتاح 0/);
+assert.equal(commitRecord(purchase),true);assert.equal(S.accounts[0].balance,-800);assert.equal(S.records.find(r=>r.id===900).paid,800);
 
 // Initial three units + purchase two - sale four leaves one; cancelling the purchase must explain the dependency.
 reset();S.records=[];S.products[0].stocks[S.warehouse]=3;S.accounts[0].balance=1000;syncStock();

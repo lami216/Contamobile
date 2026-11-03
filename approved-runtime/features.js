@@ -5,8 +5,9 @@ import {installAdminFeatures} from './feature-admin.js';
 import {installSystemFeatures} from './feature-system.js';
 import {installImportFeatures} from './feature-import.js';
 import {installStockFeatures} from './feature-stock.js';
+import {repairArchivedBalances,reconcileHistoricalArchives} from './accounting-lifecycle.js';
 
-export function prepareFeatureState(state){const changed=upgradeState(state),events=seedStockEvents(state);validateFeatureState(state);return changed||events;}
+export function prepareFeatureState(state){const changed=upgradeState(state),events=seedStockEvents(state);validateFeatureState(state);const archives=repairArchivedBalances(state);return changed||events||archives;}
 export function installFeatures(api){
  const report=installReportFeatures(api),admin=installAdminFeatures(api),stock=installStockFeatures(api),importer=installImportFeatures(api),system=installSystemFeatures(api);
  globalThis.karnaCurrency=()=>currencyCode(S);
@@ -38,6 +39,7 @@ export function installFeatures(api){
   if(old?.openingAccountCorrection){const latest=S.records.find(x=>!x.voided&&x.openingAccountCorrection&&x.account===old.account);if(latest?.id!==old.id)throw Error('يمكن تعديل آخر تصحيح فعال فقط');}
   if(!old&&['sale','purchase','expense'].includes(r.kind)){r.sequence=nextDocumentNumber(S,r.kind);r.number=String(r.sequence);}
   if(!originalCommit(r))return false;
+  reconcileHistoricalArchives(S,r,previous);
   if(previous){recordStockEvents(S,previous,-1,'edit');applyOpeningMetadata(S,previous,true);}
   recordStockEvents(S,r,1,previous?'edit':'post');applyOpeningMetadata(S,r);
   if(r.openingStock)for(const l of r.lines){const p=S.products.find(p=>p.id===l.product);p.openingTotal=(p.openingTotal||0)+l.delta;p.openingCost=l.price;p.openingWarehouse=r.warehouse;}
@@ -59,8 +61,8 @@ export function installFeatures(api){
   if(sourced?.openingAccountCorrection){await admin.action('account-opening',String(sourced.account));editingId=sourced.id;render();return;}
   if(await stock.before(action))return;
   if(action==='post-sale'||action==='post-party'||action==='post-cash'){
-   const account=Number(api.form().account||paymentAccount),old=S.records.find(r=>r.id===editingId);if(action!=='post-sale'||settlement==='paid')if(!S.accounts.some(a=>a.id===account&&!a.archived&&(a.active!==false||old?.account===account)))throw Error('اختر وسيلة دفع فعالة');
-   const to=Number(api.form().to);if(to&&!S.accounts.some(a=>a.id===to&&!a.archived&&(a.active!==false||old?.to===to)))throw Error('اختر وسيلة دفع فعالة');
+   const account=Number(api.form().account||paymentAccount),old=S.records.find(r=>r.id===editingId);if(action!=='post-sale'||settlement==='paid')if(!S.accounts.some(a=>a.id===account&&((!a.archived&&a.active!==false)||old?.account===account)))throw Error('اختر وسيلة دفع فعالة');
+   const to=Number(api.form().to);if(to&&!S.accounts.some(a=>a.id===to&&((!a.archived&&a.active!==false)||old?.to===to)))throw Error('اختر وسيلة دفع فعالة');
   }
   if(action==='new:sale'&&!cart.length&&activeWarehouses(S).includes(S.salesWarehouse)){S.warehouse=S.salesWarehouse;syncStock();}
   const result=await originalEngine(action);
@@ -71,7 +73,7 @@ export function installFeatures(api){
    const newName=oldWarehouse&&!S.warehouses.includes(oldWarehouse)?S.warehouses.find(w=>!Object.hasOwn(S.warehouseMeta,w)):S.warehouses.at(-1);
    if(newName){S.warehouseMeta[newName]=oldWarehouse?S.warehouseMeta[oldWarehouse]||{archived:false}:{archived:false};if(oldWarehouse&&oldWarehouse!==newName){delete S.warehouseMeta[oldWarehouse];if(S.salesWarehouse===oldWarehouse)S.salesWarehouse=newName;for(const e of S.stockEvents)if(e.warehouseId===oldWarehouse)e.warehouseId=newName;for(const p of S.products)if(p.openingWarehouse===oldWarehouse)p.openingWarehouse=newName;for(const r of S.records)for(const l of r.lines||[])if(l.warehouse===oldWarehouse)l.warehouse=newName;}}
   }
-  if(action==='confirm-void'&&oldRecord&&!oldRecord.voided&&S.records.find(r=>r.id===oldRecord.id)?.voided){recordStockEvents(S,oldRecord,-1,'void');applyOpeningMetadata(S,oldRecord,true);if(oldRecord.openingAccountCorrection)S.accounts.find(a=>a.id===oldRecord.account).openingBalance=oldRecord.openingBalanceBefore;currentCosts();}
+  if(action==='confirm-void'&&oldRecord&&!oldRecord.voided&&S.records.find(r=>r.id===oldRecord.id)?.voided){recordStockEvents(S,oldRecord,-1,'void');applyOpeningMetadata(S,oldRecord,true);if(oldRecord.openingAccountCorrection)S.accounts.find(a=>a.id===oldRecord.account).openingBalance=oldRecord.openingBalanceBefore;reconcileHistoricalArchives(S,oldRecord,null,true);currentCosts();render();}
   stock.after(action,oldView,oldModal,oldEditing);return result;
  };
  const oldSheet=sheet;sheet=function(){for(const group of groups){const html=group.sheet();if(html)return html;}let html=stock.expenseHtml(oldSheet());if(modal==='site-export')html=html.replace(/<button type="button" data-action="site:export-print">[\s\S]*?<\/button>/,'');return html;};

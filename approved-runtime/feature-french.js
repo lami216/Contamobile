@@ -1,4 +1,8 @@
 export const featureFrench={
+ 'سند التصحيح القديم لا يحتوي بيانات كافية للتعديل الآمن؛ راجع سجل المخزون':'Cette ancienne correction ne contient pas assez de données pour être modifiée sans risque ; consultez les mouvements de stock.',
+ 'لا يمكن تغيير مخزن سند التصحيح بعد اعتماده':'Le dépôt d’une correction validée ne peut pas être changé.',
+ 'لا يمكن تغيير منتجات سند التصحيح بعد اعتماده؛ عدّل الكميات فقط أو ألغ السند وأنشئ سندًا جديدًا':'Les produits d’une correction validée ne peuvent pas être changés ; modifiez les quantités ou annulez la correction et créez-en une nouvelle.',
+ 'رصيد البداية يُصحح من شاشة رصيد البداية':'Le stock initial se corrige depuis son écran dédié.',
  "تغيّرت بيانات الدخول. سجّل الدخول مجددًا بكلمة المرور الحالية.":"Les identifiants ont changé. Reconnectez-vous avec le mot de passe actuel.",
  "لم يكتمل الحفظ؛ لم تُسجّل العملية":"L’enregistrement a échoué ; l’opération n’a pas été enregistrée.",
  "تغيّرت البيانات من نافذة أخرى. أعد تحميل الموقع قبل متابعة التسجيل أو الاستعادة.":"Les données ont changé dans une autre fenêtre. Actualisez avant de poursuivre l’enregistrement ou la restauration.",

@@ -221,6 +221,7 @@ Object.assign(mobileFrench,{
  "أدخل اسمًا فريدًا": "Saisissez un nom unique",
  "أدخل اسمًا واسم مستخدم فريدًا": "Saisissez un nom et un identifiant unique",
  "أدخل رصيدًا غير سالب وسبب التصحيح": "Saisissez un solde positif ou nul et le motif de correction",
+ "أدخل رصيدًا صحيحًا وسبب التصحيح": "Saisissez un solde valide et le motif de correction",
  "اختر صلاحية صحيحة": "Choisissez un rôle valide",
  "اختر ملف النسخة أو الصق نصها": "Choisissez une sauvegarde ou collez son contenu",
  "التقاص غير متاح": "La compensation n’est pas disponible",

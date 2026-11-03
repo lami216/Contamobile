@@ -33,7 +33,7 @@ export function validateFeatureState(state){
  if(state.warehouses.some(w=>['__proto__','constructor','prototype'].includes(w)||w.length>120))throw Error('اسم مخزن غير صالح');
  const finite=v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1e14;
  if(state.brandInfo){const b=state.brandInfo;if(b.logo&&(!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(b.logo)||b.logo.length>700000))throw Error('صورة شعار غير صالحة');if(b.nameFont&&!['tahoma','arial','segoe-ui','times-new-roman'].includes(b.nameFont)||b.nameFontSize!=null&&(!finite(b.nameFontSize)||b.nameFontSize<16||b.nameFontSize>32)||b.nameFontWeight!=null&&![400,600,800].includes(b.nameFontWeight))throw Error('إعدادات خط غير صالحة');}
- for(const a of state.accounts)if(a.openingBalance!=null&&(!finite(a.openingBalance)||a.openingBalance<0))throw Error('رصيد بداية غير صالح');
+ for(const a of state.accounts)if(a.openingBalance!=null&&!finite(a.openingBalance))throw Error('رصيد بداية غير صالح');
  for(const r of state.records){for(const l of r.lines||[])if(l.warehouse&&!state.warehouses.includes(l.warehouse))throw Error('المخزن غير موجود');if(r.openingCorrection&&(!state.products.some(p=>p.id===r.openingProduct)||!['openingTotalBefore','openingTotalAfter','openingCostBefore','openingCostAfter'].every(k=>finite(r[k])&&r[k]>=0)))throw Error('تصحيح رصيد البداية غير صالح');}
  if(state.stockEvents){if(!Array.isArray(state.stockEvents)||state.stockEvents.length>1000000)throw Error('سجل المخزون غير صالح');const products=new Set(state.products.map(p=>String(p.id))),warehouses=new Set(state.warehouses);for(const e of state.stockEvents)if(!products.has(e.productId)||!warehouses.has(e.warehouseId)||!finite(e.quantityDelta))throw Error('حركة مخزون غير صالحة');}
  return true;

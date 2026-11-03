@@ -43,14 +43,40 @@ export function applyOpeningMetadata(state,record,reverse=false){
  const purchase=state.records.filter(r=>!r.voided&&r.kind==='purchase'&&r.lines.some(l=>l.product===p.id)).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id).at(-1);
  p.cost=purchase?.lines.find(l=>l.product===p.id)?.price??p.openingCost??p.cost;
 }
+// A correction counts the stock at the original count, not the stock on the day it is edited.
+// Older mobile rows kept that count in actualQuantity/newQty; desktop imports keep the source line.
+export function adjustmentLineCount(state,record,line){
+ const finite=value=>typeof value==='number'&&Number.isFinite(value);
+ const desktopId=state.products.find(p=>p.id===line.product)?.desktopId;
+ const source=desktopId==null?null:record.desktop?.lines?.find(l=>String(l.productId)===String(desktopId));
+ const count=(r,l)=>finite(l.actualQuantity)?l.actualQuantity:finite(l.balanceAfter)?l.balanceAfter:r.lines.length===1&&finite(r.newQty)?r.newQty:null;
+ const actual=count(record,line)??(finite(source?.balanceAfter)?source.balanceAfter:null);
+ let baseline=finite(line.balanceBefore)?line.balanceBefore:finite(source?.balanceBefore)?source.balanceBefore:null;
+ // Revisions from before this fix may retain the true baseline while a later buggy edit does not.
+ for(const revision of record.revisions||[]){
+  if(baseline!==null)break;
+  if(revision.kind!=='adjustment'||revision.warehouse!==record.warehouse)continue;
+  const prior=revision.lines?.find(l=>l.product===line.product);if(!prior||!finite(prior.delta))continue;
+  const priorCount=count(revision,prior);
+  if(finite(prior.balanceBefore))baseline=prior.balanceBefore;else if(priorCount!==null)baseline=priorCount-prior.delta;
+ }
+ if(baseline===null&&actual!==null&&finite(line.delta))baseline=actual-line.delta;
+ if(baseline===null||!finite(line.delta))throw Error('سند التصحيح القديم لا يحتوي بيانات كافية للتعديل الآمن؛ راجع سجل المخزون');
+ return {before:baseline,after:actual??baseline+line.delta};
+}
 export function stockOperationRecord(state,mode,draft,existing,id,date,time){
  if(!['transfer','adjustment'].includes(mode)||!state.warehouses.includes(draft.from)||state.warehouseMeta?.[draft.from]?.archived)throw Error('اختر المخزن');
  if(mode==='transfer'&&(!state.warehouses.includes(draft.to)||draft.to===draft.from||state.warehouseMeta?.[draft.to]?.archived))throw Error('اختر مخزنين مختلفين');
  if(!draft.lines.length||new Set(draft.lines.map(l=>l.product)).size!==draft.lines.length)throw Error('أضف منتجات مختلفة إلى العملية');
+ if(mode==='adjustment'&&existing){
+  if(existing.kind!=='adjustment'||existing.openingStock||existing.openingCorrection)throw Error('رصيد البداية يُصحح من شاشة رصيد البداية');
+  if(draft.from!==existing.warehouse)throw Error('لا يمكن تغيير مخزن سند التصحيح بعد اعتماده');
+  if(draft.lines.length!==existing.lines.length||draft.lines.some(l=>!existing.lines.some(old=>old.product===l.product)))throw Error('لا يمكن تغيير منتجات سند التصحيح بعد اعتماده؛ عدّل الكميات فقط أو ألغ السند وأنشئ سندًا جديدًا');
+ }
  const lines=draft.lines.map(line=>{const p=state.products.find(p=>p.id===line.product&&!p.archived);if(!p)throw Error('المنتج غير موجود');const qty=Number(line.quantity);if(!Number.isFinite(qty)||qty<0||mode==='transfer'&&qty===0)throw Error('أدخل كمية صحيحة');
-  const old=existing?.lines.find(l=>l.product===p.id),base=(p.stocks[draft.from]||0)-(existing?.kind==='adjustment'&&existing.warehouse===draft.from?(old?.delta||0):0)+(existing?.kind==='stocktransfer'&&existing.from===draft.from?(old?.qty||0):0)-(existing?.kind==='stocktransfer'&&existing.toWarehouse===draft.from?(old?.qty||0):0);
+  const old=existing?.lines.find(l=>l.product===p.id),base=mode==='adjustment'&&old?adjustmentLineCount(state,existing,old).before:(p.stocks[draft.from]||0)+(existing?.kind==='stocktransfer'&&existing.from===draft.from?(old?.qty||0):0)-(existing?.kind==='stocktransfer'&&existing.toWarehouse===draft.from?(old?.qty||0):0);
   if(mode==='transfer'&&qty>base)throw Error('الكمية المطلوبة أكبر من المخزون');
-  return {product:p.id,name:p.name,qty:mode==='transfer'?qty:Math.abs(qty-base),delta:mode==='transfer'?0:roundMoney(qty-base),price:p.cost,actualQuantity:mode==='adjustment'?qty:undefined};
+  return {product:p.id,name:p.name,qty:mode==='transfer'?qty:Math.abs(qty-base),delta:mode==='transfer'?0:qty-base,price:p.cost,...(mode==='adjustment'?{actualQuantity:qty,balanceBefore:base,balanceAfter:qty}:{})};
  });
  if(mode==='adjustment'&&!draft.note?.trim())throw Error('أدخل سبب التصحيح');
  return {id,kind:mode==='transfer'?'stocktransfer':'adjustment',date,time,lines,from:mode==='transfer'?draft.from:undefined,toWarehouse:mode==='transfer'?draft.to:undefined,warehouse:mode==='adjustment'?draft.from:undefined,newQty:lines.length===1?lines[0].actualQuantity:undefined,title:lines.length===1?lines[0].name:'حركة مخزون',subtitle:mode==='transfer'?'تحويل مخزون':'تصحيح مخزون',note:draft.note||'',total:mode==='transfer'?roundMoney(lines.reduce((n,l)=>n+l.qty*l.price,0)):roundMoney(lines.reduce((n,l)=>n+Math.abs(l.delta)*l.price,0)),paid:0,due:0};

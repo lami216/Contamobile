@@ -2,7 +2,7 @@ name: Mobile quality
 
 on:
   push:
-    branches: [mobile-v1, main, ui-redesign-v2, feat/owner-username-recovery-20261102]
+    branches: [mobile-v1, main, ui-redesign-v2, feat/accounting-parity-20261103]
   pull_request:
     branches: [main, mobile-v1]
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   approved-runtime:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/owner-username-recovery-20261102'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/accounting-parity-20261103'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -41,6 +41,9 @@ jobs:
         run: |
           node scripts/verify-approved-source-navigation.mjs
           node scripts/verify-invoice-ux.mjs
+          node scripts/verify-signed-accounts.mjs
+          node scripts/verify-stock-correction-parity.mjs
+          node scripts/verify-archived-balances.mjs
           node scripts/verify-report-sources.mjs
           node scripts/verify-party-summaries.mjs
           node scripts/verify-french-locale.mjs
@@ -49,6 +52,8 @@ jobs:
           node scripts/test-storage-integrity.mjs
           node scripts/test-runtime-integrity.mjs
           node scripts/test-invoice-ux.mjs
+          node scripts/test-signed-accounts.mjs
+          node scripts/test-accounting-parity.mjs
           node scripts/test-accounting-reset.mjs
           node scripts/test-cloud-backup.mjs
           node scripts/test-backup-ux.mjs
