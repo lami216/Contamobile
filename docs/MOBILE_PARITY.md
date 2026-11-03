@@ -1,5 +1,15 @@
 # Contamobile parity ledger
 
+## Shipped runtime accounting correction — 2026-11-03
+
+The older table below also describes the retained React Native tree. The distributed
+Android application uses `approved-runtime` and `approved-android`. The current
+targeted migration record is [ACCOUNTING_PARITY_V24.md](ACCOUNTING_PARITY_V24.md).
+Signed payment balances, original-baseline stock correction edits and archive
+restoration now have domain, real browser and signed-APK release gates. Release
+verification remains pending until the exact v24 candidate workflow succeeds.
+No intentionally removed feature is restored by this change.
+
 Source of truth: `lami216/offline-conta` (`main`). Last source/command audit: 2026-09-23, covering desktop changes through 2026-09-20.
 
 Legend:

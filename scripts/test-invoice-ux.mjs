@@ -30,13 +30,12 @@ try{
    await page.evaluate(async()=>{await act('source-location:550');await act('invoice:550');await act('back')});assert.equal(await page.locator('.source-record-focus').count(),0);
   }finally{await context.close()}
  });
- await check('new purchase and dependent cancellation show actionable account/product details and keep posting rules',async()=>{
+ await check('paid purchase permits negative cash while dependent cancellation preserves physical stock',async()=>{
   const {context,page}=await fixture();try{
    const product=await addProduct(page);await page.evaluate(async id=>{await act('new:purchase');await act('pos:add:'+id);cart[0].qty=2;render();await act('pos:checkout')},product);
    const paymentTop=await page.locator('.sheet').evaluate(async element=>{await Promise.all(element.getAnimations().map(animation=>animation.finished.catch(()=>{})));return element.getBoundingClientRect().top});await page.evaluate(()=>act('post-sale'));
-   assert.match(await page.locator('#form-error').textContent(),/رصيد حساب نقدي غير كافٍ.*المتاح 0.*المطلوب 800/);assert.equal(await page.evaluate(()=>S.records.filter(r=>r.kind==='purchase').length),0);
-   assert.equal(await page.locator('.sheet').evaluate(element=>element.getBoundingClientRect().top),paymentTop);
-   await page.evaluate(async()=>{S.accounts[0].balance=1000;S.opening.accounts[S.accounts[0].id]=1000;await act('post-sale')});const purchase=await page.evaluate(()=>selected);
+   assert(paymentTop>=0);assert.equal(await page.locator('#form-error').count(),0);assert.equal(await page.evaluate(()=>S.records.filter(r=>r.kind==='purchase').length),1);assert.equal(await page.evaluate(()=>S.accounts[0].balance),-800);
+   const purchase=await page.evaluate(()=>selected);await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');assert.equal(await page.evaluate(()=>S.accounts[0].balance),-800);assert.equal(await page.evaluate(id=>S.records.find(r=>r.id===id).paid,purchase),800);
    await page.evaluate(async id=>{await act('new:sale');await act('pos:add:'+id);cart[0].qty=4;render();await act('pos:checkout');await act('post-sale')},product);const sale=await page.evaluate(()=>selected);
    await page.evaluate(async id=>{await act('void:'+id);await act('confirm-void')},purchase);
    const error=await page.locator('#form-error').textContent();assert.match(error,/زيت/);assert.match(error,/المخزن الرئيسي/);assert.match(error,/النقص 1/);assert.equal(await page.evaluate(id=>S.records.find(r=>r.id===id).voided||false,purchase),false);
@@ -48,7 +47,7 @@ try{
    assert.equal(await page.locator('.source-record-focus').count(),1);
    await page.evaluate(async({sale,purchase})=>{await act('void:'+sale);await act('confirm-void');await act('void:'+purchase);await act('confirm-void')},{sale,purchase});
    const ending=await page.evaluate(id=>({stock:S.products.find(p=>p.id===id).stocks[S.warehouse],cash:S.accounts[0].balance,cancelled:S.records.filter(r=>r.kind==='sale'||r.kind==='purchase').every(r=>r.voided),actors:S.records.filter(r=>r.voided).map(r=>r.voidedByName)}),product);
-   assert.equal(ending.stock,3);assert.equal(ending.cash,1000);assert.equal(ending.cancelled,true);assert(ending.actors.every(name=>name==='مالك التدقيق'));
+   assert.equal(ending.stock,3);assert.equal(ending.cash,0);assert.equal(ending.cancelled,true);assert(ending.actors.every(name=>name==='مالك التدقيق'));
   }finally{await context.close()}
  });
  await check('editing records line quantity, unit price, settlement, stable number and actual actor/time through persistence',async()=>{
