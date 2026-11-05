@@ -7,6 +7,7 @@ export function installDeviceLifecycle(api){
   const t=(ar,fr)=>api.language()==='fr'?fr:ar;
   const call=(command,payload={})=>globalThis.NativeFiles.deviceLifecycle(command,payload);
   let overlay=null,body=null,busy=false,preview=null,prepared=null,closed=true;
+  let foregroundStatus=null,statusCheckedAt=0;
   const node=(tag,text,className)=>{const element=document.createElement(tag);if(text)element.textContent=text;if(className)element.className=className;return element};
   const visible=()=>!closed&&!document.hidden;
   const poller=new RecoveryPoller({poll:()=>call('status'),onResult:showStatus,onError:showError,visible,online:()=>navigator.onLine!==false});
@@ -133,11 +134,20 @@ export function installDeviceLifecycle(api){
     }catch(error){showError(error);actions()?.append(button(t('إعادة المحاولة','Réessayer'),refresh))}
   }
   document.addEventListener('click',event=>{if(event.target.closest('[data-cloud-bootstrap]'))open()});
-  const wake=()=>poller.wake();
+  // Reconcile receipts for an activation already saved on this phone. Status
+  // never accepts a new offer; foreground events share one bounded request.
+  async function reconcileActivation(){
+    if(!supported()||document.hidden||navigator.onLine===false||Date.now()-statusCheckedAt<60000)return;
+    if(foregroundStatus)return foregroundStatus;
+    foregroundStatus=Promise.resolve().then(()=>call('status')).then(value=>{statusCheckedAt=Date.now();return value}).catch(()=>null).finally(()=>{foregroundStatus=null});
+    return foregroundStatus;
+  }
+  const wake=()=>{poller.wake();reconcileActivation()};
   addEventListener('online',wake);addEventListener('alkarna-network-available',wake);
-  document.addEventListener('visibilitychange',()=>{if(visible())wake();else poller.pause()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)wake();else poller.pause()});
   async function resume(){
     if(!supported())return;
+    await reconcileActivation();
     const value=await call('resume-local');
     if(value.stage==='prepared'&&await hasReceipt(value))await finish(value);
     else if(value.stage==='complete'&&value.ackPending&&await hasReceipt(value))await call('resume');

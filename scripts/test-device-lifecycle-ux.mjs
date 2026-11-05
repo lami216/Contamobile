@@ -71,6 +71,20 @@ async function snapshotFrom(page){
 try{
   browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:process.env.PLAYWRIGHT_USE_BUNDLED==='1'?{}:{channel:'chrome'})});
   const source=await fixture();await createOwner(source.page);const savedSnapshot=await snapshotFrom(source.page);await source.context.close();
+  await check('saved activation receipts reconcile on boot and reconnect without installing offers or repeated foreground requests',async()=>{
+    const {context,page}=await fixture();
+    try{
+      await page.waitForFunction(()=>globalThis.__lifecycleCalls.some(call=>call.command==='status'));
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>call.command==='status').length),1);
+      await page.evaluate(()=>{for(let i=0;i<6;i++){dispatchEvent(new Event('online'));dispatchEvent(new Event('alkarna-network-available'));document.dispatchEvent(new Event('visibilitychange'))}});
+      await idle(page);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>call.command==='status').length),1);
+      await page.evaluate(()=>{const now=Date.now;Date.now=()=>now()+61000;dispatchEvent(new Event('alkarna-network-available'));dispatchEvent(new Event('online'))});
+      await page.waitForFunction(()=>globalThis.__lifecycleCalls.filter(call=>call.command==='status').length===2);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>['activate','bootstrap-prepare','bootstrap-finish'].includes(call.command)).length),0);
+      assert.equal(await page.locator('[data-action="site:setup"]').count(),1);
+    }finally{await context.close()}
+  });
   for(const [language,width]of [['ar',360],['fr',393]])await check(`blank replacement previews before restoring actual saved owner data ${language} ${width}px`,async()=>{
     const {context,page}=await fixture({snapshot:savedSnapshot,language,width});
     try{
