@@ -226,6 +226,7 @@ try{
     try{
       await page.evaluate(()=>{globalThis.__terminalAt='bootstrap-preview'});await page.locator('[data-cloud-bootstrap]').click();const overlay=page.locator('.owner-recovery-overlay');
       await overlay.getByRole('button',{name:'معاينة نسخة السيرفر',exact:true}).click();await idle(page);
+      await overlay.getByRole('button',{name:'التحقق من موافقة جديدة',exact:true}).waitFor();
       assert.match(await overlay.innerText(),/استُبدلت/);assert.equal(await overlay.getByRole('button',{name:'استعادة هذه النسخة',exact:true}).count(),0);
       assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>['bootstrap-prepare','bootstrap-finish'].includes(call.command)).length),0);
     }finally{await context.close()}
