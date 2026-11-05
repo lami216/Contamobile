@@ -2,7 +2,7 @@ name: Mobile quality
 
 on:
   push:
-    branches: [mobile-v1, main, ui-redesign-v2, feat/accounting-parity-20261103]
+    branches: [mobile-v1, main, ui-redesign-v2, feat/device-cloud-lifecycle-20261105]
   pull_request:
     branches: [main, mobile-v1]
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   approved-runtime:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/accounting-parity-20261103'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/device-cloud-lifecycle-20261105'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,6 +56,7 @@ jobs:
           node scripts/test-accounting-parity.mjs
           node scripts/test-accounting-reset.mjs
           node scripts/test-cloud-backup.mjs
+          node scripts/test-device-lifecycle-ux.mjs
           node scripts/test-backup-ux.mjs
           node scripts/test-owner-recovery-ux.mjs
           node scripts/test-user-integrity.mjs

@@ -7,13 +7,25 @@ const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve()};
 function harness(){
  let sequence=0,now=0;const calls=[],timers=new Map(),events=new Map();
  const context={crypto:{randomUUID:()=>String(++sequence)},Map,Set,Promise,Error,Uint8Array,Blob,btoa:value=>Buffer.from(value,'binary').toString('base64'),document:{documentElement:{lang:'ar'},querySelector:()=>null},MutationObserver:class{observe(){}},NativeHost:{},setTimeout(fn,ms){const id=++sequence;timers.set(id,{at:now+ms,fn});return id},clearTimeout:id=>timers.delete(id),addEventListener(name,fn){events.set(name,fn)}};
- for(const method of ['cloudBackup','cloudBackupBegin','cloudBackupAppend','cloudBackupFinish','cloudBackupCancel'])context.NativeHost[method]=(...args)=>calls.push({method,args});
+ for(const method of ['cloudBackup','cloudBackupBegin','cloudBackupAppend','cloudBackupFinish','cloudBackupCancel','deviceLifecycle'])context.NativeHost[method]=(...args)=>calls.push({method,args});
  context.window=context;vm.createContext(context);vm.runInContext(source,context);
  return {context,calls,timers,files:context.NativeFiles,reply:(id,value)=>context.__nativeResult(id,value),event:name=>events.get(name)?.(),async advance(ms){const until=now+ms;while(true){const next=[...timers.entries()].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>until)break;timers.delete(next[0]);now=next[1].at;next[1].fn();await flush()}now=until;await flush()}};
 }
 const pending=promise=>{const result={status:'pending'};promise.then(value=>Object.assign(result,{status:'resolved',value}),error=>Object.assign(result,{status:'rejected',error}));return result};
 const last=(h,name)=>h.calls.filter(c=>c.method===name).at(-1);
 const context={shopId:'shop-fixture',ownerId:'owner-fixture'};
+
+test('replacement preview has a bounded download deadline and page exit rejects its late result',async()=>{
+ const h=harness(),state=pending(h.files.deviceLifecycle('bootstrap-preview',{grantId:'approved-grant'})),call=last(h,'deviceLifecycle');
+ assert.equal(call.args[1],'bootstrap-preview');assert.deepEqual(JSON.parse(call.args[2]),{grantId:'approved-grant'});
+ await h.advance(60000);assert.equal(state.status,'pending');h.event('pagehide');await flush();assert.equal(state.status,'rejected');
+ h.reply(call.args[0],{stage:'preview',text:'late data'});await flush();assert.equal(state.status,'rejected');assert.equal(h.timers.size,0);
+});
+test('activation timeout cannot be mistaken for a completed lifecycle operation',async()=>{
+ const h=harness(),state=pending(h.files.deviceLifecycle('activate')),call=last(h,'deviceLifecycle');
+ await h.advance(60000);assert.equal(state.status,'rejected');assert.equal(state.error.code,'NATIVE_TIMEOUT');
+ h.reply(call.args[0],{stage:'activated'});await flush();assert.equal(state.status,'rejected');
+});
 
 test('cloud command keeps structured failure code and its independent timeout',async()=>{
  const h=harness(),state=pending(h.files.cloudBackup('configure',{...context,consent:true})),call=last(h,'cloudBackup');

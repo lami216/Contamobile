@@ -12,6 +12,7 @@ import {CAPABILITIES,PRESETS} from './permissions.js';
 import {installOwnerRecovery} from './owner-recovery.js';
 import {installCloudBackup} from './cloud-backup.js';
 import {installAccountingReset} from './accounting-reset.js';
+import {installDeviceLifecycle} from './device-lifecycle.js';
 
 const requestedLanguage=new URLSearchParams(location.search).get('lang');
 if(['ar','fr'].includes(requestedLanguage))localStorage.setItem('alkarna-site-language',requestedLanguage);
@@ -73,7 +74,7 @@ async function reloadAfterOwnerRecovery(){
 async function makeSession(user,generation){const current=()=>ownerSessionGenerations.get(user.id)||0;if(current()!==generation)throw Error('تغيّرت بيانات الدخول. سجّل الدخول مجددًا بكلمة المرور الحالية.');const token=crypto.randomUUID()+crypto.randomUUID();await database.createSession(user,{id:'session:'+await digest(token),user:user.id,expiresAt:Date.now()+12*60*60*1000});if(current()!==generation)throw Error('تغيّرت بيانات الدخول. سجّل الدخول مجددًا بكلمة المرور الحالية.');sessionStorage.setItem(sessionKey,token);revokedOwnerSessions.delete(user.id);actor=publicUser(user)}
 async function readSession(){const token=sessionStorage.getItem(sessionKey);if(!token)return;const row=await database.get('meta','session:'+await digest(token));const user=appUsers.find(u=>u.id===row?.user&&u.active!==false);if(row?.expiresAt>Date.now()&&user&&!revokedOwnerSessions.has(user.id))actor=publicUser(user)}
 async function logout(){savePosDraft();const token=sessionStorage.getItem(sessionKey);if(token)await database.put('meta',{id:'session:'+await digest(token),expiresAt:0});sessionStorage.removeItem(sessionKey);actor=null;modal=null;cart=[];editingId=null;history=[];authMode='login';render()}
-function authScreen(){const setup=authMode==='setup',licensed=setup&&verifiedSetupIdentity;return `<main class="auth-screen"><section class="auth-card"><div class="auth-brand"><img class="brand-logo" src="assets/alkarna-logo.png" alt="" width="44" height="44"><span>الكرنه</span></div>${languagePicker()}<h1>${setup?'إنشاء بيانات الدخول':'تسجيل الدخول'}</h1><p>${licensed?'اختر اسم مستخدم وكلمة مرور لحسابك المحلي.':setup?'أنشئ حساب المالك. بيانات المحل تُحفظ على هذا الجهاز وتبقى بعد إغلاق الموقع.':'ادخل بحسابك المحلي لمتابعة البيع والمخزون والحسابات.'}</p>${licensed?`<section class="licensed-identity" aria-label="معلومات من ملف التفعيل"><h2>معلومات من ملف التفعيل</h2><dl><div><dt>اسم صاحب الترخيص</dt><dd data-user-content>${esc(licensed.name)}</dd></div><div><dt>اسم المحل</dt><dd data-user-content>${esc(licensed.shop)}</dd></div></dl><small>هذه المعلومات مأخوذة من ملف التفعيل الموثّق.</small></section>`:''}<form id="site-auth-form">${setup&&!licensed?field('اسم المالك',input('name','text'))+field('اسم المحل',input('shop','text')):''}${field('اسم المستخدم',input('username','text'))}${field('كلمة المرور',input('password','password'))}</form><div class="auth-error"></div>${primary(setup?'إنشاء المحل':'دخول',setup?'site:setup':'site:login')}${!setup?`<button type="button" class="owner-recovery-entry" data-owner-recovery>${appLanguage()==='fr'?'Identifiants du propriétaire oubliés ?':'نسيت بيانات دخول المالك؟'}</button>`:''}<p class="appearance-note" style="margin-top:12px">${setup?'اختر كلمة مرور لا تقل عن 4 أحرف.':'حسابات هذا الموقع تخص البيانات الموجودة على هذا الجهاز.'}</p></section></main>`}
+function authScreen(){const setup=authMode==='setup',licensed=setup&&verifiedSetupIdentity;return `<main class="auth-screen"><section class="auth-card"><div class="auth-brand"><img class="brand-logo" src="assets/alkarna-logo.png" alt="" width="44" height="44"><span>الكرنه</span></div>${languagePicker()}<h1>${setup?'إنشاء بيانات الدخول':'تسجيل الدخول'}</h1><p>${licensed?'اختر اسم مستخدم وكلمة مرور لحسابك المحلي.':setup?'أنشئ حساب المالك. بيانات المحل تُحفظ على هذا الجهاز وتبقى بعد إغلاق الموقع.':'ادخل بحسابك المحلي لمتابعة البيع والمخزون والحسابات.'}</p>${licensed?`<section class="licensed-identity" aria-label="معلومات من ملف التفعيل"><h2>معلومات من ملف التفعيل</h2><dl><div><dt>اسم صاحب الترخيص</dt><dd data-user-content>${esc(licensed.name)}</dd></div><div><dt>اسم المحل</dt><dd data-user-content>${esc(licensed.shop)}</dd></div></dl><small>هذه المعلومات مأخوذة من ملف التفعيل الموثّق.</small></section>`:''}<form id="site-auth-form">${setup&&!licensed?field('اسم المالك',input('name','text'))+field('اسم المحل',input('shop','text')):''}${field('اسم المستخدم',input('username','text'))}${field('كلمة المرور',input('password','password'))}</form><div class="auth-error"></div>${primary(setup?'إنشاء المحل':'دخول',setup?'site:setup':'site:login')}${!setup?`<button type="button" class="owner-recovery-entry" data-owner-recovery>${appLanguage()==='fr'?'Identifiants du propriétaire oubliés ?':'نسيت بيانات دخول المالك؟'}</button>`:''}${setup&&deviceLifecycle.supported()?`<button type="button" class="owner-recovery-entry" data-cloud-bootstrap>${appLanguage()==='fr'?'Récupérer une sauvegarde serveur':'استعادة نسخة السيرفر على هذا الهاتف'}</button>`:''}<p class="appearance-note" style="margin-top:12px">${setup?'اختر كلمة مرور لا تقل عن 4 أحرف.':'حسابات هذا الموقع تخص البيانات الموجودة على هذا الجهاز.'}</p></section></main>`}
 
 let partyMetricSelection=null;
 const partyMetricLabels={receivable:'لنا',payable:'علينا',trade:'المبيعات',profit:'الربح الإجمالي',cashIn:'المستلم',cashOut:'المدفوع',invoiceCount:'عدد الفواتير'};
@@ -266,7 +267,20 @@ const accountingReset=installAccountingReset({
   }
  }
 });
+const deviceLifecycle=installDeviceLifecycle({
+ database,language:appLanguage,isBusy:isPersistenceBusy,isEmpty:()=>appUsers.length===0,
+ lock(value){accountingResetBusy=value;setBusyButtons()},
+ async onRestored(){
+  ready=false;actor=null;sessionStorage.removeItem(sessionKey);render();
+  const saved=await database.load();if(!saved)throw Error('لم تكتمل قراءة البيانات المستعادة');
+  S=saved;prepareFeatureState(S);syncStock();await loadUsers();
+  actor=null;sessionStorage.removeItem(sessionKey);authMode='login';
+  cart=[];editingId=null;history=[];modal=null;view='home';activeTab='home';
+  await cloudBackup.replaced();ready=true;render();ownerRecovery.register().catch(()=>{});
+ }
+});
 await boot();
+deviceLifecycle.resume().catch(()=>{});
 accountingReset.start();
 cloudBackup.start().catch(()=>{});
 ownerRecovery.register().catch(()=>{});

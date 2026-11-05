@@ -46,7 +46,7 @@ try{
    }
   }});
   await page.goto(origin+'/?lang='+lang);await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
-  await page.locator('#site-auth-form [name=username]').fill('old-owner');await page.locator('#site-auth-form [name=password]').fill('1234');await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();
+  await page.locator('#site-auth-form [name=username]').fill('old-owner');await page.locator('#site-auth-form [name=password]').fill('1234');await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());
   await page.evaluate(async()=>{await act('go:inventory');await act('open:product')});
   for(const [name,value]of Object.entries({name:'منتج',price:'50',cost:'30'}))await page.locator('#sheet-form [name='+name+']').fill(value);
   await page.evaluate(()=>act('save-product'));

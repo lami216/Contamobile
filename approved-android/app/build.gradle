@@ -4,11 +4,11 @@ plugins { id 'com.android.application' }
 // Never fall back to the machine-generated debug identity on a release build.
 def signingEnvironment = ['ALKARNA_KEYSTORE_PATH', 'ALKARNA_STORE_PASSWORD', 'ALKARNA_KEY_ALIAS', 'ALKARNA_KEY_PASSWORD']
 def hasReleaseSigning = signingEnvironment.every { System.getenv(it)?.trim() }
-def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(24)
+def approvedVersionCode = providers.gradleProperty('alkarnaVersionCode').map { it.toInteger() }.getOrElse(25)
 // Isolated emulator audit only; the release signing path is unchanged.
 def auditDebugTests = providers.gradleProperty('alkarnaAuditDebugTests').map { it.toBoolean() }.getOrElse(false)
 
-def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.23')
+def approvedVersionName = providers.gradleProperty('alkarnaVersionName').getOrElse('1.0.24')
 // Public deployment metadata, confirmed by the owner from the current service export.
 def servicePublic = new groovy.json.JsonSlurper().parse(rootProject.file('contatools-public.json'))
 def serviceOrigin = System.getenv('CONTATOOLS_ORIGIN') ?: servicePublic.CONTATOOLS_ORIGIN

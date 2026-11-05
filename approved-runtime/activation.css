@@ -8,3 +8,4 @@ header .mark{display:block;object-fit:cover;background:#eee8df;border-color:var(
 @media(max-width:340px){.activation{padding-inline:12px}.license-card{padding:14px}.activation-contact-copy img{width:66px;height:66px}.activation-contact-copy{gap:9px}.activation-contact h2{font-size:13px}}
 
 .activation-language{display:flex;gap:5px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0 0 18px;direction:ltr}.activation-language button{flex:1;background:transparent;border-color:transparent;color:var(--muted);font-size:13px}.activation-language button[aria-pressed=true]{border-color:var(--gold);color:var(--text);background:var(--soft)}html[dir=ltr] .activation{direction:ltr;text-align:start}
+.online-activation-actions{display:flex;flex-wrap:wrap}.online-activation-actions button{flex:1;min-width:0;font-size:13px;padding:9px 10px}.online-activation-actions #online-accept{border-color:var(--gold)}

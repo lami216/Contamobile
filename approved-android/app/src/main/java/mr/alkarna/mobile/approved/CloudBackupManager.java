@@ -32,6 +32,22 @@ final class CloudBackupManager {
  private static JSONObject target(JSONObject p) throws Exception {String shop=p.getString("shopId"),owner=p.getString("ownerId");if(!shop.matches("[A-Za-z0-9_.:-]{1,160}")||!owner.matches("[A-Za-z0-9_.:-]{1,160}"))throw new IOException("INVALID_TARGET");return new JSONObject().put("shopId",shop).put("ownerId",owner);}
  private static boolean same(JSONObject a,JSONObject b){return a!=null&&b!=null&&a.optString("shopId").equals(b.optString("shopId"))&&a.optString("ownerId").equals(b.optString("ownerId"));}
  private JSONObject settings(){return disk.state.optJSONObject("settings");}
+  private boolean manual() {
+    return disk.state.optJSONObject("manual") != null;
+  }
+
+  private boolean allowed() {
+    return settings().optBoolean("consent")
+        || manual() && disk.state.optJSONObject("manual").optBoolean("authorized");
+  }
+
+  private JSONObject uploadTarget(JSONObject target, JSONObject pending) throws Exception {
+    JSONObject result = ProtocolJson.copy(target);
+    if (pending.has("manualRequestId"))
+      result.put("manualRequestId", pending.getString("manualRequestId"));
+    return result;
+  }
+
  private void scope(JSONObject value) throws Exception {
   JSONObject old=disk.state.optJSONObject("context");if(same(old,value))return;
   if(old!=null&&settings().optBoolean("consent"))throw new IOException("WRONG_SHOP");
@@ -44,11 +60,81 @@ final class CloudBackupManager {
   boolean changes=latest!=null&&!latest.optString("sha256").equals(state.optString("lastSha256"));String stage=state.optString("stage","disabled");
   if("uploading".equals(stage)&&!running)stage="scheduled";
   JSONObject visibleServer=server==null?null:ProtocolJson.copy(server);if(visibleServer!=null)visibleServer.put("entitlement",new JSONObject().put("enabled",server.optBoolean("subscribed")).put("active",server.optBoolean("subscribed")&&server.optBoolean("writer")).put("writer",server.optBoolean("writer")).put("endsAt",server.opt("endsAt")).put("downloadUntil",server.opt("downloadUntil")).put("quotaBytes",server.opt("quotaBytes")).put("usedBytes",server.opt("usedBytes")));
-  return new JSONObject().put("settings",ProtocolJson.copy(settings())).put("context",state.opt("context")).put("paused",state.optBoolean("paused")).put("stage",stage).put("lastSuccessAt",state.optLong("lastSuccessAt")).put("lastBackup",state.opt("lastBackup")).put("stagedRevision",latest==null?JSONObject.NULL:latest.optString("localRevision")).put("lastBackedUpRevision",state.opt("lastBackedUpRevision")).put("changesPending",changes).put("nextRunAt",state.optLong("dueAt")).put("retryAt",state.optLong("retryAt")).put("lastError",state.opt("lastError")).put("progress",state.opt("progress")).put("server",visibleServer==null?JSONObject.NULL:visibleServer).put("serverCheckedAt",state.optLong("serverCheckedAt"));
+  return new JSONObject().put("settings",ProtocolJson.copy(settings())).put("manualConsentGranted",state.optBoolean("manualConsentGranted")).put("manualPending",manual()).put("context",state.opt("context")).put("paused",state.optBoolean("paused")).put("stage",stage).put("lastSuccessAt",state.optLong("lastSuccessAt")).put("lastBackup",state.opt("lastBackup")).put("stagedRevision",latest==null?JSONObject.NULL:latest.optString("localRevision")).put("lastBackedUpRevision",state.opt("lastBackedUpRevision")).put("changesPending",changes).put("nextRunAt",state.optLong("dueAt")).put("retryAt",state.optLong("retryAt")).put("lastError",state.opt("lastError")).put("progress",state.opt("progress")).put("server",visibleServer==null?JSONObject.NULL:visibleServer).put("serverCheckedAt",state.optLong("serverCheckedAt"));
  }
+  JSONObject manualConsent(JSONObject p) throws Exception {
+    JSONObject t = target(p);
+    String request;
+    long epoch;
+    synchronized (lock) {
+      scope(t);
+      epoch = disk.state.optLong("epoch");
+      disk.state.put("manualConsentGranted", true);
+      JSONObject manual = disk.state.optJSONObject("manual");
+      if (manual == null) {
+        manual = new JSONObject().put("requestId", UUID.randomUUID().toString());
+        disk.state.put("manual", manual);
+      }
+      request = manual.getString("requestId");
+      disk.save();
+    }
+    ensureNetwork(false);
+    revokeIfNeeded();
+    JSONObject answer =
+        client.call("manual.authorize", ProtocolJson.copy(t).put("requestId", request));
+    if (!request.equals(answer.optString("manualRequestId"))
+        || !answer.optBoolean("subscribed")
+        || !answer.optBoolean("writer")) throw new IOException("INVALID_MANUAL_AUTHORIZATION");
+    synchronized (lock) {
+      JSONObject manual = disk.state.optJSONObject("manual");
+      if (epoch != disk.state.optLong("epoch")
+          || !same(disk.state.optJSONObject("context"), t)
+          || manual == null
+          || !request.equals(manual.optString("requestId"))) throw new IOException("PAUSED");
+      manual.put("authorized", true).put("generation", answer.getInt("generation"));
+      JSONObject pending = disk.state.optJSONObject("pending");
+      if (!settings().optBoolean("consent")
+          && pending != null
+          && !request.equals(pending.optString("manualRequestId"))) {
+        disk.state.remove("pending");
+        JSONObject latest = disk.state.optJSONObject("latest");
+        if (latest == null || !latest.optString("id").equals(pending.optString("id"))) {
+          disk.deleteSnapshot(pending.optString("id"));
+        }
+      }
+      disk.state.put("paused", false)
+          .put("manualConsentGeneration", answer.getInt("generation")).remove("lastError");
+      disk.save();
+      return local();
+    }
+  }
+
+  private void rejectPendingUpload(String attemptedId, int status) throws Exception {
+    JSONObject pending = disk.state.optJSONObject("pending");
+    if (pending == null || !pending.optString("backupId").equals(attemptedId)) return;
+    boolean oneOff = pending.has("manualRequestId");
+    if (status != 409 && !oneOff) return;
+    disk.state.remove("pending");
+    if (oneOff) {
+      JSONObject authorization = disk.state.optJSONObject("manual");
+      JSONObject server = disk.state.optJSONObject("server");
+      boolean changedGeneration = authorization != null && server != null
+          && authorization.has("generation") && server.has("generation")
+          && authorization.getLong("generation") != server.getLong("generation");
+      disk.state.remove("manual");
+      if (changedGeneration) disk.state.remove("manualConsentGranted");
+    }
+    // Retain the latest complete snapshot. A new explicit request gets a new
+    // immutable upload ID; a rejected one-off never keeps polling HTTP 403.
+    JSONObject latest = disk.state.optJSONObject("latest");
+    if (latest == null || !latest.optString("id").equals(pending.optString("id"))) {
+      disk.deleteSnapshot(pending.optString("id"));
+    }
+  }
+
  JSONObject status(JSONObject p,boolean refresh) throws Exception {
   JSONObject t=target(p);synchronized(lock){scope(t);if(!refresh)return local();}
-  ensureNetwork(false);JSONObject server=client.call("status",t);synchronized(lock){if(!same(disk.state.optJSONObject("context"),t))throw new IOException("WRONG_SHOP");disk.state.put("server",server).put("serverCheckedAt",System.currentTimeMillis());disk.save();return local();}
+  ensureNetwork(false);JSONObject server=client.call("status",t);synchronized(lock){if(!same(disk.state.optJSONObject("context"),t))throw new IOException("WRONG_SHOP");if(disk.state.has("manualConsentGeneration")&&server.has("generation")&&disk.state.getLong("manualConsentGeneration")!=server.getLong("generation"))disk.state.remove("manualConsentGranted");disk.state.put("server",server).put("serverCheckedAt",System.currentTimeMillis());disk.save();return local();}
  }
  JSONObject configure(JSONObject p) throws Exception {
   JSONObject t=target(p),newSettings=CloudBackupPolicy.settings(p);boolean consent=newSettings.optBoolean("consent");
@@ -62,7 +148,7 @@ final class CloudBackupManager {
  private void pauseLocked(boolean invalidate) throws Exception {
   JSONObject t=disk.state.optJSONObject("context");if(t!=null)disk.state.put("revocation",ProtocolJson.copy(t));
   disk.state.put("epoch",disk.state.optLong("epoch")+1);settings().put("consent",false);disk.state.put("paused",invalidate).put("stage",invalidate?"paused":"disabled").remove("retryAt");disk.state.remove("progress");
-  transfer=null;if(invalidate){clearBlobs();disk.state.remove("latest");disk.state.remove("pending");}
+  transfer=null;disk.state.remove("manual");if(invalidate){clearBlobs();disk.state.remove("latest");disk.state.remove("pending");disk.state.remove("manualConsentGranted");}
   scheduler().cancel(CloudBackupPolicy.JOB_ID);disk.save();
  }
  JSONObject pause(JSONObject p,boolean invalidate) throws Exception {JSONObject t=target(p);synchronized(lock){scope(t);pauseLocked(invalidate);scheduleLocked();return local();}}
@@ -70,13 +156,14 @@ final class CloudBackupManager {
  // Keep that existing target for its revocation; never bind a new target or delete cloud copies.
  void pauseForAccountingReset() throws Exception {synchronized(lock){pauseLocked(true);scheduleLocked();}}
  JSONObject begin(String id,JSONObject p) throws Exception {
+  java.util.Iterator<String> names=p.keys();java.util.Set<String> permitted=new java.util.HashSet<>(java.util.Arrays.asList("shopId","ownerId","manual","sizeBytes","localRevision","snapshotAt"));while(names.hasNext())if(!permitted.contains(names.next()))throw new IOException("INVALID_STAGE");if(p.has("manual")&&!(p.opt("manual") instanceof Boolean))throw new IOException("INVALID_STAGE");
   JSONObject t=target(p);int size=p.getInt("sizeBytes");String revision=p.getString("localRevision");long at=p.getLong("snapshotAt");
   if(!id.matches("[a-f0-9-]{36}")||size<2||size>CloudBackupPolicy.MAX_BYTES||!revision.matches("[0-9]{1,18}")||at<0)throw new IOException("INVALID_SNAPSHOT");
-  synchronized(lock){if(!same(disk.state.optJSONObject("context"),t)||!settings().optBoolean("consent"))throw new IOException("CONSENT_REQUIRED");if(transfer!=null)throw new IOException("STAGE_BUSY");JSONObject previous=disk.state.optJSONObject("latest");if(previous!=null&&CloudBackupPolicy.older(revision,previous.optString("localRevision")))throw new IOException("STALE_SNAPSHOT");transfer=new Stage(id,t,disk.state.optLong("epoch"),revision,size,at);return new JSONObject().put("accepted",true);}
+  synchronized(lock){if(!same(disk.state.optJSONObject("context"),t)||!(settings().optBoolean("consent")||p.optBoolean("manual")&&manual()&&disk.state.getJSONObject("manual").optBoolean("authorized")))throw new IOException("CONSENT_REQUIRED");if(transfer!=null)throw new IOException("STAGE_BUSY");JSONObject previous=disk.state.optJSONObject("latest");if(previous!=null&&CloudBackupPolicy.older(revision,previous.optString("localRevision")))throw new IOException("STALE_SNAPSHOT");transfer=new Stage(id,t,disk.state.optLong("epoch"),revision,size,at);return new JSONObject().put("accepted",true);}
  }
  void append(String id,String encoded) throws Exception {synchronized(lock){if(transfer==null||!transfer.id.equals(id)||encoded.length()>65536)throw new IOException("INVALID_STAGE");byte[] bytes=Base64.getDecoder().decode(encoded);if(bytes.length>CloudBackupPolicy.CHUNK_BYTES||transfer.data.size()+bytes.length>transfer.expected){transfer=null;throw new IOException("INVALID_STAGE");}transfer.data.write(bytes);}}
  JSONObject finish(String id) throws Exception {
-  synchronized(lock){Stage current=transfer;transfer=null;if(current==null||!current.id.equals(id)||current.data.size()!=current.expected||current.epoch!=disk.state.optLong("epoch")||!settings().optBoolean("consent"))throw new IOException("INVALID_STAGE");byte[] bytes=current.data.toByteArray();CloudBackupStore.validateSnapshot(bytes,current.target.getString("shopId"));JSONObject previous=disk.state.optJSONObject("latest");
+  synchronized(lock){Stage current=transfer;transfer=null;if(current==null||!current.id.equals(id)||current.data.size()!=current.expected||current.epoch!=disk.state.optLong("epoch")||!allowed())throw new IOException("INVALID_STAGE");byte[] bytes=current.data.toByteArray();CloudBackupStore.validateSnapshot(bytes,current.target.getString("shopId"));JSONObject previous=disk.state.optJSONObject("latest");
    if(previous!=null){if(CloudBackupPolicy.older(current.revision,previous.optString("localRevision")))throw new IOException("STALE_SNAPSHOT");if(current.revision.equals(previous.optString("localRevision")))return local();}
    String hash=CloudBackupStore.hash(bytes);disk.writeSnapshot(id,bytes);JSONObject latest=new JSONObject().put("id",id).put("sha256",hash).put("sizeBytes",bytes.length).put("localRevision",current.revision).put("snapshotAt",current.snapshotAt);
    disk.state.put("latest",latest).put("stage",hash.equals(disk.state.optString("lastSha256"))?"up-to-date":"scheduled");if("connected".equals(settings().optString("schedule")))disk.state.put("dueAt",System.currentTimeMillis()+2000+(long)(random.nextDouble()*3000));disk.save();
@@ -84,7 +171,7 @@ final class CloudBackupManager {
   }
  }
  void cancelStage(String id){synchronized(lock){if(transfer!=null&&transfer.id.equals(id))transfer=null;}}
- JSONObject run(JSONObject p) throws Exception {JSONObject t=target(p);synchronized(lock){scope(t);if(!settings().optBoolean("consent"))throw new IOException("CONSENT_REQUIRED");JSONObject latest=disk.state.optJSONObject("latest");if(latest==null)throw new IOException("SNAPSHOT_REQUIRED");if(latest.optString("sha256").equals(disk.state.optString("lastSha256"))){disk.state.put("stage","up-to-date");disk.save();return local();}disk.state.put("dueAt",System.currentTimeMillis()).put("stage","scheduled");disk.state.remove("retryAt");disk.state.remove("lastError");disk.save();scheduleLocked();}launch();synchronized(lock){return local();}}
+ JSONObject run(JSONObject p) throws Exception {JSONObject t=target(p);synchronized(lock){scope(t);if(!allowed())throw new IOException("CONSENT_REQUIRED");JSONObject latest=disk.state.optJSONObject("latest");if(latest==null)throw new IOException("SNAPSHOT_REQUIRED");if(latest.optString("sha256").equals(disk.state.optString("lastSha256"))){disk.state.remove("manual");disk.state.put("stage","up-to-date");disk.save();return local();}disk.state.put("dueAt",System.currentTimeMillis()).put("stage","scheduled");disk.state.remove("retryAt");disk.state.remove("lastError");disk.save();scheduleLocked();}launch();synchronized(lock){return local();}}
  JSONObject list(JSONObject p) throws Exception {JSONObject t=target(p);ensureNetwork(false);JSONObject result=client.call("list",t.put("cursor",p.optInt("cursor",0)).put("limit",Math.max(1,Math.min(50,p.optInt("limit",20)))));JSONArray versions=result.optJSONArray("versions");if(versions!=null)for(int i=0;i<versions.length();i++){JSONObject item=versions.getJSONObject(i);item.put("backupId",item.getString("id")).put("bytes",item.optLong("sizeBytes"));}return result;}
  JSONObject download(JSONObject p) throws Exception {
   JSONObject t=target(p);String id=p.getString("backupId");if(!id.matches("[a-f0-9-]{36}"))throw new IOException("INVALID_BACKUP_ID");ensureNetwork(false);ByteArrayOutputStream out=new ByteArrayOutputStream();String hash=null;int count=1,size=0;
@@ -97,7 +184,7 @@ final class CloudBackupManager {
  private JobScheduler scheduler(){return (JobScheduler)context.getSystemService(Context.JOB_SCHEDULER_SERVICE);}
  private void scheduleLocked() throws Exception {
   boolean revoke=disk.state.has("revocation");JSONObject latest=disk.state.optJSONObject("latest");boolean dirty=latest!=null&&!latest.optString("sha256").equals(disk.state.optString("lastSha256"));
-  if(!revoke&&(!settings().optBoolean("consent")||!dirty)){scheduler().cancel(CloudBackupPolicy.JOB_ID);return;}
+  if(!revoke&&(!allowed()||!dirty)){scheduler().cancel(CloudBackupPolicy.JOB_ID);return;}
   // Scheduling the same ID while its service is running stops that job. A newer
   // snapshot waits for this immutable upload to finish, then gets one new job.
   if(running&&!revoke)return;
@@ -116,21 +203,21 @@ final class CloudBackupManager {
  static boolean unmeteredWifi(NetworkCapabilities caps){return caps!=null&&unmeteredWifi(caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED));}
  private void ensureNetwork(boolean wifi) throws Exception {if(injected)return;ConnectivityManager manager=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);NetworkCapabilities caps=manager==null?null:manager.getNetworkCapabilities(manager.getActiveNetwork());if(caps==null||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)||!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))throw new IOException("NETWORK");if(wifi&&!unmeteredWifi(caps))throw new IOException("WIFI_REQUIRED");}
  private void revokeIfNeeded() throws Exception {JSONObject revoke;synchronized(lock){revoke=disk.state.optJSONObject("revocation");if(revoke==null)return;revoke=ProtocolJson.copy(revoke);}try{client.call("consent",revoke.put("enabled",false).put("consentVersion",1));}catch(ContatoolsClient.ServiceFailure error){if(error.status!=403&&error.status!=404)throw error;}synchronized(lock){JSONObject current=disk.state.optJSONObject("revocation");if(same(current,revoke)){disk.state.remove("revocation");disk.save();}}}
- private void live(long epoch,JSONObject target,AtomicBoolean stopped) throws Exception {if(stopped.get())throw new IOException("STOPPED");synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!settings().optBoolean("consent")||!same(disk.state.optJSONObject("context"),target))throw new IOException("PAUSED");ensureNetwork(settings().optBoolean("wifiOnly"));}}
+ private void live(long epoch,JSONObject target,AtomicBoolean stopped) throws Exception {if(stopped.get())throw new IOException("STOPPED");synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!allowed()||!same(disk.state.optJSONObject("context"),target))throw new IOException("PAUSED");ensureNetwork(settings().optBoolean("wifiOnly"));}}
  void process(AtomicBoolean stopped){process(stopped,false);}
  void process(AtomicBoolean stopped,boolean fromJob){
   synchronized(UPLOAD_LOCK){running=true;String attemptedBackupId=null;try{
    ensureNetwork(false);revokeIfNeeded();JSONObject t,pending;long epoch;
-   synchronized(lock){if(!settings().optBoolean("consent"))return;JSONObject latest=disk.state.optJSONObject("latest");if(latest==null||latest.optString("sha256").equals(disk.state.optString("lastSha256")))return;long now=System.currentTimeMillis();if(now<Math.max(disk.state.optLong("dueAt"),disk.state.optLong("retryAt")))return;t=ProtocolJson.copy(disk.state.getJSONObject("context"));epoch=disk.state.optLong("epoch");pending=disk.state.optJSONObject("pending");if(pending==null){pending=ProtocolJson.copy(latest).put("backupId",UUID.randomUUID().toString());disk.state.put("pending",pending);}pending=ProtocolJson.copy(pending);disk.state.put("stage","uploading");disk.state.remove("lastError");disk.save();}
-   attemptedBackupId=pending.getString("backupId");live(epoch,t,stopped);JSONObject server=client.call("status",t);synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!same(disk.state.optJSONObject("context"),t)||!settings().optBoolean("consent"))return;disk.state.put("server",server).put("serverCheckedAt",System.currentTimeMillis());disk.save();}
-   if(!server.optBoolean("subscribed"))throw new IOException("NOT_SUBSCRIBED");if(!server.optBoolean("writer"))throw new IOException("WRITER_REQUIRED");if(!server.optBoolean("consent"))throw new IOException("CONSENT_REQUIRED");
+   synchronized(lock){if(!allowed())return;JSONObject latest=disk.state.optJSONObject("latest");if(latest==null||latest.optString("sha256").equals(disk.state.optString("lastSha256")))return;long now=System.currentTimeMillis();if(now<Math.max(disk.state.optLong("dueAt"),disk.state.optLong("retryAt")))return;t=ProtocolJson.copy(disk.state.getJSONObject("context"));epoch=disk.state.optLong("epoch");pending=disk.state.optJSONObject("pending");if(pending==null){pending=ProtocolJson.copy(latest).put("backupId",UUID.randomUUID().toString());if(manual())pending.put("manualRequestId",disk.state.getJSONObject("manual").getString("requestId"));disk.state.put("pending",pending);}pending=ProtocolJson.copy(pending);disk.state.put("stage","uploading");disk.state.remove("lastError");disk.save();}
+   attemptedBackupId=pending.getString("backupId");live(epoch,t,stopped);JSONObject server=client.call("status",t);synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!same(disk.state.optJSONObject("context"),t)||!allowed())return;disk.state.put("server",server).put("serverCheckedAt",System.currentTimeMillis());disk.save();}
+   if(!server.optBoolean("subscribed"))throw new IOException("NOT_SUBSCRIBED");if(!server.optBoolean("writer"))throw new IOException("WRITER_REQUIRED");if(!pending.has("manualRequestId")&&!server.optBoolean("consent"))throw new IOException("CONSENT_REQUIRED");
    byte[] bytes; synchronized(lock){bytes=disk.snapshot(pending.getString("id"));}if(bytes.length!=pending.getInt("sizeBytes")||!CloudBackupStore.hash(bytes).equals(pending.getString("sha256")))throw new IOException("STAGED_CHECKSUM");
-   live(epoch,t,stopped);JSONObject begin=client.call("upload.begin",ProtocolJson.copy(t).put("backupId",pending.getString("backupId")).put("generation",server.getInt("generation")).put("sizeBytes",bytes.length).put("sha256",pending.getString("sha256")).put("snapshotAt",pending.getLong("snapshotAt")).put("localRevision",pending.getString("localRevision")));
+   live(epoch,t,stopped);JSONObject begin=client.call("upload.begin",uploadTarget(t,pending).put("backupId",pending.getString("backupId")).put("generation",server.getInt("generation")).put("sizeBytes",bytes.length).put("sha256",pending.getString("sha256")).put("snapshotAt",pending.getLong("snapshotAt")).put("localRevision",pending.getString("localRevision")));
    int count=(bytes.length+CloudBackupPolicy.CHUNK_BYTES-1)/CloudBackupPolicy.CHUNK_BYTES;if(begin.optInt("chunkBytes",CloudBackupPolicy.CHUNK_BYTES)!=CloudBackupPolicy.CHUNK_BYTES||begin.optInt("chunkCount",count)!=count)throw new IOException("INVALID_UPLOAD");Set<Integer> received=new HashSet<>();JSONArray chunks=begin.optJSONArray("receivedChunks");if(chunks!=null)for(int i=0;i<chunks.length();i++)received.add(chunks.getInt(i));
-   for(int i=0;i<count;i++){live(epoch,t,stopped);if(!received.contains(i)&&!"ready".equals(begin.optString("status"))){int from=i*CloudBackupPolicy.CHUNK_BYTES,to=Math.min(bytes.length,from+CloudBackupPolicy.CHUNK_BYTES);client.call("upload.chunk",ProtocolJson.copy(t).put("backupId",pending.getString("backupId")).put("index",i).put("data",Base64.getEncoder().encodeToString(Arrays.copyOfRange(bytes,from,to))));}synchronized(lock){disk.state.put("progress",new JSONObject().put("completed",i+1).put("total",count));disk.save();}}
-   live(epoch,t,stopped);JSONObject result=client.call("upload.commit",ProtocolJson.copy(t).put("backupId",pending.getString("backupId")));if(!"ready".equals(result.optString("status"))||!pending.getString("backupId").equals(result.optString("backupId"))||!pending.getString("sha256").equals(result.optString("sha256"))||pending.getInt("sizeBytes")!=result.optInt("sizeBytes"))throw new IOException("INVALID_ACK");
-   synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!same(disk.state.optJSONObject("context"),t))return;long now=System.currentTimeMillis();disk.state.put("lastSuccessAt",now).put("lastBackup",result).put("lastSha256",pending.getString("sha256")).put("lastBackedUpRevision",pending.getString("localRevision")).put("failures",0).put("dueAt",CloudBackupPolicy.nextPreferred(settings(),now,ZoneId.systemDefault()));disk.state.remove("pending");disk.state.remove("retryAt");disk.state.remove("lastError");disk.state.remove("progress");JSONObject latest=disk.state.optJSONObject("latest");boolean dirty=latest!=null&&!latest.optString("sha256").equals(pending.getString("sha256"));disk.state.put("stage",settings().optBoolean("consent")?(dirty?"scheduled":"up-to-date"):"paused");disk.save();if(latest==null||!latest.optString("id").equals(pending.getString("id")))disk.deleteSnapshot(pending.getString("id"));}
-  }catch(Exception failure){synchronized(lock){try{if(!"PAUSED".equals(failure.getMessage())&&!"STOPPED".equals(failure.getMessage())){int n=Math.min(20,disk.state.optInt("failures")+1);long now=System.currentTimeMillis(),retry=now+CloudBackupPolicy.backoff(n,random.nextDouble());int status=0;if(failure instanceof ContatoolsClient.ServiceFailure){ContatoolsClient.ServiceFailure service=(ContatoolsClient.ServiceFailure)failure;status=service.status;retry=Math.max(retry,service.retryAt);if(status==409){JSONObject pending=disk.state.optJSONObject("pending"),latest=disk.state.optJSONObject("latest");if(pending!=null&&pending.optString("backupId").equals(attemptedBackupId)){disk.state.remove("pending");if(latest==null||!latest.optString("id").equals(pending.optString("id")))disk.deleteSnapshot(pending.optString("id"));}}}String code=errorCode(failure);disk.state.put("failures",n).put("retryAt",retry).put("stage","waiting").put("lastError",new JSONObject().put("code",code).put("status",status).put("at",now));disk.save();}}catch(Exception ignored){}}}
+   for(int i=0;i<count;i++){live(epoch,t,stopped);if(!received.contains(i)&&!"ready".equals(begin.optString("status"))){int from=i*CloudBackupPolicy.CHUNK_BYTES,to=Math.min(bytes.length,from+CloudBackupPolicy.CHUNK_BYTES);client.call("upload.chunk",uploadTarget(t,pending).put("backupId",pending.getString("backupId")).put("index",i).put("data",Base64.getEncoder().encodeToString(Arrays.copyOfRange(bytes,from,to))));}synchronized(lock){disk.state.put("progress",new JSONObject().put("completed",i+1).put("total",count));disk.save();}}
+   live(epoch,t,stopped);JSONObject result=client.call("upload.commit",uploadTarget(t,pending).put("backupId",pending.getString("backupId")));if(!"ready".equals(result.optString("status"))||!pending.getString("backupId").equals(result.optString("backupId"))||!pending.getString("sha256").equals(result.optString("sha256"))||pending.getInt("sizeBytes")!=result.optInt("sizeBytes"))throw new IOException("INVALID_ACK");
+   synchronized(lock){if(epoch!=disk.state.optLong("epoch")||!same(disk.state.optJSONObject("context"),t))return;long now=System.currentTimeMillis();disk.state.put("lastSuccessAt",now).put("lastBackup",result).put("lastSha256",pending.getString("sha256")).put("lastBackedUpRevision",pending.getString("localRevision")).put("failures",0).put("dueAt",CloudBackupPolicy.nextPreferred(settings(),now,ZoneId.systemDefault()));disk.state.remove("pending");if(pending.has("manualRequestId"))disk.state.remove("manual");disk.state.remove("retryAt");disk.state.remove("lastError");disk.state.remove("progress");JSONObject latest=disk.state.optJSONObject("latest");boolean dirty=latest!=null&&!latest.optString("sha256").equals(pending.getString("sha256"));disk.state.put("stage",settings().optBoolean("consent")?(dirty?"scheduled":"up-to-date"):"paused");disk.save();if(latest==null||!latest.optString("id").equals(pending.getString("id")))disk.deleteSnapshot(pending.getString("id"));}
+  }catch(Exception failure){synchronized(lock){try{if(!"PAUSED".equals(failure.getMessage())&&!"STOPPED".equals(failure.getMessage())){int n=Math.min(20,disk.state.optInt("failures")+1);long now=System.currentTimeMillis(),retry=now+CloudBackupPolicy.backoff(n,random.nextDouble());int status=0;if(failure instanceof ContatoolsClient.ServiceFailure){ContatoolsClient.ServiceFailure service=(ContatoolsClient.ServiceFailure)failure;status=service.status;retry=Math.max(retry,service.retryAt);if(status==409||status==403)rejectPendingUpload(attemptedBackupId,status);}String code=errorCode(failure);disk.state.put("failures",n).put("retryAt",retry).put("stage","waiting").put("lastError",new JSONObject().put("code",code).put("status",status).put("at",now));disk.save();}}catch(Exception ignored){}}}
   finally{running=false;if(!fromJob)synchronized(lock){try{scheduleLocked();}catch(Exception ignored){}}}}
  }
  static String errorCode(Exception error){if(error instanceof ContatoolsClient.ServiceFailure){int status=((ContatoolsClient.ServiceFailure)error).status;return status==429?"RATE_LIMITED":status==413?"SNAPSHOT_TOO_LARGE":status==403?"UPLOAD_DENIED":status==409?"REVIEW_REQUIRED":"SERVER_ERROR";}String m=error.getMessage();return m!=null&&m.matches("[A-Z_]{3,40}")?m:"BACKUP_UNAVAILABLE";}

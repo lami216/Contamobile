@@ -15,10 +15,15 @@ import java.util.*;
 final class LicenseVerifier {
     static final int MAX_BYTES=64*1024;
     private static final Map<String,PublicKey> PUBLIC_KEYS=new HashMap<>();
+    private static final Map<String,PublicKey> ONLINE_KEYS=new HashMap<>();
     static {
         try {
             PUBLIC_KEYS.put("alkarna-license-v1",key("VafWOl9h-bF8auIQTUvS5AATeR8yyxJu49p-QSzk7-s","Pz7QrSsgtgcKhvc_eSblH0BPcBwEo9lCo-0zkXwIDzM"));
             PUBLIC_KEYS.put("alkarna-license-v2",key("-kAStxv0yNuJ9GyzSNaiywfrZ5BziSWL5kJVMFOnRUY","AburlAjGDOBSzFeNa2sxyd4XgLM5CWKuDR4Hpe57GYU"));
+            // Independent legacy JVM checks compile without Android's generated
+            // BuildConfig. Production only reads this APK's pinned public keys.
+            JSONObject issuers;try{issuers=new JSONObject((String)Class.forName("mr.alkarna.mobile.approved.BuildConfig").getField("CONTATOOLS_ISSUERS").get(null));}catch(ClassNotFoundException legacyJvm){issuers=new JSONObject();}
+            Iterator<String> names=issuers.keys();while(names.hasNext()){String id=names.next();JSONObject jwk=issuers.getJSONObject(id);if(jwk.has("d")||!"EC".equals(jwk.optString("kty"))||!"P-256".equals(jwk.optString("crv")))throw new Exception("Invalid online issuer");ONLINE_KEYS.put("contatools-online-v2:"+id,key(jwk.getString("x"),jwk.getString("y")));}
         } catch(Exception e){throw new ExceptionInInitializerError(e);}
     }
     static final class Rejected extends Exception {
@@ -68,7 +73,7 @@ final class LicenseVerifier {
         try {
             JSONObject doc;try(JsonReader reader=new JsonReader(new StringReader(content))){reader.setLenient(false);Object parsed=readJson(reader,0);if(!(parsed instanceof JSONObject)||reader.peek()!=JsonToken.END_DOCUMENT)throw invalid();doc=(JSONObject)parsed;}Object versionValue=doc.get("version");int version=doc.getInt("version");
             if(!(versionValue instanceof Number)||((Number)versionValue).doubleValue()!=version||!(version==1||version==2)||!"alkarna-license".equals(doc.opt("schema"))||!"ECDSA_P256_SHA256".equals(doc.opt("algorithm")))throw invalid();
-            String keyId=doc.getString("keyId");if(!keyId.equals("alkarna-license-v"+version)||!PUBLIC_KEYS.containsKey(keyId))throw invalid();
+            String keyId=doc.getString("keyId");PublicKey verificationKey=keyId.equals("alkarna-license-v"+version)?PUBLIC_KEYS.get(keyId):version==2?ONLINE_KEYS.get(keyId):null;if(verificationKey==null)throw invalid();
             JSONObject p=doc.getJSONObject("payload");
             for(String field:new String[]{"licenseId","storeId","customerName","storeName","deviceId"})if(!required(p,field))throw invalid();
             if(!"desktop".equals(p.opt("edition"))||!(p.opt("notes") instanceof String))throw invalid();
@@ -81,7 +86,7 @@ final class LicenseVerifier {
             }
             Object sig=doc.get("signature");if(!(sig instanceof String)||!((String)sig).matches("[A-Za-z0-9_-]+")||((String)sig).length()%4==1)throw invalid();
             byte[] raw=Base64.getUrlDecoder().decode((String)sig);if(raw.length!=64||!Base64.getUrlEncoder().withoutPadding().encodeToString(raw).equals(sig))throw invalid();
-            Signature check=Signature.getInstance("SHA256withECDSA");check.initVerify(PUBLIC_KEYS.get(keyId));check.update(canonical(p,version).getBytes(StandardCharsets.UTF_8));if(!check.verify(der(raw)))throw invalid();
+            Signature check=Signature.getInstance("SHA256withECDSA");check.initVerify(verificationKey);check.update(canonical(p,version).getBytes(StandardCharsets.UTF_8));if(!check.verify(der(raw)))throw invalid();
             if(!device.equals(p.getString("deviceId")))throw new Rejected("LICENSE_DEVICE_MISMATCH","هذا الترخيص مخصص لجهاز آخر");
             return doc;
         }catch(Rejected e){throw e;}catch(Exception e){throw invalid();}

@@ -57,6 +57,43 @@ export class ShopDatabase {
     },'تعذّر تجهيز نسخة متسقة؛ بيانات المحل لم تتغير');
   }
   async put(store,value){const copy=structuredClone(value);return this.run(store,'readwrite',(tx,result)=>{tx.objectStore(store).put(copy);result(copy)})}
+  async applyCloudBootstrap(prepared){
+    const p=structuredClone(prepared);
+    const ids=['grantId','intentId','shopId','ownerId','backupId'];
+    if(p?.stage!=='prepared'||p.purpose!=='cloud-bootstrap'||!ids.every(key=>typeof p[key]==='string'&&/^[A-Za-z0-9_.:-]{1,160}$/.test(p[key]))||! /^[a-f0-9]{64}$/.test(p.sha256||'')||typeof p.text!=='string')throw new StoreError('تفويض استعادة نسخة السيرفر غير صالح');
+    const bytes=new TextEncoder().encode(p.text);
+    if(bytes.length<2||bytes.length>8*1024*1024)throw new StoreError('حجم نسخة السيرفر غير صالح');
+    const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(hash!==p.sha256)throw new StoreError('لم تتطابق بصمة نسخة السيرفر');
+    let payload;
+    try{payload=JSON.parse(p.text)}catch{throw new StoreError('نسخة السيرفر غير صالحة')}
+    if(payload.format!=='alkarna-web-backup'||payload.schemaVersion!==1||payload.state?.originId!==p.shopId)throw new StoreError('النسخة لا تطابق المحل الموافق عليه');
+    validateState(payload.state);validateUsers(payload.users);
+    if(!payload.users.some(user=>user.id===p.ownerId&&user.role==='owner'&&user.active!==false))throw new StoreError('حساب المالك غير موجود في النسخة');
+    const copy=structuredClone(payload.state),users=structuredClone(payload.users);
+    const outcome=await this.run(['snapshots','users','meta'],'readwrite',(tx,result,abort,guard)=>{
+      const snapshots=tx.objectStore('snapshots'),accounts=tx.objectStore('users'),meta=tx.objectStore('meta'),values={};let pending=5;
+      const done=guard(()=>{
+        if(--pending)return;
+        const receipt=values.receipt;
+        if(receipt){
+          if(!ids.every(key=>receipt[key]===p[key])||receipt.sha256!==p.sha256||values.shop?.state?.originId!==p.shopId)throw new StoreError('إيصال الاستعادة لا يطابق النسخة');
+          result({alreadyApplied:true,revision:values.shop.revision});return;
+        }
+        if(values.shop||values.userCount||values.snapshotCount||values.metaCount)throw new StoreError('هذا الهاتف يحتوي بيانات. استعادة الهاتف البديل تتطلب محلاً فارغًا');
+        const now=new Date().toISOString(),scope=Object.fromEntries(ids.map(key=>[key,p[key]]));
+        snapshots.put({id:'shop',state:copy,revision:1,updatedAt:now});
+        for(const user of users)accounts.put(user);
+        meta.put({id:'cloud-bootstrap:'+p.grantId,...scope,sha256:p.sha256,appliedAt:now});
+        const reportedRevision=typeof p.localRevision==='string'&&/^\d+$/.test(p.localRevision)?Number(p.localRevision):p.localRevision;
+        const sourceRevision=Number.isSafeInteger(reportedRevision)&&reportedRevision>=0&&reportedRevision<Number.MAX_SAFE_INTEGER?reportedRevision:0;
+        meta.put({id:'cloud-backup-revision',value:sourceRevision+1});
+        result({alreadyApplied:false,revision:1});
+      });
+      for(const [key,request]of [['receipt',meta.get('cloud-bootstrap:'+p.grantId)],['shop',snapshots.get('shop')],['userCount',accounts.count()],['snapshotCount',snapshots.count()],['metaCount',meta.count()]])request.onsuccess=()=>{values[key]=request.result;done()};
+    },'لم تكتمل الاستعادة؛ أعد المحاولة دون حذف التطبيق');
+    this.revision=outcome.revision;return outcome;
+  }
   async createSession(user,session){
     // Password verification is asynchronous; recovery may have replaced that
     // account meanwhile. Bind the session to the verified record atomically.

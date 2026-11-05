@@ -124,9 +124,30 @@ final class DeviceLicense {
     }
     synchronized void checkpoint(){synchronized(STORE_LOCK){try{refresh();if(state==null||document==null)return;statusLocked();persist();}catch(Exception e){loadFailure="LICENSE_STORAGE_ERROR";}}}
     synchronized JSONObject install(String content) throws Exception {synchronized(STORE_LOCK){return installLocked(content);}}
+    /** Delivery retry acknowledges the same document without restarting its clock. */
+    synchronized JSONObject installOnline(String content) throws Exception {
+    synchronized (STORE_LOCK) {
+      JSONObject verified = LicenseVerifier.verify(content, device);
+      refresh();
+      if (document != null
+          && document
+              .getJSONObject("payload")
+              .getString("licenseId")
+              .equals(verified.getJSONObject("payload").getString("licenseId"))) {
+        if (!ProtocolJson.hash(document).equals(ProtocolJson.hash(verified)))
+          throw new IOException("LICENSE_REPLAY_MISMATCH");
+        return statusLocked();
+      }
+      return installLocked(content, true);
+    }
+  }
     private JSONObject installLocked(String content) throws Exception {
+        return installLocked(content,false);
+    }
+    private JSONObject installLocked(String content,boolean onlineDelivery) throws Exception {
         refresh();
         JSONObject verified=LicenseVerifier.verify(content,device);
+        if(verified.optString("keyId").startsWith("contatools-online-v2:")&&!onlineDelivery)throw new LicenseVerifier.Rejected("ONLINE_APPROVAL_REQUIRED","هذا الترخيص يحتاج موافقة التفعيل المباشر داخل التطبيق");
         if(loadFailure!=null||state==null)throw new LicenseVerifier.Rejected("LICENSE_STATE_INVALID","تعذّر التحقق من سجل التفعيل. تواصل مع مسؤول التفعيل");
         JSONObject next=new JSONObject(state.toString()),p=verified.getJSONObject("payload");String id=p.getString("licenseId");
         if(verified.getInt("version")==2){JSONArray consumed=next.getJSONArray("consumedLicenseIds");for(int i=0;i<consumed.length();i++)if(id.equals(consumed.getString(i)))throw new LicenseVerifier.Rejected("LICENSE_ALREADY_USED","ملف التفعيل مستخدم من قبل. اطلب ملفًا جديدًا للتجديد");consumed.put(id);

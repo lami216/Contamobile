@@ -9,7 +9,7 @@
  const copy={'contact-title':['تواصل لتفعيل هاتفك','Contact pour l’activation'],'contact-intro':['أرسل كود جهازك عبر واتساب، وسنرسل لك ملف التفعيل.','Envoyez votre code par WhatsApp pour recevoir le fichier de licence.'],'contact-send':['إرسال كود الجهاز','Envoyer le code'],'contact-call-text':['اتصال','Appeler'],eyebrow:['ترخيص الجهاز','Licence de l’appareil'],title:['تفعيل هذا الهاتف','Activer ce téléphone'],intro:['أرسل كود جهازك للدعم، ثم اختر ملف التفعيل الذي يصلك لهذا الهاتف.','Envoyez le code de l’appareil à l’assistance, puis importez le fichier de licence reçu.'],'device-label':['كود الجهاز','Code de l’appareil'],'copy-code':['نسخ الكود','Copier le code'],'file-text':['اختيار ملف التفعيل','Choisir le fichier de licence'],'paste-title':['لصق محتوى ملف الترخيص','Coller le contenu de la licence'],'paste-label':['محتوى ملف الترخيص','Contenu de la licence'],'install-text':['تفعيل الترخيص','Activer la licence'],continue:['فتح التطبيق','Ouvrir l’application'],footnote:['التفعيل يعمل دون إنترنت. بيانات المحل تبقى محفوظة.','L’activation fonctionne hors ligne. Les données du magasin restent conservées.']};
  for(const [id,words] of Object.entries(copy))$(id).textContent=words[fr?1:0];
  const pending=new Map();let busy=false,current=null;
- window.__nativeResult=(id,result)=>{const request=pending.get(id);if(!request)return;pending.delete(id);result.error?request.reject(new Error(result.error)):request.resolve(result)};
+ window.__nativeResult=(id,result)=>{const request=pending.get(id);if(!request)return;pending.delete(id);result.error?request.reject(Object.assign(new Error(result.error),{code:result.code||''})):request.resolve(result)};
  const call=(method,...args)=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();pending.set(id,{resolve,reject});try{NativeHost[method](id,...args)}catch(e){pending.delete(id);reject(e)}});
  const message=(text,kind='')=>{$('status').textContent=text;$('status').className=kind};
  const reasons={LICENSE_REQUIRED:['فعّل هذا الهاتف للبدء','Activez ce téléphone pour commencer'],LICENSE_EXPIRED:['انتهت مدة الترخيص. أضف ملف تفعيل جديدًا','La licence a expiré. Ajoutez un nouveau fichier.'],LICENSE_CLOCK_ROLLBACK:['تم اكتشاف إرجاع ساعة الجهاز. تواصل مع مسؤول التفعيل','Un recul de l’horloge a été détecté. Contactez le responsable.']};
@@ -29,13 +29,65 @@
  async function install(content){if(busy)return;busy=true;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=true;message(t('جارٍ التحقق من الترخيص…','Vérification de la licence…'));
   try{if(new TextEncoder().encode(content).length>65536)throw new Error(t('ملف الترخيص أكبر من 64 كيلوبايت','Le fichier dépasse 64 Ko'));const status=await call('installActivation',content);show(status);if(status.valid){$('license-text').value='';sessionStorage.removeItem('activation-draft');$('continue').focus();}}
   catch(e){message(fr?t('لم يُقبل ملف الترخيص. تأكد أنه صادر لهذا الجهاز ولم يُستخدم من قبل.','Licence refusée. Vérifiez l’appareil, le fichier et son utilisation précédente.'):e.message,'error')}
-  finally{busy=false;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=false;$('copy-code').disabled=!current?.deviceId;}
+  finally{busy=false;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=false;$('copy-code').disabled=!current?.deviceId;updateOnlineButtons();}
  }
+ let onlineTimer=null,onlineWaiting=false,onlineAvailable=false,onlineLastCheck=0;
+ const onlineSection=document.createElement('section');onlineSection.className='activation-contact';onlineSection.dataset.onlineActivation='true';
+ const onlineTitle=document.createElement('h2');onlineTitle.textContent=t('التفعيل من كونتا تولز','Activation avec Contatools');
+ const onlineDescription=document.createElement('p');onlineDescription.textContent=t('اربط الهاتف وهو متصل بالإنترنت، ثم أعطِ الإدارة كود الجهاز واسمك واسم المحل.','Reliez le téléphone à Internet puis communiquez à l’administration le code de l’appareil, votre nom et celui du commerce.');
+ const onlineMessage=document.createElement('p');onlineMessage.id='online-status';onlineMessage.setAttribute('role','status');onlineMessage.setAttribute('aria-live','polite');
+ const onlineActions=document.createElement('div');onlineActions.className='activation-contact-actions online-activation-actions';
+ const onlineConnect=document.createElement('button');onlineConnect.type='button';onlineConnect.id='online-connect';onlineConnect.textContent=t('ربط الهاتف بكونتا تولز','Relier à Contatools');
+ const onlineAccept=document.createElement('button');onlineAccept.type='button';onlineAccept.id='online-accept';onlineAccept.textContent=t('استلام التفعيل','Recevoir l’activation');onlineAccept.hidden=true;
+ onlineActions.append(onlineConnect,onlineAccept);onlineSection.append(onlineTitle,onlineDescription,onlineMessage,onlineActions);
+ $('license-info').before(onlineSection);
+ const lifecycleCall=(command,payload={})=>call('deviceLifecycle',command,JSON.stringify(payload));
+ function updateOnlineButtons(){onlineConnect.disabled=busy;onlineAccept.disabled=busy||!onlineAvailable;onlineAccept.hidden=!onlineAvailable;}
+ function cancelOnlineTimer(){clearTimeout(onlineTimer);onlineTimer=null;}
+ function scheduleOnline(){
+  cancelOnlineTimer();
+  if(onlineWaiting&&!document.hidden&&navigator.onLine!==false)onlineTimer=setTimeout(()=>onlineAction('status',false),45000);
+ }
+ function onlineResult(result){
+  onlineAvailable=result.activationAvailable===true;
+  onlineWaiting=!onlineAvailable;
+  onlineConnect.textContent=t('تحديث التفعيل','Actualiser l’activation');
+  onlineMessage.textContent=onlineAvailable?t('وصل تفعيل من الإدارة. اضغط لاستلامه على هذا الهاتف.','L’administration a envoyé une activation. Recevez-la sur cet appareil.'):
+   result.status==='active'?t('الهاتف مربوط بملف العميل. يمكنك طلب التجديد من الإدارة.','Cet appareil est associé au dossier client. Vous pouvez demander un renouvellement à l’administration.'):
+   t('وصل كود الهاتف إلى كونتا تولز. بانتظار تفعيل الإدارة.','Le code est enregistré dans Contatools. En attente de l’activation par l’administration.');
+  if(result.status==='active'&&!onlineAvailable)onlineWaiting=false;
+  updateOnlineButtons();scheduleOnline();
+ }
+ async function onlineAction(command,manual=true){
+  if(busy){scheduleOnline();return}
+  if(command==='status'&&Date.now()-onlineLastCheck<10000){scheduleOnline();return}
+  busy=true;updateOnlineButtons();cancelOnlineTimer();
+  try{
+   if(navigator.onLine===false)throw Error('offline');
+   if(command==='status')onlineLastCheck=Date.now();
+   if(manual)onlineMessage.textContent=t('جارٍ الاتصال بكونتا تولز…','Connexion à Contatools…');
+   const result=await lifecycleCall(command);
+   if(command==='activate'&&result.stage==='activated'){
+    show(await call('activationStatus'));onlineAvailable=false;onlineWaiting=false;
+    onlineMessage.textContent=result.ackPending?t('حُفظ التفعيل على الهاتف. تأكيد الاستلام ينتظر الاتصال.','L’activation est enregistrée. La confirmation attend la connexion.'):
+     t('تم حفظ التفعيل. يمكنك فتح التطبيق.','L’activation est enregistrée. Vous pouvez ouvrir l’application.');
+   }else onlineResult(result);
+  }catch(error){
+   onlineMessage.textContent=t('تعذّر الاتصال الآن. أعد المحاولة عند توفر الإنترنت.','Connexion indisponible. Réessayez avec Internet.');
+   onlineWaiting=command!=='activate';scheduleOnline();
+  }finally{busy=false;updateOnlineButtons();}
+ }
+ onlineConnect.onclick=()=>onlineAction(onlineConnect.dataset.enrolled?'status':'enroll').then(()=>{if(onlineConnect.textContent===t('تحديث التفعيل','Actualiser l’activation'))onlineConnect.dataset.enrolled='true'});
+ onlineAccept.onclick=()=>onlineAction('activate');
+ addEventListener('online',()=>{if(onlineWaiting)scheduleOnline()});
+ addEventListener('offline',cancelOnlineTimer);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelOnlineTimer();else if(onlineWaiting)scheduleOnline()});
+ addEventListener('pagehide',cancelOnlineTimer,{once:true});
  $('license-text').value=sessionStorage.getItem('activation-draft')||'';
  $('copy-code').onclick=()=>{NativeHost.copyDeviceCode();message(t('تم نسخ كود الجهاز','Code de l’appareil copié'),'success')};
  $('continue').onclick=()=>NativeHost.activationContinue();
  $('install-text').onclick=()=>install($('license-text').value.trim());
  $('license-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;$('filename').textContent=file.name;try{if(file.size>65536)throw new Error(t('ملف الترخيص أكبر من 64 كيلوبايت','Le fichier dépasse 64 Ko'));await install(await file.text())}catch(e){message(e.message,'error')}finally{event.target.value=''}};
- call('activationStatus').then(show).catch(e=>message(e.message,'error'));
+ call('activationStatus').then(status=>{show(status);if(status.license)onlineAction('status',false)}).catch(e=>message(e.message,'error'));
  setInterval(()=>{if(!busy&&current?.valid)call('activationStatus').then(show).catch(()=>{})},15000);
 })();

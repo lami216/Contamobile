@@ -1,5 +1,22 @@
 # Backup navigation cleanup
 
+## Owner-approved device lifecycle update, 2026-11-05
+
+- Save now performs a single cloud backup independently of the automatic schedule.
+  The first manual upload asks for upload consent without offering scheduling
+  fields. Subsequent explicit Save now actions reuse that permission for the same
+  local business. Turning automatic backup off does not enable a schedule through
+  a manual action.
+- A replacement phone can enroll before local owner creation. Contatools verifies
+  the customer, links the new installation and authorizes a particular cloud
+  version. The phone verifies the signed approval and offers an explicit preview
+  before atomic local restoration. Empty phones do not require a local file.
+- Direct activation and renewal use the same existing customer record and an
+  append-only issuance history. An existing valid offline license survives an
+  unavailable service or incomplete online action.
+- Reuse existing settings, approval sheets, inputs, typography and colors in both
+  Arabic/RTL and French/LTR. Preserve data and activation during signed upgrades.
+
 The Android runtime remains the reference. Reuse its existing list rows, sheets,
 buttons, spacing and colors; no stylesheet or financial schema changes.
 

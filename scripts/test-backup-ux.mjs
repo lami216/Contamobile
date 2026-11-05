@@ -34,6 +34,7 @@ async function fixture(lang='ar',width=393){
     globalThis.__backupCalls.push({command,data:structuredClone(data)});
     if(globalThis.__backupOffline&&data.refresh)throw Error('Synthetic offline');
     if(command==='configure')Object.assign(globalThis.__backupStatus.settings,data);
+    if(command==='manual-consent')globalThis.__backupStatus.manualConsentGranted=true;
     if(command==='pause')globalThis.__backupStatus.paused=true;
     if(command==='run'){globalThis.__backupStatus.lastSuccessAt=Date.now();globalThis.__backupStatus.changesPending=false;globalThis.__backupStatus.stage='up-to-date'}
     if(command==='list')return {versions:[{id:'synthetic-copy',sizeBytes:2048,createdAt:Date.now()-3600000}],nextCursor:null};
@@ -75,6 +76,22 @@ try{
    assert.equal(payload.format,'alkarna-web-backup');assert.equal(payload.users[0].username,'backup-owner');assert(payload.state.originId);
    assert.equal(await page.evaluate(()=>globalThis.__backupCalls.filter(x=>x.command==='run'||x.command==='stage').length),0);
    await command(page,'site:restore');assert.equal(await page.locator('#backup-file').count(),1);
+  }finally{await context.close()}
+ });
+ for(const language of ['ar','fr'])await check(`manual backup stays independent of an inactive automatic schedule ${language}`,async()=>{
+  const {context,page}=await fixture(language,393);try{
+   await page.locator('[data-action="cloud:overview"]').click();await page.locator('[data-action="cloud:run"]').click();await idle(page);
+   assert.equal(await page.locator('[data-action="cloud:manual-confirm"]').count(),1);
+   assert.equal(await page.locator('[name=cloudSchedule],[name=cloudTime],[name=cloudWeekday]').count(),0);
+   await page.screenshot({path:`candidate-proof/manual-backup-${language}-393.png`});
+   await page.locator('[data-action="cloud:manual-confirm"]').click();await idle(page);
+   assert.equal(await page.evaluate(()=>globalThis.__backupStatus.settings.consent),false);
+   assert.equal(await page.evaluate(()=>globalThis.__backupCalls.filter(call=>call.command==='configure').length),0);
+   assert.equal(await page.evaluate(()=>globalThis.__backupCalls.filter(call=>call.command==='run'&&call.data.manual===true).length),1);
+   await page.locator('[data-action="cloud:run"]').click();await idle(page);
+   assert.equal(await page.locator('[data-action="cloud:manual-confirm"]').count(),0);
+   assert.equal(await page.evaluate(()=>globalThis.__backupCalls.filter(call=>call.command==='run').length),2);
+   await noOverflow(page);
   }finally{await context.close()}
  });
  await check('dated safety copy appears inside restore only when durable safety data exists',async()=>{

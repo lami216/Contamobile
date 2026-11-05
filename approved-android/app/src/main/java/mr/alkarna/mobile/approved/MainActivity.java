@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
     private DeviceLicense licensing;
     private ContatoolsClient administration;
     private AccountingResetClient accountingReset;
+    private DeviceLifecycleClient deviceLifecycle;
     private RecoveryPreflight dataRescue;
     // An Activity recreation must never capture live Chromium storage in this process.
     private static volatile boolean webViewWasCreated;
@@ -221,6 +222,85 @@ public final class MainActivity extends Activity {
             catch(Exception failure){JSONObject answer=value("error",NativeUi.text(MainActivity.this,"تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير."));try{answer.put("code",failure.getMessage()==null?"RESET_UNAVAILABLE":failure.getMessage());}catch(Exception ignored){}result(id,answer);}
         });}catch(java.util.concurrent.RejectedExecutionException full){error(id,"هناك طلب جارٍ. أعد المحاولة بعد قليل.");}
     });}
+    private void lifecycleRequest(String id, String command, String content) {
+    long page = backupScope.page();
+    runOnUiThread(
+        () -> {
+          if (!trusted() || licensing == null || !backupScope.current(page)) {
+            error(id, "تعذّر التحقق من الهاتف");
+            return;
+          }
+          if (command == null || content == null) {
+            error(id, "تعذّر التحقق من الطلب");
+            return;
+          }
+          boolean beforeActivation =
+              command.equals("enroll") || command.equals("status") || command.equals("activate");
+          if (!beforeActivation && (activationPage || !licenseAllowed())) {
+            error(id, "يلزم تفعيل الهاتف أولًا");
+            return;
+          }
+          try {
+            administrationQueue.execute(
+                () -> {
+                  try {
+                    if (isDestroyed()
+                        || !backupScope.current(page)
+                        || content == null
+                        || content.length() > 16384) throw new IOException("LIFECYCLE_PAGE_CLOSED");
+                    if (deviceLifecycle == null)
+                      deviceLifecycle = new DeviceLifecycleClient(this, licensing);
+                    JSONObject input = new JSONObject(content), answer;
+                    switch (command) {
+                      case "enroll":
+                        answer = deviceLifecycle.enroll(input);
+                        break;
+                      case "status":
+                        answer = deviceLifecycle.status();
+                        break;
+                      case "activate":
+                        answer = deviceLifecycle.activate();
+                        break;
+                      case "bootstrap-list":
+                        answer = deviceLifecycle.list(input);
+                        break;
+                      case "bootstrap-preview":
+                        answer = deviceLifecycle.preview(input);
+                        break;
+                      case "bootstrap-prepare":
+                        answer = deviceLifecycle.prepare(input);
+                        break;
+                      case "bootstrap-finish":
+                        answer = deviceLifecycle.finish(input);
+                        break;
+                      case "resume-local":
+                        answer = deviceLifecycle.resumeLocal();
+                        break;
+                      case "resume":
+                        answer = deviceLifecycle.resume();
+                        break;
+                      default:
+                        throw new IOException("INVALID_LIFECYCLE_INPUT");
+                    }
+                    if (!isDestroyed() && backupScope.current(page)) result(id, answer);
+                  } catch (Exception failure) {
+                    JSONObject answer =
+                        value(
+                            "error",
+                            NativeUi.text(
+                                this, "تعذّر إكمال الطلب الآن. البيانات والتفعيل محفوظان."));
+                    try {
+                      answer.put("code", CloudBackupManager.errorCode(failure));
+                    } catch (Exception ignored) {
+                    }
+                    if (backupScope.current(page)) result(id, answer);
+                  }
+                });
+          } catch (java.util.concurrent.RejectedExecutionException full) {
+            error(id, "هناك طلب جارٍ. أعد المحاولة بعد قليل.");
+          }
+        });
+  }
     private interface BackupAction { JSONObject run(CloudBackupManager manager) throws Exception; }
     private void backupRequest(String id,boolean immediate,BackupAction action){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){backupScope.cancel(id);error(id,"تعذّر التحقق من التفعيل المحلي");return;}
@@ -230,12 +310,14 @@ public final class MainActivity extends Activity {
     private void cancelBackupTransfers(){backupScope.changed();for(String id:backupTransfers)try{CloudBackupManager.get(this).cancelStage(id);}catch(Exception ignored){}backupTransfers.clear();}
     public final class NativeHost {
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
+        @JavascriptInterface public void deviceLifecycle(String id,String command,String content){lifecycleRequest(id,command,content);}
         @JavascriptInterface public void accountingReset(String id,String command,String content){accountingResetRequest(id,command,content);}
         @JavascriptInterface public void cloudBackup(String id,String command,String content){backupRequest(id,"pause".equals(command)||"invalidate".equals(command),manager->{
             if(content==null||content.length()>16384)throw new IOException("INVALID_BACKUP_REQUEST");JSONObject payload=new JSONObject(content);
             switch(command){
                 case "status":return manager.status(payload,payload.optBoolean("refresh",false));
                 case "configure":return manager.configure(payload);
+                case "manual-consent":return manager.manualConsent(payload);
                 case "run":return manager.run(payload);
                 case "list":return manager.list(payload);
                 case "download":return manager.download(payload);

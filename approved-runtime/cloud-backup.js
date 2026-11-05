@@ -39,9 +39,9 @@ export function installCloudBackup(api){
   if(error)return error;
   if(status?.paused)return friendly('paused');
   if(status?.server?.entitlement?.enabled===false||status?.server?.entitlement?.active===false)return t('اشتراك النسخ غير فعال','Abonnement de sauvegarde inactif');
-  if(!settings().consent)return t('النسخ التلقائي متوقف على هذا الهاتف','Sauvegarde automatique désactivée sur cet appareil');
   if(/upload|running/.test(String(status?.stage||'')))return t('جارٍ رفع نسخة؛ يمكنك متابعة العمل','Sauvegarde en cours ; vous pouvez continuer à travailler');
   if(status?.lastError)return friendly(status.lastError);
+  if(!settings().consent)return status?.manualPending?t('النسخة اليدوية بانتظار الاتصال','La sauvegarde manuelle attend la connexion'):status?.lastSuccessAt?t('آخر نسخة ناجحة محفوظة على السيرفر؛ النسخ التلقائي متوقف','Dernière sauvegarde confirmée sur le serveur ; sauvegarde automatique désactivée'):t('النسخ التلقائي متوقف على هذا الهاتف','Sauvegarde automatique désactivée sur cet appareil');
   if(dirty||status?.changesPending)return t('توجد تغييرات لم تُنسخ بعد','Des modifications restent à sauvegarder');
   if(status?.lastSuccessAt)return t('آخر نسخة ناجحة محفوظة على السيرفر','Dernière sauvegarde confirmée sur le serveur');
   return t('بانتظار أول نسخة ناجحة','En attente de la première sauvegarde réussie');
@@ -76,9 +76,10 @@ export function installCloudBackup(api){
   globalThis.addEventListener?.('pagehide',()=>{clearInterval(localTimer);clearTimeout(timer)},{once:true});
  }
  function committed(){dirty=true;clearTimeout(timer);timer=setTimeout(()=>stage().catch(()=>{}),1500)}
- async function stage(force=false){
-  if(!supported()||!context||!sameShop()||!settings().consent||status?.paused){if(force)throw Error(status?.paused?'paused':'unconfigured');return false}
-  if(staging){again=true;await staging;if(force)return stage(true);return true}
+ async function stage(force=false,manual=false){
+  const consent=manual?status?.manualConsentGranted||settings().consent:settings().consent;
+  if(!supported()||!context||!sameShop()||!consent||(status?.paused&&!manual)){if(force)throw Error(status?.paused?'paused':'unconfigured');return false}
+  if(staging){again=true;await staging;if(force)return stage(true,manual);return true}
   const currentGeneration=generation,currentContext={...context};
   staging=(async()=>{
    const snapshot=await api.database.cloudSnapshot();
@@ -86,7 +87,7 @@ export function installCloudBackup(api){
    if(snapshot.payload.state.originId!==currentContext.shopId)throw Error('owner');
    if(!force&&snapshot.revision<=(status?.stagedRevision??-1)){dirty=false;return}
    const blob=new Blob([JSON.stringify(snapshot.payload)],{type:'application/json'});
-   const value=await globalThis.NativeFiles.stageCloudBackup(currentContext,blob,snapshot.revision);
+   const value=await globalThis.NativeFiles.stageCloudBackup(manual?{...currentContext,manual:true}:currentContext,blob,snapshot.revision);
    if(currentGeneration!==generation)throw Error('paused');
    dirty=false;update(value);
   })();
@@ -111,6 +112,7 @@ export function installCloudBackup(api){
  let versions=[],nextCursor=null;
  function sheet(){
   if(api.modal()==='cloud-overview')return api.modalMarkup(t('النسخ على السيرفر','Sauvegarde sur le serveur'),overview());
+  if(api.modal()==='cloud-manual-consent')return api.modalMarkup(t('رفع نسخة الآن','Sauvegarder maintenant'),`<p class="notice">${t('ستُرفع نسخة من بيانات المحل وحسابات الدخول إلى السيرفر الخاص بالخدمة.','Une copie des données du commerce et des comptes de connexion sera envoyée au serveur du service.')}</p><p class="muted">${t('يبقى النسخ التلقائي حسب إعدادك الحالي.','La sauvegarde automatique conserve son réglage actuel.')}</p>`,'cloud:manual-confirm',t('أوافق وأرفع النسخة','Autoriser et sauvegarder'));
   if(api.modal()==='cloud-settings'){
    const s=settings();return api.modalMarkup(t('النسخ التلقائي','Sauvegarde automatique'),`<p class="notice">${esc(label())}</p>
 <label class="feature-check"><input type="checkbox" name="cloudConsent" ${s.consent?'checked':''}><span>${t('أوافق على رفع نسخ بيانات المحل وحسابات الدخول إلى السيرفر الخاص بالخدمة','J’autorise l’envoi des données du commerce et des comptes de connexion vers le serveur du service')}</span></label>
@@ -135,7 +137,16 @@ export function installCloudBackup(api){
     const f=api.form(),s=settings(),value=await call('configure',{consent:f.cloudConsent==='on',schedule:f.cloudSchedule||s.schedule,time:f.cloudTime||s.time,weekday:Number(f.cloudWeekday??s.weekday),wifiOnly:f.cloudWifi==='on'});
     update(value);api.show('cloud-overview');if(settings().consent)await stage(true);return;
    }
-   if(command==='run'){await refresh(true);if(!settings().consent){api.show('cloud-settings');return}await stage(true);update(await call('run'));return}
+   if(command==='run'){
+    await refresh(true);
+    if(!settings().consent&&!status?.manualConsentGranted){api.show('cloud-manual-consent');return}
+   }
+   if(command==='run'||command==='manual-confirm'){
+    update(await call('manual-consent'));
+    if(api.modal()!=='cloud-overview')api.show('cloud-overview');
+    await stage(true,true);
+    update(await call('run',{manual:true}));return;
+   }
    if(command==='list'||command==='more'){const response=await call('list',{limit:30,...(command==='more'&&nextCursor!==null?{cursor:nextCursor}:{})}),items=response.versions||response.items||[];versions=command==='more'?[...versions,...items]:items;nextCursor=Number.isSafeInteger(response.nextCursor)?response.nextCursor:null;api.show('cloud-versions');return}
    if(command==='download'){const id=action.slice('cloud:download:'.length),value=await call('download',{backupId:id});await api.preview(value.text);return}
   }catch(e){error=friendly(e);api.fail(error)}finally{pending=false;paint()}
