@@ -16,7 +16,8 @@ const server=createServer(async(req,res)=>{
   try{
     const relative=new URL(req.url,'http://test.invalid').pathname.slice(1)||'index.html',file=path.resolve(root,relative);
     if(!file.startsWith(root))throw Error('Invalid test path');
-    const bytes=await readFile(file);
+    let bytes=await readFile(file);
+    if(relative==='app.js')bytes=Buffer.from(bytes.toString().replace('deviceLifecycle.resume().catch(()=>{});','globalThis.__testLifecycleResume=deviceLifecycle.resume();globalThis.__testLifecycleResume.catch(()=>{});'));
     res.setHeader('content-type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes);
   }catch{res.writeHead(404).end()}
 });
@@ -33,15 +34,19 @@ async function fixture({snapshot=null,language='ar',width=393}={}){
   await page.addInitScript(({snapshot,language})=>{
     localStorage.setItem('alkarna-site-language',language);
     globalThis.__lifecycleCalls=[];globalThis.__restoreSnapshot=snapshot;
-    globalThis.__localBootstrap=null;globalThis.__finishFailures=0;
-    const scope=async()=>({stage:'preview',grantId:'grant-new-phone',shopId:JSON.parse(globalThis.__restoreSnapshot).state.originId,ownerId:JSON.parse(globalThis.__restoreSnapshot).users[0].id,backupId:'approved-version',sha256:[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(globalThis.__restoreSnapshot)))].map(byte=>byte.toString(16).padStart(2,'0')).join(''),localRevision:'40',text:globalThis.__restoreSnapshot});
+    globalThis.__localBootstrap=null;globalThis.__finishFailures=0;globalThis.__terminalAt=null;globalThis.__grantId='grant-new-phone';
+    const scope=async()=>({stage:'preview',grantId:globalThis.__grantId,shopId:JSON.parse(globalThis.__restoreSnapshot).state.originId,ownerId:JSON.parse(globalThis.__restoreSnapshot).users[0].id,backupId:'approved-version',sha256:[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(globalThis.__restoreSnapshot)))].map(byte=>byte.toString(16).padStart(2,'0')).join(''),localRevision:'40',text:globalThis.__restoreSnapshot});
     globalThis.NativeFiles={
       async deviceLifecycle(command,payload={}){
         globalThis.__lifecycleCalls.push({command,payload:structuredClone(payload)});
+        if(command===globalThis.__terminalAt){
+          globalThis.__localBootstrap={...await scope(),stage:'terminal',purpose:'cloud-bootstrap',intentId:'restore-intent',localPhase:command==='bootstrap-finish'?'applied':'prepared',ackPending:false,outcome:{status:'superseded-unknown',reasonCode:'REPLACEMENT_PHONE_LOST',decisionId:'recorded-owner-review',decidedAt:Date.now(),chainGeneration:1,minVersionCode:26}};
+          return structuredClone(globalThis.__localBootstrap);
+        }
         if(command==='resume-local')return globalThis.__localBootstrap||{stage:'idle'};
-        if(command==='status')return {status:'active',bootstrapAvailable:!!globalThis.__restoreSnapshot,bootstrapMeta:{grantId:'grant-new-phone'}};
+        if(command==='status')return {status:'active',bootstrapAvailable:!!globalThis.__restoreSnapshot,bootstrapMeta:{grantId:globalThis.__grantId}};
         if(command==='bootstrap-list'){
-          if(payload.grantId!=='grant-new-phone')throw Error('Grant is required');
+          if(payload.grantId!==globalThis.__grantId)throw Error('Grant is required');
           return {grantId:payload.grantId,versions:[{id:'approved-version',createdAt:Date.now()}]};
         }
         if(command==='bootstrap-preview')return scope();
@@ -58,7 +63,7 @@ async function fixture({snapshot=null,language='ar',width=393}={}){
       }
     };
   },{snapshot,language});
-  await page.goto(origin+'/');await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await idle(page);
+  await page.goto(origin+'/');await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await idle(page);await page.evaluate(()=>globalThis.__testLifecycleResume?.catch(()=>{}));
   return {context,page};
 }
 async function createOwner(page){
@@ -174,6 +179,69 @@ try{
       await page.screenshot({path:`candidate-proof/online-activation-${language}-360.png`});
       await page.locator('#online-accept').click();await page.locator('#continue').waitFor({state:'visible'});
       assert.equal(await page.evaluate(()=>globalThis.__activationCalls.filter(call=>call.command==='activate').length),1);
+    }finally{await context.close()}
+  });
+  for(const language of ['ar','fr'])await check(`superseded prepared restore stays terminal without importing or retrying ${language}`,async()=>{
+    const {context,page}=await fixture({snapshot:savedSnapshot,language,width:360});
+    try{
+      await page.evaluate(async()=>{globalThis.__localBootstrap=await NativeFiles.deviceLifecycle('bootstrap-prepare',{accepted:true});globalThis.__terminalAt='bootstrap-prepare';globalThis.__lifecycleCalls=[]});
+      await page.locator('[data-cloud-bootstrap]').click();const overlay=page.locator('.owner-recovery-overlay');
+      await overlay.getByRole('button',{name:language==='fr'?'Restaurer cette sauvegarde':'استعادة هذه النسخة',exact:true}).click();await idle(page);
+      assert.match(await overlay.innerText(),language==='fr'?/remplacée|remplacée/i:/استُبدلت/);
+      assert.equal(await overlay.getByRole('button',{name:language==='fr'?'Restaurer cette sauvegarde':'استعادة هذه النسخة',exact:true}).count(),0);
+      const state=await page.evaluate(async()=>{const {ShopDatabase}=await import('./database.js'),db=await new ShopDatabase().open();const result={state:await db.load(),receipt:await db.get('meta','cloud-bootstrap:grant-new-phone')};db.db.close();return result});
+      assert.equal(state.state,null);assert(!state.receipt);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>call.command==='bootstrap-finish').length),0);
+      assert.equal(await page.locator('[data-action="site:setup"]').count(),1);
+      assert(await overlay.evaluate(n=>n.scrollWidth<=n.clientWidth+1));
+      await page.screenshot({path:`candidate-proof/bootstrap-terminal-${language}-360.png`});
+      await overlay.getByRole('button',{name:language==='fr'?'Fermer':'إغلاق',exact:true}).click();
+      await page.evaluate(()=>{globalThis.__terminalAt=null;globalThis.__lifecycleCalls=[]});await page.locator('[data-cloud-bootstrap]').click();
+      await overlay.getByRole('button',{name:language==='fr'?'Vérifier une nouvelle autorisation':'التحقق من موافقة جديدة',exact:true}).waitFor();
+      assert.match(await overlay.innerText(),language==='fr'?/remplacée/i:/استُبدلت/);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>/^bootstrap-/.test(call.command)).length),0);
+    }finally{await context.close()}
+  });
+  await check('a superseded finish preserves locally committed users and receipt across cold restart without another import',async()=>{
+    const {context,page}=await fixture({snapshot:savedSnapshot});
+    try{
+      await page.evaluate(()=>{globalThis.__terminalAt='bootstrap-finish'});
+      await page.locator('[data-cloud-bootstrap]').click();const overlay=page.locator('.owner-recovery-overlay');
+      await overlay.getByRole('button',{name:'معاينة نسخة السيرفر',exact:true}).click();await overlay.getByRole('button',{name:'استعادة هذه النسخة',exact:true}).click();await idle(page);
+      assert.match(await overlay.innerText(),/إيصال الحفظ المحلي موجود/);assert.equal(await page.locator('[data-action="site:setup"]').count(),0);
+      const terminal=await page.evaluate(()=>globalThis.__localBootstrap),before=JSON.parse(await snapshotFrom(page));
+      assert.deepEqual(before.users,JSON.parse(savedSnapshot).users);
+      await context.addInitScript(value=>{globalThis.__localBootstrap=value},terminal);await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await idle(page);
+      assert.equal(await page.locator('[data-action="site:login"]').count(),1);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>['bootstrap-prepare','bootstrap-finish'].includes(call.command)).length),0);
+      assert.deepEqual(JSON.parse(await snapshotFrom(page)).users,before.users);
+      assert(await page.evaluate(async()=>{const {ShopDatabase}=await import('./database.js'),db=await new ShopDatabase().open();const receipt=await db.get('meta','cloud-bootstrap:grant-new-phone');db.db.close();return receipt?.intentId==='restore-intent'}));
+      await page.locator('#site-auth-form [name=username]').fill('saved-owner');await page.locator('#site-auth-form [name=password]').fill('1234');await page.locator('[data-action="site:login"]').click();await page.locator('.nav').waitFor();await idle(page);
+      await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await page.evaluate(()=>globalThis.__testLifecycleResume?.catch(()=>{}));await idle(page);
+      assert.equal(await page.locator('.nav').count(),1,'A cached terminal receipt must not log an already loaded account out on reopening');
+    }finally{await context.close()}
+  });
+  await check('a terminal preview never exposes final confirmation or starts a local import',async()=>{
+    const {context,page}=await fixture({snapshot:savedSnapshot});
+    try{
+      await page.evaluate(()=>{globalThis.__terminalAt='bootstrap-preview'});await page.locator('[data-cloud-bootstrap]').click();const overlay=page.locator('.owner-recovery-overlay');
+      await overlay.getByRole('button',{name:'معاينة نسخة السيرفر',exact:true}).click();await idle(page);
+      assert.match(await overlay.innerText(),/استُبدلت/);assert.equal(await overlay.getByRole('button',{name:'استعادة هذه النسخة',exact:true}).count(),0);
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>['bootstrap-prepare','bootstrap-finish'].includes(call.command)).length),0);
+    }finally{await context.close()}
+  });
+  await check('an empty terminal phone can explicitly check a different new approval without retrying or consuming the old attempt',async()=>{
+    const {context,page}=await fixture({snapshot:savedSnapshot});
+    try{
+      await page.evaluate(async()=>{const saved=await NativeFiles.deviceLifecycle('bootstrap-prepare',{accepted:true});globalThis.__localBootstrap={...saved,stage:'terminal',ackPending:false,outcome:{status:'expired-unclaimed'}};globalThis.__grantId='different-new-approval';globalThis.__lifecycleCalls=[]});
+      await page.locator('[data-cloud-bootstrap]').click();const overlay=page.locator('.owner-recovery-overlay');
+      await overlay.getByRole('button',{name:'التحقق من موافقة جديدة',exact:true}).click();await overlay.getByRole('button',{name:'معاينة نسخة السيرفر',exact:true}).waitFor();
+      assert.equal(await page.evaluate(()=>globalThis.__lifecycleCalls.filter(call=>['bootstrap-prepare','bootstrap-finish'].includes(call.command)).length),0);
+      await overlay.getByRole('button',{name:'معاينة نسخة السيرفر',exact:true}).click();await overlay.getByRole('button',{name:'استعادة هذه النسخة',exact:true}).waitFor();
+      assert.equal(await page.evaluate(async()=>{const {ShopDatabase}=await import('./database.js'),db=await new ShopDatabase().open();const state=await db.load();db.db.close();return state}),null);
+      await overlay.getByRole('button',{name:'استعادة هذه النسخة',exact:true}).click();await idle(page);
+      assert.equal(await page.locator('[data-action="site:login"]').count(),1);assert.deepEqual(JSON.parse(await snapshotFrom(page)).users,JSON.parse(savedSnapshot).users);
+      assert(await page.evaluate(async()=>{const {ShopDatabase}=await import('./database.js'),db=await new ShopDatabase().open();const receipt=await db.get('meta','cloud-bootstrap:different-new-approval');db.db.close();return !!receipt}));
     }finally{await context.close()}
   });
   await mkdir('candidate-proof',{recursive:true});await writeFile('candidate-proof/device-lifecycle-ux-proof.json',JSON.stringify({passed:results.every(item=>item.passed),cases:results,syntheticOnly:true},null,2)+'\n');

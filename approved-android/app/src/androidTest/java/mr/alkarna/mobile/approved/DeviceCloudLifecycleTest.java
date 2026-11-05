@@ -323,17 +323,30 @@ public class DeviceCloudLifecycleTest {
     client.list(expiredInput);
     client.preview(expiredInput);
     service.rejectUnclaimed = true;
-    assertEquals("expired", client.prepare(copy(expiredInput).put("accepted", true)).getString("stage"));
-    assertEquals("idle", client.resumeLocal().getString("stage"));
+    JSONObject terminal = client.prepare(copy(expiredInput).put("accepted", true));
+    assertEquals("terminal", terminal.getString("stage"));
+    assertEquals("expired-unclaimed", terminal.getJSONObject("outcome").getString("status"));
+    assertEquals("terminal", client.resumeLocal().getString("stage"));
+    String originalIntent = terminal.getString("intentId");
     assertEquals(0, service.claims);
     service.rejectUnclaimed = false;
     JSONObject renewed = grant(), renewedInput = select(renewed);
     assertNotEquals(expired.getString("grantId"), renewed.getString("grantId"));
     client.list(renewedInput);
     client.preview(renewedInput);
-    assertEquals("prepared", client.prepare(copy(renewedInput).put("accepted", true)).getString("stage"));
+    assertEquals(
+        "prepared", client.prepare(copy(renewedInput).put("accepted", true)).getString("stage"));
     assertEquals(1, service.claims);
     assertFalse(service.transferred);
+    DeviceLifecycleStore saved =
+        new DeviceLifecycleStore(
+            context, license.deviceCode() + "|" + new InstallationIdentity().fingerprint());
+    JSONObject archived =
+        saved.state.getJSONObject("archives").getJSONObject(expired.getString("grantId"));
+    assertEquals(originalIntent, archived.getString("intentId"));
+    assertEquals("awaiting-claim", archived.getString("stage"));
+    assertTrue(archived.has("outcome"));
+    assertArrayEquals(service.snapshot, saved.archivedSnapshot(expired.getString("grantId")));
   }
 
   @Test
@@ -390,13 +403,21 @@ public class DeviceCloudLifecycleTest {
     assertEquals(1, service.versions.size());
     manager.manualConsent(target);
     String oldRequest = service.manualId;
-    byte[] changed = new JSONObject(new String(bytes, StandardCharsets.UTF_8))
-        .put("createdAt", "2026-11-05T01:00:00.000Z").toString().getBytes(StandardCharsets.UTF_8);
+    byte[] changed =
+        new JSONObject(new String(bytes, StandardCharsets.UTF_8))
+            .put("createdAt", "2026-11-05T01:00:00.000Z")
+            .toString()
+            .getBytes(StandardCharsets.UTF_8);
     saved.state.put("dueAt", System.currentTimeMillis() + 3600000);
     saved.save();
     String second = UUID.randomUUID().toString();
-    manager.begin(second, copy(target).put("manual", true).put("sizeBytes", changed.length)
-        .put("localRevision", "2").put("snapshotAt", 2));
+    manager.begin(
+        second,
+        copy(target)
+            .put("manual", true)
+            .put("sizeBytes", changed.length)
+            .put("localRevision", "2")
+            .put("snapshotAt", 2));
     manager.append(second, Base64.getEncoder().encodeToString(changed));
     manager.finish(second);
     ((android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE))
@@ -409,8 +430,9 @@ public class DeviceCloudLifecycleTest {
     assertFalse(manager.status(target, false).getBoolean("manualPending"));
     assertFalse(manager.status(target, false).getBoolean("manualConsentGranted"));
     assertNotNull(saved.state.optJSONObject("latest"));
-    assertNull(((android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE))
-        .getPendingJob(CloudBackupPolicy.JOB_ID));
+    assertNull(
+        ((android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE))
+            .getPendingJob(CloudBackupPolicy.JOB_ID));
     manager.manualConsent(target);
     assertNotEquals(oldRequest, service.manualId);
     saved.state.put("dueAt", 0).remove("retryAt");
@@ -436,19 +458,29 @@ public class DeviceCloudLifecycleTest {
     return ProtocolJson.base64(out);
   }
 
-  private static final class FakeService implements ContatoolsClient.Transport {
+  static final class FakeService implements ContatoolsClient.Transport {
     final KeyPair pair;
     final JSONObject issuers;
     final String device;
-    final byte[] snapshot;
+    byte[] snapshot;
     final Map<String, JSONObject> challenges = new HashMap<>(), uploads = new HashMap<>();
     final Map<String, byte[]> versions = new HashMap<>();
     JSONObject enrollment, activation, bootstrap, claim;
-    boolean dropAccept, dropClaim, dropFinish, corrupt, transferred, autoConsent, dropCommit, rejectUnclaimed;
+    boolean dropAccept,
+        dropClaim,
+        dropFinish,
+        corrupt,
+        transferred,
+        autoConsent,
+        dropCommit,
+        rejectUnclaimed;
     int accepts, claims, finishes, generation = 1, manualGeneration;
     final Set<String> accepted = new HashSet<>();
     String manualId;
     Checked duringManual;
+    String forcedOutcome, terminalOperation;
+    int unsignedBootstrapStatus, bootstrapCalls;
+    boolean wrongTerminalIntent, corruptTerminal;
 
     FakeService(String device) throws Exception {
       this.device = device;
@@ -476,7 +508,30 @@ public class DeviceCloudLifecycleTest {
               .put("format", "alkarna-web-backup")
               .put("schemaVersion", 1)
               .put("createdAt", "2026-11-05T00:00:00.000Z")
-              .put("state", new JSONObject().put("originId", "lifecycle-shop"))
+              .put(
+                  "state",
+                  new JSONObject()
+                      .put("originId", "lifecycle-shop")
+                      .put("branding", "متجر الفحص")
+                      .put("products", new JSONArray())
+                      .put("parties", new JSONArray())
+                      .put("records", new JSONArray())
+                      .put(
+                          "accounts",
+                          new JSONArray()
+                              .put(
+                                  new JSONObject()
+                                      .put("id", 1)
+                                      .put("name", "نقدي")
+                                      .put("balance", 120)))
+                      .put("warehouses", new JSONArray().put("الرئيسي"))
+                      .put("warehouse", "الرئيسي")
+                      .put(
+                          "opening",
+                          new JSONObject()
+                              .put("stocks", new JSONObject())
+                              .put("parties", new JSONObject())
+                              .put("accounts", new JSONObject().put("1", 120))))
               .put(
                   "users",
                   new JSONArray()
@@ -551,6 +606,7 @@ public class DeviceCloudLifecycleTest {
     }
 
     void restore() throws Exception {
+      claim = null;
       long now = System.currentTimeMillis();
       JSONObject p =
           new JSONObject()
@@ -612,6 +668,41 @@ public class DeviceCloudLifecycleTest {
           .put("writer", true)
           .put("consent", autoConsent)
           .put("generation", generation);
+    }
+
+    JSONObject terminal(JSONObject request, String status, String reason) throws Exception {
+      JSONObject grant = bootstrap.getJSONObject("grant"), g = grant.getJSONObject("payload");
+      JSONObject p =
+          new JSONObject().put("decisionId", "fixture-decision-" + g.getString("grantId"));
+      for (String field :
+          new String[] {
+            "grantId",
+            "installationId",
+            "keyFingerprint",
+            "deviceCode",
+            "subscriptionId",
+            "backupId",
+            "shopId",
+            "ownerId",
+            "sha256"
+          }) p.put(field, g.get(field));
+      String intent =
+          claim != null
+              ? claim.getJSONObject("payload").getString("intentId")
+              : request.optString("intentId", "");
+      p.put("intentId", wrongTerminalIntent ? "wrong-intent" : intent)
+          .put("grantHash", ProtocolJson.hash(grant))
+          .put("fenceGeneration", 2)
+          .put("outcome", status)
+          .put("reasonCode", reason)
+          .put("decidedAt", System.currentTimeMillis())
+          .put("replacementGrantId", "");
+      JSONObject envelope = sign("contatools-cloud-bootstrap-outcome", p);
+      if (corruptTerminal) envelope.getJSONObject("payload").put("fenceGeneration", 3);
+      return new JSONObject()
+          .put("stage", "terminal")
+          .put("outcome", envelope)
+          .put("serverTime", System.currentTimeMillis());
     }
 
     public synchronized JSONObject post(String path, JSONObject body) throws Exception {
@@ -709,6 +800,15 @@ public class DeviceCloudLifecycleTest {
       }
       JSONObject grant = bootstrap.getJSONObject("grant"), g = grant.getJSONObject("payload");
       assertEquals(g.getString("grantId"), p.getString("grantId"));
+      if (operation.startsWith("bootstrap.")) {
+        bootstrapCalls++;
+        if (unsignedBootstrapStatus != 0)
+          throw new ContatoolsClient.ServiceFailure(unsignedBootstrapStatus, true, 0);
+        if (forcedOutcome != null
+            && (terminalOperation == null || terminalOperation.equals(operation))) {
+          return terminal(p, forcedOutcome, "REPLACEMENT_PHONE_LOST");
+        }
+      }
       if (operation.equals("bootstrap.list"))
         return new JSONObject()
             .put("grant", grant)
@@ -730,6 +830,8 @@ public class DeviceCloudLifecycleTest {
       if (operation.equals("bootstrap.prepare")) {
         assertTrue(p.getBoolean("accepted"));
         if (rejectUnclaimed && claim == null) {
+          if (p.optInt("protocolVersion") == 2)
+            return terminal(p, "expired-unclaimed", "OFFER_EXPIRED");
           throw new ContatoolsClient.ServiceFailure(403, true, 0);
         }
         if (claim == null) {

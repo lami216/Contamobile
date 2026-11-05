@@ -16,6 +16,7 @@ export function installDeviceLifecycle(api){
   function showError(error){
     const code=String(error?.code||error?.message||'').toLowerCase();
     const text=/expired/.test(code)?t('انتهت موافقة الاستعادة. اطلب من الإدارة موافقة جديدة.','L’autorisation a expiré. Demandez un nouvel accord à l’administration.'):
+      /update.required|426/.test(code)?t('يحتاج مسار الاستعادة إلى تحديث التطبيق أو خدمة الإدارة. بيانات الهاتف وتفعيله محفوظان.','Ce parcours nécessite une mise à jour de l’application ou du service. Les données et l’activation sont conservées.'):
       /populated|يحتوي بيانات/.test(code)?t('هذا الهاتف يحتوي بيانات. اطلب من الدعم مراجعتها قبل الاستعادة.','Cet appareil contient des données. Contactez l’assistance avant toute restauration.'):
       t('تعذّر إكمال الاستعادة. أعد المحاولة؛ تفعيل الهاتف محفوظ.','La récupération n’a pas abouti. Réessayez ; l’activation est conservée.');
     message(text);
@@ -37,6 +38,7 @@ export function installDeviceLifecycle(api){
   async function refresh(){
     let value=await call('resume-local');
     if(value.stage==='awaiting-network')value=await call('resume');
+    if(value.stage==='terminal'){await showTerminal(value);return}
     if(value.stage==='prepared'){
       if(await hasReceipt(value)){await finish(value);return}
       if(!api.isEmpty())throw Error('populated');
@@ -54,6 +56,28 @@ export function installDeviceLifecycle(api){
   async function hasReceipt(value){
     const receipt=await api.database.get('meta','cloud-bootstrap:'+value.grantId);
     return !!receipt&&['intentId','shopId','ownerId','backupId','sha256'].every(key=>receipt[key]===value[key]);
+  }
+  async function showTerminal(value){
+    poller.stop();preview=null;prepared=null;
+    // Only a matching durable accounting receipt proves the local commit. A
+    // missing server ACK or local receipt never proves that no copy was made.
+    const committed=await hasReceipt(value);
+    if(committed&&api.isEmpty())await api.onRestored();
+    const status=value.outcome?.status,expired=status==='expired-unclaimed',revoked=status==='revoked-service-restore';
+    message(expired?t('انتهت صلاحية هذه الموافقة قبل تثبيت المطالبة. اطلب موافقة جديدة من الإدارة.','Cette autorisation a expiré avant sa réclamation. Demandez un nouvel accord à l’administration.'):
+      revoked?t('أُبطلت صلاحية هذه المحاولة بعد استعادة بيانات الخدمة. راجع الإدارة قبل بدء محاولة جديدة.','Cette tentative a été révoquée après une restauration du service. Contactez l’administration avant de recommencer.'):
+      t('استُبدلت صلاحية هذه المحاولة بقرار موثّق من الإدارة. لا يمكنها تغيير الهاتف المسموح له برفع النسخ.','Cette tentative a été remplacée par une décision enregistrée. Elle ne peut plus changer l’appareil autorisé à envoyer les sauvegardes.'));
+    const area=actions();if(!area)return;area.replaceChildren();
+    area.append(node('p',committed?t('إيصال الحفظ المحلي موجود. بياناتك وحسابات الدخول محفوظة؛ أغلق النافذة وسجّل الدخول.','Le reçu local confirme l’enregistrement. Vos données et identifiants sont conservés ; fermez cette fenêtre et connectez-vous.'):
+      t('لا نستنتج أن الاستعادة لم تحدث من غياب التأكيد. لم نحذف بيانات الهاتف أو نغيّر تفعيله.','L’absence de confirmation ne prouve pas que la restauration n’a pas eu lieu. Aucune donnée locale ni activation n’a été effacée.'),'notice'));
+    area.append(node('p',t('لا يستطيع السيرفر محو بيانات سبق تنزيلها أو إيقاف هاتف غير متصل فورًا. المحاولة الأصلية ونتيجتها الموثقة محفوظتان للمراجعة.','Le serveur ne peut pas effacer une copie déjà téléchargée ni bloquer immédiatement un appareil hors connexion. La tentative initiale et son résultat enregistré restent disponibles pour examen.'),'muted'));
+    if(api.isEmpty())area.append(button(t('التحقق من موافقة جديدة','Vérifier une nouvelle autorisation'),async()=>{
+      if(!api.isEmpty())throw Error('populated');
+      const current=await call('status');
+      if(!api.isEmpty())throw Error('populated');
+      if(current?.bootstrapAvailable&&current.bootstrapMeta?.grantId!==value.grantId){await showStatus(current);return}
+      message(t('لا توجد موافقة جديدة لهذا الهاتف. تبقى المحاولة السابقة محفوظة؛ اطلب من الإدارة مراجعة الحالة.','Aucune nouvelle autorisation pour cet appareil. L’ancienne tentative est conservée ; demandez un examen à l’administration.'));
+    }));
   }
   function summary(payload){
     const panel=node('div',null,'panel');
@@ -79,6 +103,7 @@ export function installDeviceLifecycle(api){
   async function finish(value){
     await api.onRestored();
     const result=await call('bootstrap-finish',{grantId:value.grantId,intentId:value.intentId});
+    if(result?.stage==='terminal'){await showTerminal(result);return}
     if(result?.stage!=='complete')throw Error('Restore receipt was not accepted');
     message(result.ackPending?t('حُفظت البيانات على الهاتف. تأكيد الربط ينتظر الاتصال. سجّل الدخول بحساب النسخة.','Les données sont enregistrées. La confirmation de liaison attend la connexion. Connectez-vous avec les identifiants de la sauvegarde.'):
       t('تمت الاستعادة. أغلق النافذة وسجّل الدخول بحساب النسخة.','Restauration terminée. Fermez cette fenêtre et connectez-vous avec les identifiants de la sauvegarde.'));
@@ -89,6 +114,7 @@ export function installDeviceLifecycle(api){
     api.lock(true);
     try{
       prepared=await call('bootstrap-prepare',{grantId:preview.grantId,accepted:true});
+      if(prepared?.stage==='terminal'){await showTerminal(prepared);return}
       if(prepared.stage!=='prepared'||prepared.sha256!==preview.sha256||prepared.backupId!==preview.backupId||prepared.shopId!==preview.shopId||prepared.ownerId!==preview.ownerId)throw Error('Approved version changed');
       await api.database.applyCloudBootstrap(prepared);
       try{await finish(prepared)}catch{
@@ -99,6 +125,7 @@ export function installDeviceLifecycle(api){
   }
   async function showStatus(value){
     if(closed)return;
+    if(value?.stage==='terminal'){await showTerminal(value);return}
     const area=actions();area.replaceChildren();
     if(!value?.bootstrapAvailable){
       message(t('بانتظار ربط الهاتف الجديد بنسخة محلك من كونتا تولز.','En attente de la liaison de cet appareil à votre sauvegarde dans Contatools.'));
@@ -109,10 +136,12 @@ export function installDeviceLifecycle(api){
     poller.stop();
     const list=await call('bootstrap-list',{grantId:value.bootstrapMeta?.grantId});
     if(closed)return;
+    if(list?.stage==='terminal'){await showTerminal(list);return}
     message(t('وصلت موافقة الإدارة. اختر معاينة النسخة قبل استعادتها.','L’administration a autorisé la récupération. Consultez la sauvegarde avant de la restaurer.'));
     area.append(button(t('معاينة نسخة السيرفر','Voir la sauvegarde du serveur'),async()=>{
       message(t('جارٍ تنزيل النسخة والتحقق منها…','Téléchargement et vérification…'));
-      showPreview(await call('bootstrap-preview',{grantId:list.grantId}));
+      const downloaded=await call('bootstrap-preview',{grantId:list.grantId});
+      if(downloaded?.stage==='terminal')await showTerminal(downloaded);else showPreview(downloaded);
     },true));
   }
   async function open(){
@@ -149,6 +178,7 @@ export function installDeviceLifecycle(api){
     if(!supported())return;
     await reconcileActivation();
     const value=await call('resume-local');
+    if(value.stage==='terminal'){await showTerminal(value);return}
     if(value.stage==='prepared'&&await hasReceipt(value))await finish(value);
     else if(value.stage==='complete'&&value.ackPending&&await hasReceipt(value))await call('resume');
   }

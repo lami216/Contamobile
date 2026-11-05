@@ -14,6 +14,14 @@ final class DeviceLifecycleClient {
   private final ContatoolsClient.Transport transport;
   private final DeviceLifecycleStore disk;
 
+  private static final class TerminalOutcome extends Exception {
+    final JSONObject value;
+
+    TerminalOutcome(JSONObject value) {
+      this.value = value;
+    }
+  }
+
   DeviceLifecycleClient(Context context, DeviceLicense license) throws Exception {
     this(
         context,
@@ -37,6 +45,7 @@ final class DeviceLifecycleClient {
 
   private JSONObject call(String operation, JSONObject payload) throws Exception {
     JSONObject wire = ProtocolJson.copy(payload).put("installationId", identity.id());
+    if (operation.startsWith("bootstrap.")) wire.put("protocolVersion", 2);
     JSONObject challenge =
         transport.post(
             "/api/android/lifecycle/challenge",
@@ -51,13 +60,145 @@ final class DeviceLifecycleClient {
         || !ProtocolJson.hash(wire).equals(proof.optString("payloadHash"))
         || !challenge.getString("id").equals(proof.optString("id")))
       throw new IOException("INVALID_LIFECYCLE_PROOF");
-    return transport.post(
-        "/api/android/lifecycle/dispatch",
-        new JSONObject()
-            .put("operation", operation)
-            .put("payload", wire)
-            .put("challengeId", challenge.getString("id"))
-            .put("signature", identity.sign(message)));
+    JSONObject response =
+        transport.post(
+            "/api/android/lifecycle/dispatch",
+            new JSONObject()
+                .put("operation", operation)
+                .put("payload", wire)
+                .put("challengeId", challenge.getString("id"))
+                .put("signature", identity.sign(message)));
+    if (operation.startsWith("bootstrap.") && "terminal".equals(response.optString("stage"))) {
+      throw new TerminalOutcome(
+          acceptOutcome(response, savedBootstrap(payload.getString("grantId"))));
+    }
+    return response;
+  }
+
+  private JSONObject savedBootstrap(String grantId) throws Exception {
+    for (String slot : new String[] {"pending", "offer"}) {
+      JSONObject item = disk.state.optJSONObject(slot);
+      if (item != null
+          && grantId.equals(
+              item.getJSONObject("grant").getJSONObject("payload").optString("grantId"))) {
+        return item;
+      }
+    }
+    for (String slot : new String[] {"terminalOffers", "archives"}) {
+      JSONObject saved = disk.state.optJSONObject(slot);
+      if (saved != null && saved.optJSONObject(grantId) != null)
+        return saved.getJSONObject(grantId);
+    }
+    throw new IOException("BOOTSTRAP_SCOPE_MISMATCH");
+  }
+
+  private String localIntent(JSONObject item) {
+    return item.optString("intentId", "");
+  }
+
+  private JSONObject cachedTerminal(String grantId) throws Exception {
+    for (String slot : new String[] {"pending", "offer"}) {
+      JSONObject item = disk.state.optJSONObject(slot);
+      if (item != null
+          && grantId.equals(
+              item.getJSONObject("grant").getJSONObject("payload").optString("grantId"))) {
+        return terminal(item);
+      }
+    }
+    for (String slot : new String[] {"terminalOffers", "archives"}) {
+      JSONObject saved = disk.state.optJSONObject(slot);
+      if (saved != null && saved.optJSONObject(grantId) != null)
+        return terminal(saved.getJSONObject(grantId));
+    }
+    return null;
+  }
+
+  private JSONObject terminal(JSONObject item) throws Exception {
+    JSONObject envelope = item.optJSONObject("outcome");
+    if (envelope == null) return null;
+    JSONObject payload =
+        BootstrapOutcome.verify(
+            envelope,
+            issuers,
+            item.getJSONObject("grant"),
+            localIntent(item),
+            identity.id(),
+            identity.fingerprint(),
+            license.deviceCode());
+    if (item.has("claim") && payload.getString("outcome").endsWith("-unclaimed")) {
+      throw new IOException("BOOTSTRAP_OUTCOME_CONTRADICTS_CLAIM");
+    }
+    JSONObject grant = bootstrapGrant(item.getJSONObject("grant"), false);
+    return metadata(grant)
+        .put("stage", "terminal")
+        .put("purpose", "cloud-bootstrap")
+        .put("intentId", localIntent(item))
+        .put("localPhase", item.optString("stage", "preview"))
+        .put("ackPending", false)
+        .put(
+            "outcome",
+            new JSONObject()
+                .put("status", payload.getString("outcome"))
+                .put("reasonCode", payload.getString("reasonCode"))
+                .put("decisionId", payload.getString("decisionId"))
+                .put("decidedAt", payload.getLong("decidedAt"))
+                .put("minVersionCode", 26)
+                .put("chainGeneration", payload.getLong("fenceGeneration"))
+                .put("replacementGrantId", payload.getString("replacementGrantId")));
+  }
+
+  private JSONObject acceptOutcome(JSONObject response, JSONObject item) throws Exception {
+    if (!"terminal".equals(response.optString("stage"))) return null;
+    JSONObject envelope = response.getJSONObject("outcome");
+    BootstrapOutcome.verify(
+        envelope,
+        issuers,
+        item.getJSONObject("grant"),
+        localIntent(item),
+        identity.id(),
+        identity.fingerprint(),
+        license.deviceCode());
+    JSONObject candidate = ProtocolJson.copy(item).put("outcome", ProtocolJson.copy(envelope));
+    terminal(candidate); // Validate local signed-claim consistency before changing durable state.
+    // Preserve the original stage, intent, signed claim, used receipt and bytes.
+    // A signed permanent decision closes only this optional recovery authority.
+    item.put("outcome", ProtocolJson.copy(envelope));
+    if (!item.has("stage")) {
+      JSONObject history = disk.state.optJSONObject("terminalOffers");
+      if (history == null) history = new JSONObject();
+      history.put(
+          item.getJSONObject("grant").getJSONObject("payload").getString("grantId"),
+          ProtocolJson.copy(item));
+      disk.state.put("terminalOffers", history);
+    }
+    disk.save();
+    return terminal(item);
+  }
+
+  private byte[] snapshotFor(JSONObject item) throws Exception {
+    return item.has("snapshotGrantId")
+        ? disk.previewSnapshot(item.getString("snapshotGrantId"))
+        : disk.snapshot();
+  }
+
+  private void archiveClosedPending(JSONObject pending) throws Exception {
+    if (terminal(pending) == null) throw new IOException("BOOTSTRAP_BUSY");
+    JSONObject grant = bootstrapGrant(pending.getJSONObject("grant"), false);
+    byte[] bytes = snapshotFor(pending);
+    validateSnapshot(bytes, grant);
+    String grantId = grant.getString("grantId");
+    disk.archiveSnapshot(grantId, bytes);
+    JSONObject history = disk.state.optJSONObject("archives");
+    if (history == null) history = new JSONObject();
+    history.put(
+        grantId,
+        ProtocolJson.copy(pending)
+            .put("archiveSnapshotId", grantId)
+            .put("wasConsumed", disk.used(grantId)));
+    disk.state.put("archives", history);
+    // Save the archive before replacing pending. A crash leaves the old phase
+    // and bytes usable; status/preview alone never performs this transition.
+    disk.save();
   }
 
   private static void keys(JSONObject value, String... allowed) throws Exception {
@@ -120,6 +261,7 @@ final class DeviceLifecycleClient {
     JSONObject answer = call("enroll", payload);
     disk.state
         .put("enrolled", true)
+        .put("enrolledVersionCode", BuildConfig.VERSION_CODE)
         .put("lastEnrollmentAt", System.currentTimeMillis())
         .put(
             "enrolledLicenseHash",
@@ -131,6 +273,11 @@ final class DeviceLifecycleClient {
   }
 
   private JSONObject sanitize(JSONObject response) throws Exception {
+    if ("terminal".equals(response.optString("stage"))) {
+      String grantId =
+          response.getJSONObject("outcome").getJSONObject("payload").getString("grantId");
+      return acceptOutcome(response, savedBootstrap(grantId));
+    }
     JSONObject result =
         new JSONObject()
             .put("status", response.optString("status", "pending"))
@@ -158,7 +305,17 @@ final class DeviceLifecycleClient {
       JSONObject grant = bootstrap.getJSONObject("grant"), p = bootstrapGrant(grant, true);
       if (!disk.used(p.getString("grantId"))) {
         result.put("bootstrapAvailable", true).put("bootstrapMeta", metadata(p));
-        if (!disk.state.has("pending")) disk.state.put("offer", bootstrap);
+        JSONObject pending = disk.state.optJSONObject("pending");
+        if (pending == null
+            || (terminal(pending) != null
+                && !p.getString("grantId")
+                    .equals(
+                        pending
+                            .getJSONObject("grant")
+                            .getJSONObject("payload")
+                            .getString("grantId")))) {
+          disk.state.put("offer", bootstrap);
+        }
       }
     }
     disk.save();
@@ -176,6 +333,7 @@ final class DeviceLifecycleClient {
     if (saved != null) {
       String hash = ProtocolJson.hash(new JSONObject(saved.getString("licenseDocument")));
       if (!disk.state.optBoolean("enrolled")
+          || disk.state.optInt("enrolledVersionCode") != BuildConfig.VERSION_CODE
           || !hash.equals(disk.state.optString("enrolledLicenseHash"))
           || System.currentTimeMillis() - disk.state.optLong("lastEnrollmentAt") >= 60000)
         enroll(new JSONObject());
@@ -320,13 +478,19 @@ final class DeviceLifecycleClient {
   synchronized JSONObject list(JSONObject input) throws Exception {
     keys(input, "grantId");
     String grantId = id(input, "grantId");
-    JSONObject response = call("bootstrap.list", new JSONObject().put("grantId", grantId)),
-        p = bootstrapGrant(response.getJSONObject("grant"), true);
-    if (!grantId.equals(p.getString("grantId")) || disk.used(grantId))
-      throw new IOException("BOOTSTRAP_ALREADY_USED");
-    disk.state.put("offer", new JSONObject().put("grant", response.getJSONObject("grant")));
-    disk.save();
-    return metadata(p).put("versions", response.getJSONArray("versions"));
+    JSONObject closed = cachedTerminal(grantId);
+    if (closed != null) return closed;
+    try {
+      JSONObject response = call("bootstrap.list", new JSONObject().put("grantId", grantId)),
+          p = bootstrapGrant(response.getJSONObject("grant"), true);
+      if (!grantId.equals(p.getString("grantId")) || disk.used(grantId))
+        throw new IOException("BOOTSTRAP_ALREADY_USED");
+      disk.state.put("offer", new JSONObject().put("grant", response.getJSONObject("grant")));
+      disk.save();
+      return metadata(p).put("versions", response.getJSONArray("versions"));
+    } catch (TerminalOutcome closedOutcome) {
+      return closedOutcome.value;
+    }
   }
 
   private JSONObject offer(String grantId, boolean current) throws Exception {
@@ -382,14 +546,20 @@ final class DeviceLifecycleClient {
   synchronized JSONObject preview(JSONObject input) throws Exception {
     keys(input, "grantId");
     String grant = id(input, "grantId");
-    JSONObject item = offer(grant, true), p = bootstrapGrant(item.getJSONObject("grant"), true);
-    byte[] bytes = download(p, null);
-    disk.snapshot(bytes);
-    disk.state.put("previewGrantId", grant);
-    disk.save();
-    return metadata(p)
-        .put("stage", "preview")
-        .put("text", new String(bytes, StandardCharsets.UTF_8));
+    JSONObject closed = cachedTerminal(grant);
+    if (closed != null) return closed;
+    try {
+      JSONObject item = offer(grant, false), p = bootstrapGrant(item.getJSONObject("grant"), false);
+      byte[] bytes = download(p, null);
+      disk.previewSnapshot(grant, bytes);
+      disk.state.put("previewGrantId", grant);
+      disk.save();
+      return metadata(p)
+          .put("stage", "preview")
+          .put("text", new String(bytes, StandardCharsets.UTF_8));
+    } catch (TerminalOutcome closedOutcome) {
+      return closedOutcome.value;
+    }
   }
 
   private void claim(JSONObject pending) throws Exception {
@@ -404,8 +574,9 @@ final class DeviceLifecycleClient {
     JSONObject grant = answer.getJSONObject("grant");
     if (!ProtocolJson.canonical(p).equals(ProtocolJson.canonical(bootstrapGrant(grant, false))))
       throw new IOException("BOOTSTRAP_CLAIM_SCOPE");
-    pending.put("claim", answer.getJSONObject("claim"));
-    verifyClaim(pending);
+    JSONObject candidate = ProtocolJson.copy(pending).put("claim", answer.getJSONObject("claim"));
+    verifyClaim(candidate);
+    pending.put("claim", candidate.getJSONObject("claim"));
     pending.put("stage", "prepared");
     disk.save();
   }
@@ -432,7 +603,7 @@ final class DeviceLifecycleClient {
   private JSONObject prepared(JSONObject pending) throws Exception {
     JSONObject p = verifyClaim(pending);
     if (disk.used(p.getString("grantId"))) throw new IOException("BOOTSTRAP_ALREADY_USED");
-    byte[] bytes = disk.snapshot();
+    byte[] bytes = snapshotFor(pending);
     validateSnapshot(bytes, p);
     return metadata(p)
         .put("stage", "prepared")
@@ -446,16 +617,32 @@ final class DeviceLifecycleClient {
     if (!Boolean.TRUE.equals(input.opt("accepted")))
       throw new IOException("BOOTSTRAP_CONSENT_REQUIRED");
     String grantId = id(input, "grantId");
+    JSONObject closed = cachedTerminal(grantId);
+    if (closed != null) return closed;
     JSONObject pending = disk.state.optJSONObject("pending");
-    if (pending == null) {
-      JSONObject item = offer(grantId, true), p = bootstrapGrant(item.getJSONObject("grant"), true);
+    if (pending != null
+        && !grantId.equals(
+            pending.getJSONObject("grant").getJSONObject("payload").getString("grantId"))) {
+      if (terminal(pending) == null) throw new IOException("BOOTSTRAP_BUSY");
+      JSONObject selected = offer(grantId, false);
       if (!grantId.equals(disk.state.optString("previewGrantId")))
         throw new IOException("BOOTSTRAP_PREVIEW_REQUIRED");
-      validateSnapshot(disk.snapshot(), p);
+      validateSnapshot(
+          disk.previewSnapshot(grantId), bootstrapGrant(selected.getJSONObject("grant"), false));
+      archiveClosedPending(pending);
+      pending = null;
+    }
+    if (pending == null) {
+      JSONObject item = offer(grantId, false),
+          p = bootstrapGrant(item.getJSONObject("grant"), false);
+      if (!grantId.equals(disk.state.optString("previewGrantId")))
+        throw new IOException("BOOTSTRAP_PREVIEW_REQUIRED");
+      validateSnapshot(disk.previewSnapshot(grantId), p);
       pending =
           new JSONObject()
               .put("stage", "awaiting-claim")
               .put("grant", item.getJSONObject("grant"))
+              .put("snapshotGrantId", grantId)
               .put("intentId", UUID.randomUUID().toString());
       disk.state.put("pending", pending);
       disk.save();
@@ -467,7 +654,13 @@ final class DeviceLifecycleClient {
 
   synchronized JSONObject resumeLocal() throws Exception {
     JSONObject pending = disk.state.optJSONObject("pending");
-    if (pending == null) return new JSONObject().put("stage", "idle");
+    if (pending == null) {
+      JSONObject offer = disk.state.optJSONObject("offer");
+      JSONObject closed = offer == null ? null : terminal(offer);
+      return closed != null ? closed : new JSONObject().put("stage", "idle");
+    }
+    JSONObject closed = terminal(pending);
+    if (closed != null) return closed;
     if ("applied".equals(pending.optString("stage")))
       return complete(pending).put("ackPending", true);
     if ("awaiting-claim".equals(pending.optString("stage")))
@@ -477,28 +670,17 @@ final class DeviceLifecycleClient {
 
   synchronized JSONObject resume() throws Exception {
     JSONObject pending = disk.state.optJSONObject("pending");
-    if (pending == null) return new JSONObject().put("stage", "idle");
+    if (pending == null) return resumeLocal();
+    JSONObject closed = terminal(pending);
+    if (closed != null) return closed;
     if ("applied".equals(pending.optString("stage"))) return acknowledge(pending);
-    if ("awaiting-claim".equals(pending.optString("stage"))) {
-      try {
-        // Always retry the identical durable intent first: a successful claim
-        // response may have been lost, including before the expiry boundary.
-        claim(pending);
-      } catch (ContatoolsClient.ServiceFailure refusal) {
-        if (!refusal.permanent
-            || !(refusal.status == 403 || refusal.status == 404
-                || refusal.status == 409 || refusal.status == 410)) {
-          throw refusal;
-        }
-        // No verified claim and no local commit exist in this stage. A definitive
-        // refusal can release this unused intent so a fresh approval is usable.
-        disk.state.remove("pending");
-        disk.state.remove("offer");
-        disk.state.remove("previewGrantId");
-        disk.save();
-        disk.clearSnapshot();
-        return new JSONObject().put("stage", "expired");
-      }
+    try {
+      // Revalidate the identical durable claim before a new local commit. A
+      // cached v25 prepared claim can have been fenced while the phone was away.
+      // HTTP errors alone never prove a final decision and never erase intent.
+      claim(pending);
+    } catch (TerminalOutcome closedOutcome) {
+      return closedOutcome.value;
     }
     return prepared(pending);
   }
@@ -512,6 +694,12 @@ final class DeviceLifecycleClient {
 
   synchronized JSONObject finish(JSONObject input) throws Exception {
     keys(input, "grantId", "intentId");
+    JSONObject closed = cachedTerminal(id(input, "grantId"));
+    if (closed != null) {
+      if (!id(input, "intentId").equals(closed.getString("intentId")))
+        throw new IOException("BOOTSTRAP_RECEIPT_SCOPE");
+      return closed;
+    }
     JSONObject pending = disk.state.optJSONObject("pending");
     if (pending == null) {
       JSONObject previous = disk.state.optJSONObject("lastReceipt");
@@ -547,8 +735,12 @@ final class DeviceLifecycleClient {
       disk.state.remove("offer");
       disk.state.remove("previewGrantId");
       disk.save();
+      if (pending.has("snapshotGrantId"))
+        disk.clearPreviewSnapshot(pending.getString("snapshotGrantId"));
       disk.clearSnapshot();
       return completed.put("ackPending", false);
+    } catch (TerminalOutcome closedOutcome) {
+      return closedOutcome.value;
     } catch (Exception failure) {
       return completed.put("ackPending", true);
     }

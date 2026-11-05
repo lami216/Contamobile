@@ -121,4 +121,44 @@ final class DeviceLifecycleStore {
   void clearSnapshot() {
     new AtomicFile(new File(directory, "bootstrap.bin")).delete();
   }
+
+  private String scopedFile(String prefix, String grantId) throws Exception {
+    if (!grantId.matches("[A-Za-z0-9_.:-]{1,160}")) throw new IOException("INVALID_BOOTSTRAP_ID");
+    return prefix + "-" + ProtocolJson.hash(grantId) + ".bin";
+  }
+
+  void previewSnapshot(String grantId, byte[] bytes) throws Exception {
+    if (bytes.length > CloudBackupPolicy.MAX_BYTES) throw new IOException("SNAPSHOT_TOO_LARGE");
+    write(scopedFile("preview", grantId), encrypt(bytes, "preview:" + grantId));
+  }
+
+  byte[] previewSnapshot(String grantId) throws Exception {
+    try {
+      return decrypt(
+          new AtomicFile(new File(directory, scopedFile("preview", grantId))).readFully(),
+          "preview:" + grantId);
+    } catch (FileNotFoundException legacyPreview) {
+      if (grantId.equals(state.optString("previewGrantId"))) return snapshot();
+      throw legacyPreview;
+    }
+  }
+
+  void archiveSnapshot(String grantId, byte[] bytes) throws Exception {
+    if (bytes.length > CloudBackupPolicy.MAX_BYTES) throw new IOException("SNAPSHOT_TOO_LARGE");
+    write(scopedFile("archive", grantId), encrypt(bytes, "archive:" + grantId));
+  }
+
+  byte[] archivedSnapshot(String grantId) throws Exception {
+    return decrypt(
+        new AtomicFile(new File(directory, scopedFile("archive", grantId))).readFully(),
+        "archive:" + grantId);
+  }
+
+  void clearPreviewSnapshot(String grantId) {
+    try {
+      new AtomicFile(new File(directory, scopedFile("preview", grantId))).delete();
+    } catch (Exception ignored) {
+      /* An encrypted orphan must not invalidate a completed receipt. */
+    }
+  }
 }

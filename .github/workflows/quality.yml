@@ -2,7 +2,7 @@ name: Mobile quality
 
 on:
   push:
-    branches: [mobile-v1, main, ui-redesign-v2, feat/device-cloud-lifecycle-20261105]
+    branches: [mobile-v1, main, ui-redesign-v2, feat/bootstrap-support-replacement-20261105]
   pull_request:
     branches: [main, mobile-v1]
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   approved-runtime:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/device-cloud-lifecycle-20261105'
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.ref == 'refs/heads/feat/bootstrap-support-replacement-20261105'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
