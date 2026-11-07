@@ -66,8 +66,11 @@ final class PhoneEntitlement {
     long seq=number(next,"sequence"),oldSeq=number(previous,"sequence"),generation=number(next,"bindingGeneration"),oldGeneration=number(previous,"bindingGeneration");
     if(seq<oldSeq||generation<oldGeneration)throw new IOException("ENTITLEMENT_REPLAY");
     if(seq==oldSeq&&generation==oldGeneration){
-      boolean pendingRefresh="pending".equals(previous.getString("status"))&&"pending".equals(next.getString("status"));
-      for(String name:SNAPSHOT_FIELDS)if(!"issuedAt".equals(name)&&!(pendingRefresh&&"decisionId".equals(name))&&!Objects.equals(ProtocolJson.canonical(previous.get(name)),ProtocolJson.canonical(next.get(name))))throw new IOException("ENTITLEMENT_DECISION_CONFLICT");
+      // Reviewing, replacing or withdrawing an offer does not change the
+      // assignment generation. Signed inactive messages may change their offer
+      // diagnostics, but cannot alter any scope, licence, term or current phone.
+      boolean inactiveRefresh=oneOf(previous.getString("status"),"pending","replaced")&&oneOf(next.getString("status"),"pending","replaced");
+      for(String name:SNAPSHOT_FIELDS)if(!"issuedAt".equals(name)&&!(inactiveRefresh&&oneOf(name,"decisionId","status","reasonCode","intentId"))&&!Objects.equals(ProtocolJson.canonical(previous.get(name)),ProtocolJson.canonical(next.get(name))))throw new IOException("ENTITLEMENT_DECISION_CONFLICT");
       if(number(next,"issuedAt")<number(previous,"issuedAt"))throw new IOException("ENTITLEMENT_REPLAY");
     }
   }

@@ -46,9 +46,16 @@ public final class PhoneEntitlementTest {
     PhoneEntitlement.monotonic(first,replaced);rejects(()->PhoneEntitlement.monotonic(replaced,first));
   }
   @Test public void aNewPendingOfferCanRefreshWithoutGrantingActivation()throws Exception{
-    JSONObject first=verify(copy(payload).put("status","pending").put("reasonCode","PENDING_REPLACEMENT").put("currentDeviceCode","old-code").put("currentInstallationId","old-installation"));
+    JSONObject first=verify(copy(payload).put("status","pending").put("reasonCode","PENDING_REPLACEMENT").put("intentId","").put("currentDeviceCode","old-code").put("currentInstallationId","old-installation"));
     JSONObject next=verify(copy(first).put("decisionId","other-offer").put("issuedAt",2000));PhoneEntitlement.monotonic(first,next);
     rejects(()->PhoneEntitlement.monotonic(first,verify(copy(next).put("endsAt",200000))));
+    JSONObject withdrawn=verify(copy(next).put("status","replaced").put("reasonCode","REPLACED_INSTALLATION").put("decisionId","last-assignment").put("intentId","own-historical-intent").put("issuedAt",3000));PhoneEntitlement.monotonic(next,withdrawn);
+    JSONObject reviewed=verify(copy(withdrawn).put("status","pending").put("reasonCode","PENDING_REPLACEMENT").put("decisionId","reviewed-offer").put("intentId","").put("issuedAt",4000));PhoneEntitlement.monotonic(withdrawn,reviewed);
+    rejects(()->PhoneEntitlement.monotonic(reviewed,withdrawn));
+    for(String name:new String[]{"licenseId","licenseDocumentHash","currentDeviceCode","currentInstallationId"})rejects(()->PhoneEntitlement.monotonic(withdrawn,verify(copy(reviewed).put(name,"licenseDocumentHash".equals(name)?"b".repeat(64):"changed"))));
+    rejects(()->PhoneEntitlement.monotonic(withdrawn,verify(copy(reviewed).put("sequence",0))));
+    JSONObject inactiveWithSameCurrent=verify(copy(payload).put("status","replaced").put("reasonCode","REPLACED_PHONE"));
+    rejects(()->PhoneEntitlement.monotonic(inactiveWithSameCurrent,verify(payload)));rejects(()->PhoneEntitlement.monotonic(verify(payload),inactiveWithSameCurrent));
   }
   @Test public void onlyTheClaimedOfferIntentAndDocumentMayBeInstalled()throws Exception{
     JSONObject offer=new JSONObject().put("schemaVersion",1).put("offerId","offer").put("entitlementId","entitlement").put("clientId","client").put("installationId","installation").put("keyFingerprint","fingerprint").put("deviceCode","code").put("expectedGeneration",1).put("kind","replacement").put("issuedAt",1000).put("expiresAt",5000);

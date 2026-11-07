@@ -12,6 +12,10 @@ public final class VerifyPhoneEntitlement {
     JSONObject issuers=input.getJSONObject("issuers");
     String installation=input.getString("installationId"),fingerprint=input.getString("keyFingerprint"),device=input.getString("deviceCode");
     JSONObject snapshot=PhoneEntitlement.snapshot(input.getJSONObject("entitlement"),issuers,installation,fingerprint,device);
+    if(input.has("previous")){
+      JSONObject previous=PhoneEntitlement.snapshot(input.getJSONObject("previous"),issuers,installation,fingerprint,device);
+      PhoneEntitlement.monotonic(previous,snapshot);
+    }
     if(input.has("offer")){
       JSONObject offer=PhoneEntitlement.offer(input.getJSONObject("offer"),issuers,installation,fingerprint,device,false,0);
       PhoneEntitlement.claimed(offer,snapshot,input.getString("intentId"),input.getString("documentHash"));
