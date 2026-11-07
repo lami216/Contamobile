@@ -7,9 +7,41 @@ proof_dir=candidate-proof
 mkdir -p "$proof_dir"
 # Keep every synthetic fixture offline even if a guest service re-enables a link.
 # This root/firewall setup is allowed only after proving this is an emulator.
-adb root
-timeout 30s adb wait-for-device
-test "$(adb shell id -u | tr -d '\r')" = 0
+# adbd restarts when root is requested; recent emulator images can close that
+# first transport before returning a reply. Retry readiness only, never a test
+# or business operation, and prove emulator/root identity before continuing.
+root_ready=false
+: > "$proof_dir/root-readiness.txt"
+for attempt in 1 2 3; do
+ echo "root readiness attempt $attempt" >> "$proof_dir/root-readiness.txt"
+ if [ "$attempt" -gt 1 ]; then
+  if ! timeout 30s adb wait-for-device >> "$proof_dir/root-readiness.txt" 2>&1; then continue; fi
+  retry_emulator=''
+  if retry_emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$proof_dir/root-readiness.txt" | tr -d '\r'); then :;else retry_emulator='';fi
+  if [ "$retry_emulator" != 1 ]; then
+   echo 'Emulator identity could not be reverified; refusing another root request' >> "$proof_dir/root-readiness.txt"
+   cat "$proof_dir/root-readiness.txt" >&2
+   exit 1
+  fi
+ fi
+ if timeout 15s adb root >> "$proof_dir/root-readiness.txt" 2>&1; then :; else
+  echo 'Root request transport closed or timed out; verifying actual device state' >> "$proof_dir/root-readiness.txt"
+ fi
+ if timeout 30s adb wait-for-device >> "$proof_dir/root-readiness.txt" 2>&1; then
+  actual_uid='';actual_emulator=''
+  if actual_uid=$(timeout 10s adb shell id -u 2>> "$proof_dir/root-readiness.txt" | tr -d '\r'); then :;else actual_uid='';fi
+  if actual_emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$proof_dir/root-readiness.txt" | tr -d '\r'); then :;else actual_emulator='';fi
+  echo "verified uid=$actual_uid emulator=$actual_emulator" >> "$proof_dir/root-readiness.txt"
+  if [ "$actual_uid" = 0 ] && [ "$actual_emulator" = 1 ]; then root_ready=true;break;fi
+  if [ -n "$actual_emulator" ] && [ "$actual_emulator" != 1 ]; then
+   cat "$proof_dir/root-readiness.txt" >&2
+   exit 1
+  fi
+ fi
+ if [ "$attempt" -lt 3 ]; then sleep 1;fi
+done
+if [ "$root_ready" != true ]; then cat "$proof_dir/root-readiness.txt" >&2;exit 1;fi
+cat "$proof_dir/root-readiness.txt"
 : > "$proof_dir/network-egress-block.txt"
 for firewall in iptables ip6tables; do
  if ! adb shell "$firewall" -w 5 -n -L ALKARNA_SYNTHETIC_OFFLINE >/dev/null 2>&1; then

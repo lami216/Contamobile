@@ -262,6 +262,7 @@ jobs:
       - name: Existing source checks and deterministic scheduling policy
         run: |
           bash -n scripts/test-candidate-upgrade.sh
+          bash scripts/test-candidate-readiness.sh
           python3 scripts/prepare-approved-dependencies.py
           node --test scripts/test-service-contact.mjs
           java scripts/RegistrationPolicyCheck.java
