@@ -7,6 +7,9 @@ repository=Path(__file__).resolve().parents[1]
 source=repository/'approved-android/app/src/test/java/mr/alkarna/mobile/approved/BootstrapOutcomeTest.java'
 expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source.read_text(encoding='utf-8'))
 assert len(expected)==len(set(expected))==7,'The seven required BootstrapOutcomeTest JVM cases are missing'
+phone_source=repository/'approved-android/app/src/test/java/mr/alkarna/mobile/approved/PhoneEntitlementTest.java'
+phone_expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',phone_source.read_text(encoding='utf-8'))
+assert len(phone_expected)==len(set(phone_expected))==8,'The eight required customer-phone entitlement JVM cases are missing'
 files=sorted(directory.glob('TEST-*.xml'))
 assert files,'Missing executed JVM test XML; compilation alone is not acceptance'
 cases=[]
@@ -20,10 +23,13 @@ for filename in files:
     for row in rows:
         assert not any(row.find(key) is not None for key in ['failure','error','skipped']),(filename,row.get('name'))
         cases.append({'class':row.get('classname',suite.get('name')),'name':row.get('name'),'passed':True})
-assert len(cases)>=23 and len({(row['class'],row['name']) for row in cases})==len(cases)
+assert len(cases)>=32 and len({(row['class'],row['name']) for row in cases})==len(cases)
 actual=[row['name'] for row in cases if row['class']=='mr.alkarna.mobile.approved.BootstrapOutcomeTest']
 assert len(actual)==7 and set(actual)==set(expected),'The new JVM test class did not actually run all seven methods'
+phone_actual=[row['name'] for row in cases if row['class']=='mr.alkarna.mobile.approved.PhoneEntitlementTest']
+assert len(phone_actual)==8 and set(phone_actual)==set(phone_expected),'The customer phone entitlement JVM tests did not actually execute every required case'
 result={'schema':'alkarna-native-jvm-execution','passed':True,'executed':len(cases),'failed':0,'skipped':0,'bootstrapOutcomeExecuted':7,'bootstrapOutcomeCases':sorted(actual),'cases':cases,'scope':'JVM native unit execution; distinct from Android instrumentation and physical-phone acceptance'}
+result.update(phoneEntitlementExecuted=8,phoneEntitlementCases=sorted(phone_actual))
 output.parent.mkdir(parents=True,exist_ok=True)
 output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(result,indent=2))

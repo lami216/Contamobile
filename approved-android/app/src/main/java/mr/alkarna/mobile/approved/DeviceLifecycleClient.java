@@ -1,6 +1,7 @@
 package mr.alkarna.mobile.approved;
 
 import android.content.Context;
+import android.os.SystemClock;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -60,6 +61,7 @@ final class DeviceLifecycleClient {
         || !ProtocolJson.hash(wire).equals(proof.optString("payloadHash"))
         || !challenge.getString("id").equals(proof.optString("id")))
       throw new IOException("INVALID_LIFECYCLE_PROOF");
+    long dispatchStarted=SystemClock.elapsedRealtime();
     JSONObject response =
         transport.post(
             "/api/android/lifecycle/dispatch",
@@ -68,6 +70,7 @@ final class DeviceLifecycleClient {
                 .put("payload", wire)
                 .put("challengeId", challenge.getString("id"))
                 .put("signature", identity.sign(message)));
+    response.put("_nativeEntitlementObservationStart",dispatchStarted);
     if (operation.startsWith("bootstrap.") && "terminal".equals(response.optString("stage"))) {
       throw new TerminalOutcome(
           acceptOutcome(response, savedBootstrap(payload.getString("grantId"))));
@@ -273,6 +276,7 @@ final class DeviceLifecycleClient {
   }
 
   private JSONObject sanitize(JSONObject response) throws Exception {
+    JSONObject entitlement=entitlementResponse(response);
     if ("terminal".equals(response.optString("stage"))) {
       String grantId =
           response.getJSONObject("outcome").getJSONObject("payload").getString("grantId");
@@ -285,9 +289,13 @@ final class DeviceLifecycleClient {
             .put("installationId", identity.id())
             .put("activationAvailable", false)
             .put("bootstrapAvailable", false);
+    if(entitlement!=null)result.put("entitlement",entitlement);
+    JSONObject entitlementOffer=disk.state.optJSONObject("entitlementOffer"),entitlementPending=disk.state.optJSONObject("entitlementPending");
+    boolean pendingAccepted=entitlementPending!=null&&!entitlementPending.has("outcome");
+    if(entitlementOffer!=null||pendingAccepted)result.put("entitlementAvailable",true).put("entitlementKind",entitlementOffer!=null?entitlementOffer.getJSONObject("payload").getString("kind"):entitlementPending.getJSONObject("offer").getJSONObject("payload").getString("kind")).put("activationAvailable",true);
     if (response.has("clientId")) result.put("clientId", response.opt("clientId"));
     JSONObject activation = response.optJSONObject("activation");
-    if (activation != null) {
+    if (activation != null && entitlement==null) {
       JSONObject p = activation(activation, true);
       if (p.getLong("sequence") > disk.state.optLong("licenseSequence"))
         result
@@ -340,7 +348,86 @@ final class DeviceLifecycleClient {
     }
     JSONObject pending = disk.state.optJSONObject("activationPending");
     if (pending != null && installed(pending)) activate();
-    return sanitize(call("status", new JSONObject()));
+    JSONObject result=sanitize(call("status",new JSONObject())),entitlement=disk.state.optJSONObject("entitlementPending");
+    if(entitlement!=null&&!entitlement.has("outcome")&&entitlementInstalled(entitlement)){
+      try{return activateEntitlement(entitlement);}catch(Exception acknowledgement){result.put("entitlementAckPending",true);}
+    }
+    return result;
+  }
+
+  /** Optional sibling documents never change the legacy request or ten-field activation contract. */
+  private JSONObject entitlementResponse(JSONObject response) throws Exception {
+    JSONObject envelope=response.optJSONObject("entitlement"),value=null;
+    if(envelope!=null){
+      if(response.has("entitlementProtocol")&&response.optInt("entitlementProtocol")!=1)throw new IOException("ENTITLEMENT_PROTOCOL_REQUIRED");
+      value=PhoneEntitlement.snapshot(envelope,issuers,identity.id(),identity.fingerprint(),license.deviceCode());
+      JSONObject previous=disk.state.optJSONObject("entitlementSnapshot");
+      PhoneEntitlement.monotonic(previous==null?null:PhoneEntitlement.snapshot(previous,issuers,identity.id(),identity.fingerprint(),license.deviceCode()),value);
+      license.entitlement(envelope,issuers,identity.id(),identity.fingerprint(),observation(response));
+      disk.state.put("entitlementSnapshot",ProtocolJson.copy(envelope));
+      JSONObject pending=disk.state.optJSONObject("entitlementPending");
+      if(pending!=null){
+        JSONObject offered=pending.getJSONObject("offer").getJSONObject("payload");
+        boolean same=offered.getString("offerId").equals(value.getString("decisionId"))&&pending.getString("intentId").equals(value.getString("intentId"));
+        if("replaced".equals(value.getString("status"))||!same&&PhoneEntitlement.number(value,"bindingGeneration")>PhoneEntitlement.number(offered,"expectedGeneration"))pending.put("outcome",ProtocolJson.copy(envelope));
+      }
+    }
+    JSONObject offer=response.optJSONObject("entitlementOffer");
+    if(offer!=null){
+      if(response.has("entitlementProtocol")&&response.optInt("entitlementProtocol")!=1)throw new IOException("ENTITLEMENT_PROTOCOL_REQUIRED");
+      JSONObject pending=disk.state.optJSONObject("entitlementPending");
+      boolean durable=pending!=null&&offer.getJSONObject("payload").optString("offerId").equals(pending.getJSONObject("offer").getJSONObject("payload").optString("offerId"));
+      PhoneEntitlement.offer(offer,issuers,identity.id(),identity.fingerprint(),license.deviceCode(),!durable,System.currentTimeMillis());
+      disk.state.put("entitlementOffer",ProtocolJson.copy(offer));
+    }else disk.state.remove("entitlementOffer");
+    disk.save();return value;
+  }
+  private boolean entitlementInstalled(JSONObject pending) throws Exception {
+    JSONObject prepared=pending.optJSONObject("prepared");
+    return prepared!=null&&ProtocolJson.hash(prepared.getJSONObject("document")).equals(license.documentHash());
+  }
+  private long observation(JSONObject response){return response.has("_nativeEntitlementObservationStart")?Math.max(0,SystemClock.elapsedRealtime()-response.optLong("_nativeEntitlementObservationStart")):0;}
+  private JSONObject beginEntitlement(JSONObject envelope) throws Exception {
+    JSONObject p=PhoneEntitlement.offer(envelope,issuers,identity.id(),identity.fingerprint(),license.deviceCode(),true,System.currentTimeMillis());
+    JSONObject old=disk.state.optJSONObject("entitlementPending");
+    if(old!=null){
+      if(p.getString("offerId").equals(old.getJSONObject("offer").getJSONObject("payload").getString("offerId")))return activateEntitlement(old);
+      JSONObject history=disk.state.optJSONObject("entitlementHistory");if(history==null)history=new JSONObject();
+      if(history.length()>=50)throw new IOException("ENTITLEMENT_HISTORY_FULL");
+      history.put(old.getJSONObject("offer").getJSONObject("payload").getString("offerId"),ProtocolJson.copy(old));disk.state.put("entitlementHistory",history);
+    }
+    JSONObject pending=new JSONObject().put("offer",ProtocolJson.copy(envelope)).put("intentId",UUID.randomUUID().toString()).put("stage","offered");
+    disk.state.put("entitlementPending",pending);disk.save();return activateEntitlement(pending);
+  }
+  private JSONObject activateEntitlement(JSONObject pending) throws Exception {
+    JSONObject offer=PhoneEntitlement.offer(pending.getJSONObject("offer"),issuers,identity.id(),identity.fingerprint(),license.deviceCode(),false,System.currentTimeMillis());
+    if(pending.has("outcome"))return new JSONObject().put("stage","entitlement-replaced").put("entitlement",PhoneEntitlement.snapshot(pending.getJSONObject("outcome"),issuers,identity.id(),identity.fingerprint(),license.deviceCode()));
+    String offerId=offer.getString("offerId"),intent=pending.getString("intentId");
+    JSONObject prepared=pending.optJSONObject("prepared");
+    if(prepared==null){
+      prepared=call("entitlement.claim",new JSONObject().put("offerId",offerId).put("intentId",intent).put("accepted",true));
+      if(prepared.has("entitlement")&&!"entitlement-prepared".equals(prepared.optString("stage"))){entitlementResponse(prepared);return new JSONObject().put("stage","entitlement-replaced").put("entitlement",prepared.getJSONObject("entitlement").getJSONObject("payload"));}
+      if(!"entitlement-prepared".equals(prepared.optString("stage"))||!offerId.equals(prepared.optString("offerId"))||!intent.equals(prepared.optString("intentId")))throw new IOException("ENTITLEMENT_CLAIM_MISMATCH");
+      JSONObject p=PhoneEntitlement.snapshot(prepared.getJSONObject("entitlement"),issuers,identity.id(),identity.fingerprint(),license.deviceCode());
+      PhoneEntitlement.claimed(offer,p,intent,ProtocolJson.hash(prepared.getJSONObject("document")));
+      pending.put("prepared",ProtocolJson.copy(prepared)).put("stage","prepared");disk.save();
+    }
+    // A received old claim is not permission to install after another replacement.
+    JSONObject fresh=call("status",new JSONObject());
+    JSONObject p=entitlementResponse(fresh);
+    if(p==null)throw new IOException("ENTITLEMENT_PROTOCOL_REQUIRED");
+    if(!"active".equals(p.getString("status"))){pending.put("outcome",fresh.getJSONObject("entitlement"));disk.save();return new JSONObject().put("stage","entitlement-replaced").put("entitlement",p);}
+    PhoneEntitlement.claimed(offer,p,intent,ProtocolJson.hash(prepared.getJSONObject("document")));
+    JSONObject original=PhoneEntitlement.snapshot(prepared.getJSONObject("entitlement"),issuers,identity.id(),identity.fingerprint(),license.deviceCode());PhoneEntitlement.monotonic(original,p);
+    JSONObject active=license.installEntitlement(prepared.getJSONObject("document").toString(),fresh.getJSONObject("entitlement"),issuers,identity.id(),identity.fingerprint(),observation(fresh));
+    pending.put("stage","installed");disk.save();
+    JSONObject result=new JSONObject().put("stage","activated").put("license",active).put("entitlement",p).put("offerId",offerId);
+    try{
+      JSONObject ack=call("entitlement.finish",new JSONObject().put("offerId",offerId).put("intentId",intent).put("licenseDocumentHash",p.getString("licenseDocumentHash")));
+      JSONObject finalSnapshot=entitlementResponse(ack);
+      if(!"entitlement-complete".equals(ack.optString("stage"))||!offerId.equals(ack.optString("offerId"))||!intent.equals(ack.optString("intentId"))||finalSnapshot==null||!"active".equals(finalSnapshot.getString("status"))){pending.put("outcome",ack.getJSONObject("entitlement"));disk.save();return result.put("stage","entitlement-replaced").put("entitlement",finalSnapshot);}
+      pending.put("stage","complete");disk.state.put("entitlementReceipt",ProtocolJson.copy(pending));disk.state.remove("entitlementPending");disk.state.remove("entitlementOffer");disk.save();return result.put("ackPending",false);
+    }catch(Exception unavailable){return result.put("ackPending",true);}
   }
 
   private JSONObject activation(JSONObject offer, boolean current) throws Exception {
@@ -391,10 +478,17 @@ final class DeviceLifecycleClient {
   }
 
   synchronized JSONObject activate() throws Exception {
+    JSONObject entitlementPending=disk.state.optJSONObject("entitlementPending"),entitlementOffer=disk.state.optJSONObject("entitlementOffer");
+    if(entitlementOffer!=null&&(entitlementPending==null||!entitlementOffer.getJSONObject("payload").getString("offerId").equals(entitlementPending.getJSONObject("offer").getJSONObject("payload").getString("offerId"))))return beginEntitlement(entitlementOffer);
+    if(entitlementPending!=null&&(!entitlementPending.has("outcome")||entitlementOffer==null))return activateEntitlement(entitlementPending);
+    if(entitlementOffer!=null)return beginEntitlement(entitlementOffer);
     JSONObject offer = disk.state.optJSONObject("activationPending");
     boolean applied = offer != null && installed(offer);
     if (!applied) {
       JSONObject response = call("status", new JSONObject());
+      JSONObject entitlement=entitlementResponse(response);
+      if(response.optJSONObject("entitlementOffer")!=null)return beginEntitlement(response.getJSONObject("entitlementOffer"));
+      if(entitlement!=null&&!"active".equals(entitlement.getString("status")))return new JSONObject().put("stage","entitlement-replaced").put("entitlement",entitlement);
       offer = response.optJSONObject("activation");
       if (offer == null) {
         disk.state.remove("activationPending");

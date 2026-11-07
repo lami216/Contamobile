@@ -110,15 +110,55 @@ final class DeviceLicense {
         if(!preferences.edit().putString("state",encoded).commit())throw new IOException("Activation persistence failed");observedPreferences=encoded;lastPersist=SystemClock.elapsedRealtime();
     }
     synchronized JSONObject status(){synchronized(STORE_LOCK){return statusLocked();}}
+    synchronized String documentHash() throws Exception {synchronized(STORE_LOCK){refresh();return document==null?"":ProtocolJson.hash(document);}}
+    /** Verify the server decision before persisting it. Active adoption requires the exact installed document. */
+    synchronized boolean entitlement(JSONObject envelope,JSONObject issuers,String installation,String fingerprint) throws Exception {return entitlement(envelope,issuers,installation,fingerprint,0);}
+    synchronized boolean entitlement(JSONObject envelope,JSONObject issuers,String installation,String fingerprint,long observedElapsed) throws Exception {synchronized(STORE_LOCK){
+        refresh();if(loadFailure!=null||state==null)throw new IOException("LICENSE_STATE_INVALID");
+        JSONObject p=PhoneEntitlement.snapshot(envelope,issuers,installation,fingerprint,device),old=state.optJSONObject("phoneEntitlement");
+        PhoneEntitlement.monotonic(old==null?null:old.getJSONObject("payload"),p);
+        if("active".equals(p.getString("status"))&&(document==null||!p.getString("licenseDocumentHash").equals(ProtocolJson.hash(document))))return false;
+        JSONObject next=new JSONObject(state.toString());
+        next.put("phoneEntitlement",new JSONObject().put("payload",p).put("envelope",ProtocolJson.copy(envelope)).put("clock",EntitlementClock.begin(p,old==null||!"active".equals(p.getString("status"))?null:old.getJSONObject("clock"),System.currentTimeMillis(),SystemClock.elapsedRealtime(),observedElapsed)));
+        next.put("revision",next.optLong("revision")+1);state=next;try{persist();return true;}catch(Exception failed){loadFailure="LICENSE_STORAGE_ERROR";throw failed;}
+    }}
+    /** Licence plus fixed deadline are one authenticated durable write, never two windows. */
+    synchronized JSONObject installEntitlement(String content,JSONObject envelope,JSONObject issuers,String installation,String fingerprint) throws Exception {return installEntitlement(content,envelope,issuers,installation,fingerprint,0);}
+    synchronized JSONObject installEntitlement(String content,JSONObject envelope,JSONObject issuers,String installation,String fingerprint,long observedElapsed) throws Exception {synchronized(STORE_LOCK){
+        refresh();if(loadFailure!=null||state==null)throw new IOException("LICENSE_STATE_INVALID");
+        JSONObject verified=LicenseVerifier.verify(content,device),p=PhoneEntitlement.snapshot(envelope,issuers,installation,fingerprint,device),old=state.optJSONObject("phoneEntitlement");
+        PhoneEntitlement.monotonic(old==null?null:old.getJSONObject("payload"),p);
+        if(document!=null&&"perpetual".equals(document.getJSONObject("payload").getString("type"))&&"temporary".equals(verified.getJSONObject("payload").getString("type")))throw new IOException("PERPETUAL_DOWNGRADE_REFUSED");
+        if(!"active".equals(p.getString("status"))||!p.getString("licenseDocumentHash").equals(ProtocolJson.hash(verified))||!p.getString("licenseId").equals(verified.getJSONObject("payload").getString("licenseId"))||!p.getString("type").equals(verified.getJSONObject("payload").getString("type")))throw new IOException("ENTITLEMENT_LICENSE_MISMATCH");
+        if(document!=null&&ProtocolJson.hash(document).equals(ProtocolJson.hash(verified))){entitlement(envelope,issuers,installation,fingerprint,observedElapsed);return statusLocked();}
+        JSONObject clock=EntitlementClock.begin(p,null,System.currentTimeMillis(),SystemClock.elapsedRealtime(),observedElapsed);
+        if(EntitlementClock.remaining(p,clock,System.currentTimeMillis(),SystemClock.elapsedRealtime())==0)throw new IOException("ENTITLEMENT_EXPIRED");
+        JSONObject next=new JSONObject(state.toString()),licensePayload=verified.getJSONObject("payload");
+        JSONArray consumed=next.getJSONArray("consumedLicenseIds");for(int i=0;i<consumed.length();i++)if(licensePayload.getString("licenseId").equals(consumed.getString(i)))throw new IOException("LICENSE_ALREADY_USED");
+        consumed.put(licensePayload.getString("licenseId"));boolean temporary="temporary".equals(licensePayload.getString("type"));
+        next.put("activeLicense",new JSONObject().put("licenseId",licensePayload.getString("licenseId")).put("type",licensePayload.getString("type")).put("remainingMs",temporary?licensePayload.getDouble("durationSeconds")*1000:JSONObject.NULL).put("lastWallClockMs",System.currentTimeMillis()).put("expired",false).put("clockRollbackDetected",false));
+        next.put("phoneEntitlement",new JSONObject().put("payload",p).put("envelope",ProtocolJson.copy(envelope)).put("clock",clock));
+        next.put("document",verified).put("revision",next.optLong("revision")+1);state=next;
+        try{persist();document=verified;documentFailure=null;this.clock.reset();return statusLocked();}catch(Exception failed){loadFailure="LICENSE_STORAGE_ERROR";throw failed;}
+    }}
     private JSONObject statusLocked(){
         JSONObject result=new JSONObject();try {
             refresh();
             result.put("deviceId",device).put("valid",false);
             if(loadFailure!=null)throw new LicenseVerifier.Rejected(loadFailure,"تعذّر التحقق من بيانات التفعيل المحفوظة. تواصل مع مسؤول التفعيل");
+            JSONObject entitlement=state.optJSONObject("phoneEntitlement");long termRemaining=Long.MAX_VALUE;
+            if(entitlement!=null){JSONObject p=entitlement.getJSONObject("payload");result.put("entitlement",ProtocolJson.copy(p));
+                if(!"active".equals(p.getString("status")))return result.put("code","pending".equals(p.getString("status"))?"ENTITLEMENT_PENDING":"ENTITLEMENT_REPLACED").put("reason","pending".equals(p.getString("status"))?"بانتظار موافقة استبدال الهاتف":"استُبدل هذا الهاتف. بيانات المحل محفوظة على الجهاز");
+                if(document==null||!p.getString("licenseDocumentHash").equals(ProtocolJson.hash(document)))throw new IOException("ENTITLEMENT_LICENSE_MISMATCH");
+                termRemaining=EntitlementClock.remaining(p,entitlement.getJSONObject("clock"),System.currentTimeMillis(),SystemClock.elapsedRealtime());
+                if(termRemaining==0)return result.put("code","ENTITLEMENT_EXPIRED").put("reason","انتهت مدة التفعيل. اطلب التجديد من الإدارة");
+            }
             if(document==null)return result.put("code",documentFailure==null?"LICENSE_REQUIRED":documentFailure).put("reason",documentFailure==null?"فعّل هذا الهاتف للبدء":"ملف الترخيص المحفوظ غير صالح. أضف ملف تفعيل جديدًا");
             JSONObject payload=document.getJSONObject("payload");Object remaining=JSONObject.NULL;
             if(document.getInt("version")==2){JSONObject active=state.optJSONObject("activeLicense");if(active==null||!payload.getString("licenseId").equals(active.optString("licenseId")))throw new LicenseVerifier.Rejected("LICENSE_REQUIRED","أضف ملف تفعيل هذا الهاتف");
                 if("temporary".equals(active.getString("type"))){try{remaining=Math.ceil(clock.evaluate(active,System.currentTimeMillis(),SystemClock.elapsedRealtime())/1000);}catch(LicenseVerifier.Rejected e){persist();throw e;}if(SystemClock.elapsedRealtime()-lastPersist>=7000)persist();}}
+            if(termRemaining!=Long.MAX_VALUE)remaining=remaining==JSONObject.NULL?Math.ceil(termRemaining/1000d):Math.min(((Number)remaining).doubleValue(),Math.ceil(termRemaining/1000d));
+            if(entitlement!=null&&SystemClock.elapsedRealtime()-lastPersist>=7000)persist();
             return result.put("valid",true).put("license",new JSONObject().put("licenseId",payload.getString("licenseId")).put("customerName",payload.getString("customerName")).put("storeName",payload.getString("storeName")).put("type",payload.getString("type")).put("remainingSeconds",remaining));
         }catch(Exception e){try{result.put("valid",false).put("code",e instanceof LicenseVerifier.Rejected?((LicenseVerifier.Rejected)e).code:"LICENSE_STORAGE_ERROR").put("reason",e instanceof LicenseVerifier.Rejected?e.getMessage():"تعذّر حفظ التفعيل. تحقّق من مساحة التخزين وأعد فتح التطبيق");}catch(Exception ignored){}return result;}
     }
@@ -149,6 +189,7 @@ final class DeviceLicense {
         JSONObject verified=LicenseVerifier.verify(content,device);
         if(verified.optString("keyId").startsWith("contatools-online-v2:")&&!onlineDelivery)throw new LicenseVerifier.Rejected("ONLINE_APPROVAL_REQUIRED","هذا الترخيص يحتاج موافقة التفعيل المباشر داخل التطبيق");
         if(loadFailure!=null||state==null)throw new LicenseVerifier.Rejected("LICENSE_STATE_INVALID","تعذّر التحقق من سجل التفعيل. تواصل مع مسؤول التفعيل");
+        if(state.optJSONObject("phoneEntitlement")!=null)throw new LicenseVerifier.Rejected("ENTITLEMENT_APPROVAL_REQUIRED","هذا الهاتف مرتبط بتفعيل موثّق. استلم التفعيل من كونتا تولز");
         JSONObject next=new JSONObject(state.toString()),p=verified.getJSONObject("payload");String id=p.getString("licenseId");
         if(verified.getInt("version")==2){JSONArray consumed=next.getJSONArray("consumedLicenseIds");for(int i=0;i<consumed.length();i++)if(id.equals(consumed.getString(i)))throw new LicenseVerifier.Rejected("LICENSE_ALREADY_USED","ملف التفعيل مستخدم من قبل. اطلب ملفًا جديدًا للتجديد");consumed.put(id);
             boolean temporary="temporary".equals(p.getString("type"));next.put("activeLicense",new JSONObject().put("licenseId",id).put("type",p.getString("type")).put("remainingMs",temporary?p.getDouble("durationSeconds")*1000:JSONObject.NULL).put("lastWallClockMs",System.currentTimeMillis()).put("expired",false).put("clockRollbackDetected",false));

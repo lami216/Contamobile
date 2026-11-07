@@ -12,24 +12,29 @@
  window.__nativeResult=(id,result)=>{const request=pending.get(id);if(!request)return;pending.delete(id);result.error?request.reject(Object.assign(new Error(result.error),{code:result.code||''})):request.resolve(result)};
  const call=(method,...args)=>new Promise((resolve,reject)=>{const id=crypto.randomUUID();pending.set(id,{resolve,reject});try{NativeHost[method](id,...args)}catch(e){pending.delete(id);reject(e)}});
  const message=(text,kind='')=>{$('status').textContent=text;$('status').className=kind};
- const reasons={LICENSE_REQUIRED:['فعّل هذا الهاتف للبدء','Activez ce téléphone pour commencer'],LICENSE_EXPIRED:['انتهت مدة الترخيص. أضف ملف تفعيل جديدًا','La licence a expiré. Ajoutez un nouveau fichier.'],LICENSE_CLOCK_ROLLBACK:['تم اكتشاف إرجاع ساعة الجهاز. تواصل مع مسؤول التفعيل','Un recul de l’horloge a été détecté. Contactez le responsable.']};
+ const reasons={LICENSE_REQUIRED:['فعّل هذا الهاتف للبدء','Activez ce téléphone pour commencer'],LICENSE_EXPIRED:['انتهت مدة الترخيص. أضف ملف تفعيل جديدًا','La licence a expiré. Ajoutez un nouveau fichier.'],LICENSE_CLOCK_ROLLBACK:['تم اكتشاف إرجاع ساعة الجهاز. تواصل مع مسؤول التفعيل','Un recul de l’horloge a été détecté. Contactez le responsable.'],ENTITLEMENT_PENDING:['بانتظار موافقة استبدال الهاتف','En attente de l’autorisation de remplacement'],ENTITLEMENT_REPLACED:['استُبدل هذا الهاتف. بيانات المحل محفوظة على الجهاز','Ce téléphone a été remplacé. Les données restent sur cet appareil.'],ENTITLEMENT_EXPIRED:['انتهت مدة التفعيل. اطلب التجديد من الإدارة','L’activation a expiré. Demandez son renouvellement à l’administration.']};
  const duration=seconds=>{const n=Math.max(0,Math.ceil(seconds)),days=Math.floor(n/86400),hours=Math.floor(n%86400/3600),minutes=Math.floor(n%3600/60);return days?days+' '+t('يوم','j')+' '+hours+' '+t('ساعة','h'):hours?hours+' '+t('ساعة','h')+' '+minutes+' '+t('دقيقة','min'):minutes+' '+t('دقيقة','min')+' '+n%60+' '+t('ثانية','s')};
- function show(status){current=status;const supportMode=status.valid||['LICENSE_EXPIRED','LICENSE_CLOCK_ROLLBACK','LICENSE_STATE_INVALID','LICENSE_STORAGE_ERROR'].includes(status.code);
+ function show(status){current=status;const supportMode=status.valid||status.entitlement||['LICENSE_EXPIRED','LICENSE_CLOCK_ROLLBACK','LICENSE_STATE_INVALID','LICENSE_STORAGE_ERROR'].includes(status.code);
   $('contact-title').textContent=supportMode?t('الدعم وتجديد الترخيص','Assistance et renouvellement'):copy['contact-title'][fr?1:0];
   $('contact-intro').textContent=supportMode?t('للمساعدة أو تجديد ترخيص هاتفك، تواصل معنا عبر واتساب.','Pour l’assistance ou le renouvellement, contactez-nous par WhatsApp.'):copy['contact-intro'][fr?1:0];
   $('contact-send').textContent=supportMode?t('التواصل مع الدعم','Contacter l’assistance'):copy['contact-send'][fr?1:0];
   $('intro').textContent=status.valid?t('هذا الهاتف مفعّل. يمكنك مراجعة بيانات الترخيص أو إضافة ملف تجديد.','Ce téléphone est activé. Consultez votre licence ou ajoutez un fichier de renouvellement.'):copy.intro[fr?1:0];
+  if(status.valid&&status.entitlement)$('intro').textContent=t('هذا هو الهاتف الحالي في ملف العميل. استلم التجديد أو موافقة إعادة التثبيت من كونتا تولز.','Il s’agit du téléphone actuel du client. Recevez les renouvellements ou autorisations de réinstallation depuis Contatools.');
   $('contact-whatsapp').href='https://wa.me/22249823328?text='+encodeURIComponent((supportMode?t('أحتاج مساعدة في الكرنه. كود الجهاز: ','J’ai besoin d’aide pour AlKarna. Code : '):t('أريد تفعيل الكرنه على هاتفي. كود الجهاز: ','Je souhaite activer AlKarna sur mon téléphone. Code : '))+(status.deviceId||''));$('device-code').textContent=status.deviceId||'—';$('copy-code').disabled=!status.deviceId;$('continue').hidden=!status.valid;
   $('title').textContent=status.valid?t('الهاتف مفعّل','Téléphone activé'):copy.title[fr?1:0];
+  if(status.code==='ENTITLEMENT_REPLACED'){$('title').textContent=t('استُبدل هذا الهاتف','Téléphone remplacé');$('intro').textContent=t('أصبح هاتفًا سابقًا في ملف العميل. بياناته محفوظة، ويمكن للإدارة مراجعة الحالة دون حذف التطبيق.','Cet appareil figure dans l’historique du client. Ses données sont conservées ; l’administration peut vérifier sa situation sans supprimer l’application.');}
+  else if(status.code==='ENTITLEMENT_PENDING'){$('title').textContent=t('استبدال الهاتف','Remplacement du téléphone');$('intro').textContent=t('راجع موافقة الإدارة ثم أكد استلام التفعيل. استعادة نسخة بياناتك خطوة مستقلة بعد التفعيل.','Vérifiez l’autorisation puis recevez l’activation. La restauration des données reste une étape séparée.');}
   $('file-text').textContent=status.valid?t('تحديث ملف الترخيص','Mettre à jour la licence'):copy['file-text'][fr?1:0];
   const info=$('license-info');info.hidden=!status.valid;info.replaceChildren();
   if(status.valid){const p=status.license,remaining=p.remainingSeconds;for(const [label,value] of [[t('المحل','Magasin'),p.storeName],[t('صاحب الترخيص','Titulaire'),p.customerName],[t('الترخيص','Licence'),remaining===null?t('دائم','Permanente'):duration(remaining)+' '+t('متبقية','restant(s)')]]){const row=document.createElement('div'),name=document.createElement('span'),text=document.createElement('strong');name.textContent=label;text.textContent=value;row.append(name,text);info.append(row)}message(t('الترخيص صالح لهذا الهاتف','La licence est valide pour ce téléphone'),'success');}
   else message(reasons[status.code]?.[fr?1:0]||(fr?nativeMessages[status.reason]:status.reason)||t('تعذّر قراءة الترخيص','Impossible de lire la licence'),status.code==='LICENSE_REQUIRED'?'':'error');
+  updateManualControls();
  }
+ function updateManualControls(){const shared=!!current?.entitlement;for(const id of ['license-file','license-text','install-text'])$(id).disabled=busy||shared;$('file-label').hidden=shared;$('filename').hidden=shared;$('paste-title').closest('details').hidden=shared;}
  async function install(content){if(busy)return;busy=true;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=true;message(t('جارٍ التحقق من الترخيص…','Vérification de la licence…'));
   try{if(new TextEncoder().encode(content).length>65536)throw new Error(t('ملف الترخيص أكبر من 64 كيلوبايت','Le fichier dépasse 64 Ko'));const status=await call('installActivation',content);show(status);if(status.valid){$('license-text').value='';sessionStorage.removeItem('activation-draft');$('continue').focus();}}
   catch(e){message(fr?t('لم يُقبل ملف الترخيص. تأكد أنه صادر لهذا الجهاز ولم يُستخدم من قبل.','Licence refusée. Vérifiez l’appareil, le fichier et son utilisation précédente.'):e.message,'error')}
-  finally{busy=false;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=false;$('copy-code').disabled=!current?.deviceId;updateOnlineButtons();}
+  finally{busy=false;for(const el of document.querySelectorAll('button,input,textarea'))el.disabled=false;$('copy-code').disabled=!current?.deviceId;updateOnlineButtons();updateManualControls();}
  }
  let onlineTimer=null,onlineWaiting=false,onlineAvailable=false,onlineLastCheck=0;
  const onlineSection=document.createElement('section');onlineSection.className='activation-contact';onlineSection.dataset.onlineActivation='true';
@@ -52,9 +57,14 @@
   onlineAvailable=result.activationAvailable===true;
   onlineWaiting=!onlineAvailable;
   onlineConnect.textContent=t('تحديث التفعيل','Actualiser l’activation');
+  const entitlement=result.entitlement,kind=result.entitlementKind;
+  onlineAccept.textContent=result.entitlementAvailable?t(kind==='reinstall'?'تأكيد إعادة تثبيت الهاتف':kind==='renew'?'استلام التجديد':'تأكيد استبدال الهاتف',kind==='reinstall'?'Confirmer la réinstallation':kind==='renew'?'Recevoir le renouvellement':'Confirmer le remplacement'):t('استلام التفعيل','Recevoir l’activation');
   onlineMessage.textContent=onlineAvailable?t('وصل تفعيل من الإدارة. اضغط لاستلامه على هذا الهاتف.','L’administration a envoyé une activation. Recevez-la sur cet appareil.'):
    result.status==='active'?t('الهاتف مربوط بملف العميل. يمكنك طلب التجديد من الإدارة.','Cet appareil est associé au dossier client. Vous pouvez demander un renouvellement à l’administration.'):
    t('وصل كود الهاتف إلى كونتا تولز. بانتظار تفعيل الإدارة.','Le code est enregistré dans Contatools. En attente de l’activation par l’administration.');
+  if(result.entitlementAvailable)onlineMessage.textContent=t('وصلت موافقة الإدارة. التأكيد يجعل هذا الهاتف هو الحالي، ويحافظ على موعد انتهاء التفعيل. استعادة البيانات تتم بعد ذلك باختيارك.','L’autorisation est prête. La confirmation désigne ce téléphone comme appareil actuel sans prolonger la date de fin. Vous pourrez ensuite choisir de restaurer les données.');
+  else if(entitlement?.status==='replaced'){onlineWaiting=false;onlineMessage.textContent=t('استُبدل هذا الهاتف. بياناته محفوظة؛ تواصل مع الإدارة لمراجعة ملف العميل.','Ce téléphone a été remplacé. Ses données restent conservées ; contactez l’administration.');}
+  else if(entitlement?.status==='pending')onlineMessage.textContent=t('هذا الهاتف متصل وبانتظار موافقة الاستبدال من الإدارة.','Cet appareil est connecté et attend l’autorisation de remplacement.');
   if(result.status==='active'&&!onlineAvailable)onlineWaiting=false;
   updateOnlineButtons();scheduleOnline();
  }
@@ -71,11 +81,11 @@
     show(await call('activationStatus'));onlineAvailable=false;onlineWaiting=false;
     onlineMessage.textContent=result.ackPending?t('حُفظ التفعيل على الهاتف. تأكيد الاستلام ينتظر الاتصال.','L’activation est enregistrée. La confirmation attend la connexion.'):
      t('تم حفظ التفعيل. يمكنك فتح التطبيق.','L’activation est enregistrée. Vous pouvez ouvrir l’application.');
-   }else onlineResult(result);
+   }else{if(result.entitlement)show(await call('activationStatus'));onlineResult(result);}
   }catch(error){
    onlineMessage.textContent=t('تعذّر الاتصال الآن. أعد المحاولة عند توفر الإنترنت.','Connexion indisponible. Réessayez avec Internet.');
    onlineWaiting=command!=='activate';scheduleOnline();
-  }finally{busy=false;updateOnlineButtons();}
+  }finally{busy=false;updateOnlineButtons();updateManualControls();}
  }
  onlineConnect.onclick=()=>onlineAction(onlineConnect.dataset.enrolled?'status':'enroll').then(()=>{if(onlineConnect.textContent===t('تحديث التفعيل','Actualiser l’activation'))onlineConnect.dataset.enrolled='true'});
  onlineAccept.onclick=()=>onlineAction('activate');
@@ -88,6 +98,6 @@
  $('continue').onclick=()=>NativeHost.activationContinue();
  $('install-text').onclick=()=>install($('license-text').value.trim());
  $('license-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;$('filename').textContent=file.name;try{if(file.size>65536)throw new Error(t('ملف الترخيص أكبر من 64 كيلوبايت','Le fichier dépasse 64 Ko'));await install(await file.text())}catch(e){message(e.message,'error')}finally{event.target.value=''}};
- call('activationStatus').then(status=>{show(status);if(status.license)onlineAction('status',false)}).catch(e=>message(e.message,'error'));
+ call('activationStatus').then(status=>{show(status);if(status.license||status.entitlement)onlineAction('status',false)}).catch(e=>message(e.message,'error'));
  setInterval(()=>{if(!busy&&current?.valid)call('activationStatus').then(show).catch(()=>{})},15000);
 })();

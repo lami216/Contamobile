@@ -47,5 +47,6 @@
   "cloud-backup.js": "9264a53117cefbb1314075360787282abdfbc02d0575dc13ee8d2c22a10c9d5d",
   "accounting-reset.js": "4af814364b5112988a66f6ca4496310f1878457f75367f63fa24288b2dabc5a9",
   "accounting-lifecycle.js": "ecd7bc3b8a5f978557e9549e8ec75e77a47a6cf037c4a2251ead1a70ab266ba6",
-  "device-lifecycle.js": "85007b3f815f66eb0cf0c9f8b08078cefa817bf82e7afd5a18a7f17d462d998e"
+  "device-lifecycle.js": "85007b3f815f66eb0cf0c9f8b08078cefa817bf82e7afd5a18a7f17d462d998e",
+  "activation.js": "e17e97c79020b829aa07580e420c8cbf763453b822dc32cd5f3140711959e1fe"
 }
