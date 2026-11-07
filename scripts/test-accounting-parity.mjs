@@ -39,6 +39,12 @@ try{
   await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await page.locator('.nav').waitFor();return {context,page};
  }
  const financial=page=>page.evaluate(()=>JSON.parse(JSON.stringify({accounts:S.accounts,parties:S.parties,products:S.products,records:S.records})));
+ const waitForDurableFinancial=(page,expected)=>page.waitForFunction(async expected=>{
+  // A rendered revision precedes transaction completion. Read the committed
+  // snapshot before reloading, including when slow storage delays the click.
+  const {ShopDatabase}=await import('/database.js'),db=await new ShopDatabase().open();
+  try{const state=await db.load();return JSON.stringify({accounts:state.accounts,parties:state.parties,products:state.products,records:state.records})===JSON.stringify(expected)}finally{db.db.close()}
+ },expected);
  const reload=async page=>{await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await page.locator('.nav').waitFor()};
  async function check(name,kind,language,fn){let f;try{f=await fixture(kind,language);await fn(f.page);results.push({name,passed:true});console.log('PASS '+name)}catch(error){results.push({name,passed:false,error:error.stack});console.error('FAIL '+name+': '+error.stack)}finally{await f?.context.close()}}
  for(const language of ['ar','fr']){
@@ -50,8 +56,20 @@ try{
   });
   await check(language+' historical receipt edit can retain original archived entities without reactivating balanced customer','customer',language,async page=>{
    await page.evaluate(()=>act('source:101'));assert.equal(await page.locator('select[name=party] option[value="1"]').count(),1);assert.equal(await page.locator('select[name=party] option[value="3"]').count(),0);assert.equal(await page.locator('select[name=account] option[value="2"]').count(),1);assert.equal(await page.locator('select[name=account] option[value="3"]').count(),0);
-   await page.locator('#sheet-form [name=note]').fill('note only');await page.locator('[data-action="post-party"]').click();assert.equal(await page.locator('#form-error').count(),0);
-   const state=await financial(page);assert.equal(state.records[0].revision,1);assert.equal(state.parties[0].balance,0);assert.equal(state.parties[0].archived,true);assert.equal(state.accounts[1].balance,0);assert.equal(state.accounts[1].archived,false);await reload(page);assert.deepEqual(await financial(page),state);
+   await page.locator('#sheet-form [name=note]').fill('note only');
+   await page.evaluate(()=>{
+    const put=IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put=function(value,...args){
+     const request=put.call(this,value,...args);
+     if(this.name==='snapshots'&&value.id==='shop'){
+      IDBObjectStore.prototype.put=put;const until=performance.now()+200,store=this;
+      const hold=()=>{const read=store.get('shop');read.onsuccess=()=>{if(performance.now()<until)hold()}};hold();
+     }
+     return request;
+    };
+   });
+   await page.locator('[data-action="post-party"]').click();assert.equal(await page.locator('#form-error').count(),0);
+   const state=await financial(page);assert.equal(state.records[0].revision,1);assert.equal(state.parties[0].balance,0);assert.equal(state.parties[0].archived,true);assert.equal(state.accounts[1].balance,0);assert.equal(state.accounts[1].archived,false);await waitForDurableFinancial(page,state);await reload(page);assert.deepEqual(await financial(page),state);
   });
   await check(language+' note-only correction edit preserves later sales and persists unchanged stock','stock',language,async page=>{
    await page.evaluate(()=>act('source:101'));assert.equal(await page.locator('#utility-form select[name=from]').isDisabled(),true);assert.equal(await page.locator('[data-action="site:feature:stock-add"]').count(),0);
