@@ -12,7 +12,7 @@ const root=fileURLToPath(new URL('../approved-runtime/',import.meta.url)),cases=
 const server=createServer(async(req,res)=>{try{
  const relative=new URL(req.url,'http://local.invalid').pathname.slice(1)||'index.html',file=path.resolve(root,relative);
  if(!file.startsWith(root))throw Error('Invalid path');
- const bytes=await readFile(file);res.setHeader('content-type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes);
+ const bytes=await readFile(file);res.setHeader('content-type',/\.m?js$/.test(file)?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes);
 }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin='http://127.0.0.1:'+server.address().port;let browser;

@@ -9,7 +9,7 @@ const require=createRequire(import.meta.url);let chromium;
 for(const name of [process.env.PLAYWRIGHT_MODULE,'playwright',fileURLToPath(new URL('../../Contatools-source/node_modules/playwright',import.meta.url))].filter(Boolean)){try{({chromium}=require(name));break}catch{}}
 if(!chromium)throw Error('Playwright is required for disposable signed-account checks');
 const root=fileURLToPath(new URL('../approved-runtime/',import.meta.url));
-const server=createServer(async(req,res)=>{try{const name=new URL(req.url,'http://local.invalid').pathname,filename=path.resolve(root,'.'+(name==='/'?'/index.html':name));if(!filename.startsWith(root))throw Error('Invalid path');const extension=path.extname(filename);res.setHeader('Content-Type',extension==='.js'?'text/javascript':extension==='.css'?'text/css':extension==='.html'?'text/html':'application/octet-stream');res.end(await readFile(filename))}catch{res.writeHead(404).end()}});
+const server=createServer(async(req,res)=>{try{const name=new URL(req.url,'http://local.invalid').pathname,filename=path.resolve(root,'.'+(name==='/'?'/index.html':name));if(!filename.startsWith(root))throw Error('Invalid path');const extension=path.extname(filename);res.setHeader('Content-Type',['.js','.mjs'].includes(extension)?'text/javascript':extension==='.css'?'text/css':extension==='.html'?'text/html':'application/octet-stream');res.end(await readFile(filename))}catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;const results=[];
 const check=async(name,fn)=>{try{await fn();results.push({name,passed:true});console.log('PASS '+name)}catch(error){results.push({name,passed:false,error:error.message});console.error('FAIL '+name+': '+error.stack)}};
 try{

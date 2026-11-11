@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url);let chromium;
 for(const name of [process.env.PLAYWRIGHT_MODULE,'playwright',fileURLToPath(new URL('../../Contatools-source/node_modules/playwright',import.meta.url))].filter(Boolean)){try{({chromium}=require(name));break}catch{}}
 if(!chromium)throw Error('Playwright required');
 const root=fileURLToPath(new URL('../approved-runtime/',import.meta.url)),results=[];
-const server=createServer(async(req,res)=>{try{const requested=new URL(req.url,'http://local.invalid').pathname,file=path.resolve(root,'.'+(requested==='/'?'/index.html':requested));if(!file.startsWith(root))throw Error();const bytes=await readFile(file);res.setHeader('content-type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes)}catch{res.writeHead(404).end()}});
+const server=createServer(async(req,res)=>{try{const requested=new URL(req.url,'http://local.invalid').pathname,file=path.resolve(root,'.'+(requested==='/'?'/index.html':requested));if(!file.startsWith(root))throw Error();const bytes=await readFile(file);res.setHeader('content-type',/\.m?js$/.test(file)?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes)}catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
 const check=async(name,fn)=>{try{await fn();results.push({name,passed:true});console.log('PASS '+name)}catch(error){results.push({name,passed:false,error:error.message});console.error('FAIL '+name+'\n'+error.stack)}};
 try{
