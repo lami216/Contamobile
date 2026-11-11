@@ -312,7 +312,7 @@ jobs:
           PLAYWRIGHT_USE_BUNDLED: '1'
         run: |
           npm install --prefix "$RUNNER_TEMP/release-audit-tools" --no-package-lock --ignore-scripts playwright@1.62.1
-          node "$RUNNER_TEMP/release-audit-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          node "$RUNNER_TEMP/release-audit-tools/node_modules/playwright/cli.js" install chromium
           node scripts/test-storage-integrity.mjs
           node scripts/test-runtime-integrity.mjs
           node scripts/test-invoice-ux.mjs
