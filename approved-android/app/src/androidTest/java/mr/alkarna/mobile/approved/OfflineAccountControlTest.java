@@ -43,7 +43,7 @@ public final class OfflineAccountControlTest {
   Files.write(file("offline-account-sentinel.bin").toPath(),"synthetic-ledger-bytes-unchanged".getBytes(StandardCharsets.UTF_8));
  }
  @After public void cleanup()throws Exception{
-  if(!owned)return;assertEquals("synthetic-ledger-bytes-unchanged",Files.readString(file("offline-account-sentinel.bin").toPath(),StandardCharsets.UTF_8));
+  if(!owned)return;assertEquals("synthetic-ledger-bytes-unchanged",new String(Files.readAllBytes(file("offline-account-sentinel.bin").toPath()),StandardCharsets.UTF_8));
   File dir=file(DeviceLifecycleStore.DIRECTORY);if(dir.exists()){for(File f:Objects.requireNonNull(dir.listFiles())){assertTrue(f.isFile());assertTrue(f.delete());}assertTrue(dir.delete());}
   for(String name:new String[]{"activation-v2.json",VAULT,"offline-account-sentinel.bin"})for(String suffix:new String[]{"",".bak",".new"}){File f=file(name+suffix);if(f.exists()){assertTrue(f.isFile());assertTrue(f.delete());}}
   assertTrue(context.getSharedPreferences("activation-v2",Context.MODE_PRIVATE).edit().clear().commit());

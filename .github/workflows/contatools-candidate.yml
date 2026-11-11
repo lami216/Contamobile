@@ -167,6 +167,42 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Prepare bounded emulator-only root readiness for unchanged v25 tests
+        run: |
+          cat > "$RUNNER_TEMP/current-v25-ready.sh" <<'SH'
+          set -euo pipefail
+          mkdir -p v25-acceptance-proof
+          log=v25-acceptance-proof/root-readiness.txt
+          : > "$log"
+          ready=false
+          for attempt in 1 2 3; do
+            echo "root readiness attempt $attempt" >> "$log"
+            if ! timeout 30s adb wait-for-device >> "$log" 2>&1; then continue; fi
+            emulator=''
+            if emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$log" | tr -d '\r'); then :; else emulator=''; fi
+            if [ "$emulator" != 1 ]; then
+              if [ -n "$emulator" ]; then echo 'Not an emulator; refusing root' >> "$log"; cat "$log"; exit 1; fi
+              continue
+            fi
+            uid=''
+            if uid=$(timeout 10s adb shell id -u 2>> "$log" | tr -d '\r'); then :; else uid=''; fi
+            if [ "$uid" = 0 ]; then ready=true; break; fi
+            if timeout 15s adb root >> "$log" 2>&1; then :; else
+              echo 'Root request transport closed; verifying actual readiness' >> "$log"
+            fi
+            if timeout 30s adb wait-for-device >> "$log" 2>&1; then
+              uid=''; emulator=''
+              if uid=$(timeout 10s adb shell id -u 2>> "$log" | tr -d '\r'); then :; else uid=''; fi
+              if emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$log" | tr -d '\r'); then :; else emulator=''; fi
+              if [ "$uid" = 0 ] && [ "$emulator" = 1 ]; then ready=true; break; fi
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 1; fi
+          done
+          cat "$log"
+          test "$ready" = true
+          # No test or business operation is retried or modified.
+          exec bash scripts/test-current-v25-acceptance.sh
+          SH
       - name: Current v25 Android injected-transport cases, v17 upgrade and same-v25 idempotent reinstall
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -174,7 +210,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash scripts/test-current-v25-acceptance.sh
+          script: bash "$RUNNER_TEMP/current-v25-ready.sh"
       - name: Keep only synthetic acceptance logs and honest scope
         if: always()
         uses: actions/upload-artifact@v4
