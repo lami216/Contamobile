@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url);let chromium;
 for(const name of [process.env.PLAYWRIGHT_MODULE,'playwright',fileURLToPath(new URL('../../Contatools-source/node_modules/playwright',import.meta.url))].filter(Boolean)){try{({chromium}=require(name));break}catch{}}
 if(!chromium)throw Error('Playwright required');
 const root=fileURLToPath(new URL('../approved-runtime/',import.meta.url));
-const server=createServer(async(req,res)=>{try{const pathname=new URL(req.url,'http://local.invalid').pathname,filename=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(path.relative(root,filename).startsWith('..'))throw Error('Invalid path');const content=await readFile(filename);res.setHeader('Content-Type',filename.endsWith('.js')?'text/javascript':filename.endsWith('.css')?'text/css':filename.endsWith('.html')?'text/html':'application/octet-stream');res.end(content)}catch{res.writeHead(404).end()}});
+const server=createServer(async(req,res)=>{try{const pathname=new URL(req.url,'http://local.invalid').pathname,filename=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(path.relative(root,filename).startsWith('..'))throw Error('Invalid path');const content=await readFile(filename);res.setHeader('Content-Type',(/\.m?js$/.test(filename))?'text/javascript':filename.endsWith('.css')?'text/css':filename.endsWith('.html')?'text/html':'application/octet-stream');res.end(content)}catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;const results=[];
 try{
  browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:process.env.PLAYWRIGHT_USE_BUNDLED==='1'?{}:{channel:'chrome'})});

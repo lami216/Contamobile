@@ -47,17 +47,17 @@ public class ApprovedRuntimeTest {
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
     }
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
-        activity=ActivityScenario.launch(MainActivity.class);
+        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.openManualActivation(activity);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
         until("document.querySelector('.activation-contact img').naturalWidth>0");
-        assertEquals("true",js("document.querySelector('#contact-whatsapp').href.includes(document.querySelector('#device-code').textContent)"));
+        assertEquals("true",js("!document.querySelector('#contact-whatsapp,#contact-send,a[href*=\"wa.me\"]')&&!!document.querySelector('#license-file')&&!!document.querySelector('#license-text')&&!!document.querySelector('#install-text')"));
         String activationDevice=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
         assertTrue(activationDevice.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
         assertEquals("false",js("NativeHost.licenseAllowed()"));
         String license=TestLicenseIssuer.issue(activationDevice,"perpetual",0);
         js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
-        until("!document.querySelector('#continue').hidden");assertEquals("true",js("new URL(document.querySelector('#contact-whatsapp').href).searchParams.get('text').includes('مساعدة')"));capture("activation-valid");
+        until("!document.querySelector('#continue').hidden");assertEquals("true",js("!document.querySelector('#contact-whatsapp,#contact-send')&&document.querySelector('#contact-call').getAttribute('href')==='tel:49823328'"));capture("activation-valid");
         js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));
@@ -149,7 +149,7 @@ public class ApprovedRuntimeTest {
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         action("site:language:fr");assertEquals("true",js("document.querySelector('#phone').dir==='ltr'&&document.documentElement.lang==='fr'"));capture("french-register");
         action("go:settings");assertEquals("false",js("!!document.querySelector('[data-action=\"site:seed-demo\"]')"));
-        action("site:support");assertEquals("true",js("document.querySelector('.support-hint').innerText.includes('renouvellement')"));capture("french-support");action("close");
+        action("site:support");assertEquals("\"Pour obtenir de l’aide sur l’utilisation de l’application, contactez l’assistance.\"",js("document.querySelector('.support-hint').innerText"));capture("french-support");action("close");
         action("go:operations");
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
@@ -160,7 +160,7 @@ public class ApprovedRuntimeTest {
             save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
         }
         assertEquals("false",js("(()=>{modal='site-export';render();return !!document.querySelector('[data-action=\"site:export-print\"]')})()"));action("close");
-        activity.close();activity=ActivityScenario.launch(MainActivity.class);
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
@@ -178,7 +178,7 @@ public class ApprovedRuntimeTest {
         var statementSave=device.findObject(new UiSelector().resourceId("android:id/button1"));assertTrue("Statement PDF saved directly",statementSave.waitForExists(20000));statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
         action("go:users");action("site:new-user");js("(()=>{for(const [k,v]of Object.entries({name:'Vendeur',username:'seller',password:'1234'}))document.querySelector('#sheet-form [name='+k+']').value=v;return true})()");action("site:feature:permission-toggle:pos.edit:true");capture("french-granular-permissions");action("site:feature:user-save");
         js("window.__qaSql=false;initSqlJs().then(SQL=>{const db=new SQL.Database();db.run('CREATE TABLE offline_test(value INTEGER)');db.run('INSERT INTO offline_test VALUES (7)');window.__qaSql=db.exec('SELECT value FROM offline_test')[0].values[0][0]===7;db.close()});true");until("window.__qaSql===true");
-        activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
         assertEquals("true",js("S.currency.code==='EUR'&&S.categories[0].name==='Épicerie'&&S.products[0].categoryId===S.categories[0].id&&S.users.some(u=>u.username==='seller'&&u.capabilities.includes('pos.edit'))"));
         System.out.println("FEATURES PASS: native direct PDF, statement, display-only currency, categories, granular permissions, offline SQLite and cold persistence.");
         activity.close();

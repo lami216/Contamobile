@@ -4,6 +4,7 @@ import android.content.Context;
 final class NativeUi {
  static boolean french(Context context){return "fr".equals(context.getSharedPreferences("appearance",Context.MODE_PRIVATE).getString("language","ar"));}
  static String text(Context context,String source){if(source==null)return french(context)?"Une erreur est survenue":"تعذّر تنفيذ العملية";if(!french(context))return source;switch(source){
+ case "أوقف مسؤول المنشأة الوصول إلى هذا الهاتف. بيانات المحل محفوظة":return "Le responsable de l’établissement a suspendu cet appareil. Les données restent conservées.";
  case "انتظر اكتمال حفظ الملف الحالي":return "Attendez la fin de l’enregistrement en cours";
  case "تعذّر تجهيز الملف":return "Impossible de préparer le fichier";
  case "تعذّر تشغيل الكاميرا":return "Impossible d’ouvrir la caméra";

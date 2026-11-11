@@ -17,7 +17,7 @@ const server=createServer(async(req,res)=>{try{
  let bytes=await readFile(file);
  // Only the disposable HTTP test response exposes this controller.
  if(relative==='app.js')bytes=Buffer.from(bytes.toString().replace('const localBackupScreen=backupScreen;','globalThis.__cloudAuditController=cloudBackup;\nconst localBackupScreen=backupScreen;'));
- const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.webmanifest':'application/manifest+json','.png':'image/png','.ttf':'font/ttf'};
+ const types={'.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.webmanifest':'application/manifest+json','.png':'image/png','.ttf':'font/ttf'};
  res.setHeader('content-type',types[path.extname(file)]||'application/octet-stream');res.end(bytes);
 }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;

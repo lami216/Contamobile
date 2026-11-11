@@ -11,7 +11,7 @@ const root=fileURLToPath(new URL('../approved-runtime/',import.meta.url));
 const server=createServer(async(req,res)=>{try{
  const requestPath=new URL(req.url,'http://local.invalid').pathname,filename=path.resolve(root,'.'+(requestPath==='/'?'/index.html':requestPath));if(!filename.startsWith(root))throw Error('Invalid path');
  let content=await readFile(filename);if(filename.endsWith('features.js'))content=Buffer.from(content.toString().replace('async afterSave(){','async afterSave(){if(globalThis.__testAfterSaveFailure)throw Error("Synthetic post-commit failure");'));
- const extension=path.extname(filename);res.setHeader('Content-Type',extension==='.js'?'text/javascript':extension==='.css'?'text/css':extension==='.html'?'text/html':'application/octet-stream');res.end(content);
+ const extension=path.extname(filename);res.setHeader('Content-Type',['.js','.mjs'].includes(extension)?'text/javascript':extension==='.css'?'text/css':extension==='.html'?'text/html':'application/octet-stream');res.end(content);
  }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;const results=[];
 async function check(name,fn){try{await fn();results.push({name,passed:true});console.log('PASS '+name)}catch(error){results.push({name,passed:false,error:error.message});console.error('FAIL '+name+': '+error.message)}}

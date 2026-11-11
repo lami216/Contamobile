@@ -148,6 +148,7 @@ final class DeviceLicense {
             if(loadFailure!=null)throw new LicenseVerifier.Rejected(loadFailure,"تعذّر التحقق من بيانات التفعيل المحفوظة. تواصل مع مسؤول التفعيل");
             JSONObject entitlement=state.optJSONObject("phoneEntitlement");long termRemaining=Long.MAX_VALUE;
             if(entitlement!=null){JSONObject p=entitlement.getJSONObject("payload");result.put("entitlement",ProtocolJson.copy(p));
+                if("suspended".equals(p.getString("status")))return result.put("code","ENTITLEMENT_SUSPENDED").put("reason","أوقف مسؤول المنشأة الوصول إلى هذا الهاتف. بيانات المحل محفوظة");
                 if(!"active".equals(p.getString("status")))return result.put("code","pending".equals(p.getString("status"))?"ENTITLEMENT_PENDING":"ENTITLEMENT_REPLACED").put("reason","pending".equals(p.getString("status"))?"بانتظار موافقة استبدال الهاتف":"استُبدل هذا الهاتف. بيانات المحل محفوظة على الجهاز");
                 if(document==null||!p.getString("licenseDocumentHash").equals(ProtocolJson.hash(document)))throw new IOException("ENTITLEMENT_LICENSE_MISMATCH");
                 termRemaining=EntitlementClock.remaining(p,entitlement.getJSONObject("clock"),System.currentTimeMillis(),SystemClock.elapsedRealtime());

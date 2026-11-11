@@ -7,6 +7,7 @@
 .auth-brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:700;margin-bottom:18px}
 /* Content-sized utility sheets do not change the fixed top of editing/payment sheets. */
 .site-shell #phone .sheet:is(.account-sheet,.support-sheet){height:auto;max-height:calc(100% - 18px)!important;padding:0 18px max(16px,env(safe-area-inset-bottom));border:1px solid var(--edge-strong);border-bottom:0;box-shadow:0 -12px 40px #00000026}
+.site-shell #phone .sheet.account-sheet{max-height:min(620px,calc(100% - 18px))!important}
 .phone .account-sheet .sheet-head,.phone .support-sheet .sheet-head{margin-bottom:16px;padding-bottom:10px;border-color:var(--edge-soft)}
 .phone .account-sheet .sheet-head h2,.phone .support-sheet .sheet-head h2{font-size:18px;color:var(--ink)}
 .phone .account-sheet .sheet-body,.phone .support-sheet .sheet-body{flex:0 1 auto;padding:0;scrollbar-width:thin}

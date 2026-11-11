@@ -2,10 +2,17 @@
 from pathlib import Path
 import sys,zipfile
 apk=Path(sys.argv[1])
+runtime=Path(__file__).resolve().parents[1]/'approved-runtime'
 with zipfile.ZipFile(apk) as package:
     names=package.namelist()
     for name in ['activation.html','activation.css','activation.js']:
         assert 'assets/approved/'+name in names, 'Missing activation UI: '+name
+        content=package.read('assets/approved/'+name)
+        assert content==(runtime/name).read_text(encoding='utf-8').encode('utf-8'), 'Packaged license UI differs from reviewed source: '+name
+        assert b'wa.me' not in content and b'whatsapp://' not in content, 'External activation/renewal WhatsApp destination in license UI: '+name
+    license_html=package.read('assets/approved/activation.html')
+    for control in [b'id="license-file"',b'id="license-text"',b'id="install-text"']:
+        assert control in license_html, 'Existing license import must remain available: '+control.decode()
     assert not any('license-contract.json' in name for name in names), 'Test fixture included in APK'
     dex=b''.join(package.read(name) for name in names if name.endswith('.dex'))
     for name in [b'LicenseVerifier;',b'DeviceLicense;',b'LicenseClock;']:

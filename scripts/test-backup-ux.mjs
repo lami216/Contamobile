@@ -14,7 +14,7 @@ const server=createServer(async(req,res)=>{try{
  if(!file.startsWith(root))throw Error('Invalid path');
  let bytes=await readFile(file);
  if(relative==='app.js')bytes=Buffer.from(bytes.toString().replace('const localBackupScreen=backupScreen;','globalThis.__backupUxController=cloudBackup;\nconst localBackupScreen=backupScreen;'));
- res.setHeader('content-type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes);
+ res.setHeader('content-type',/\.m?js$/.test(file)?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(bytes);
 }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin='http://127.0.0.1:'+server.address().port,results=[];

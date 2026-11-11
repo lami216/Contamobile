@@ -1,0 +1,1682 @@
+{
+  "schema": "contatools-protocol-number-test-vectors",
+  "version": 1,
+  "synthetic": true,
+  "generator": "Node.js JSON.stringify + SHA-256",
+  "cases": [
+    {
+      "input": "1e-7",
+      "json": "1e-7",
+      "canonicalPayload": "{\"value\":1e-7}",
+      "payloadHash": "910750038eb30a40d06da88009b6259aabaf3751b3cb212c616d51abb6b008a4"
+    },
+    {
+      "input": "-1e-7",
+      "json": "-1e-7",
+      "canonicalPayload": "{\"value\":-1e-7}",
+      "payloadHash": "07f205e995e6b3d584d198ed587ada3f42b26be4933c3d88eba80814e1fba81d"
+    },
+    {
+      "input": "1e-6",
+      "json": "0.000001",
+      "canonicalPayload": "{\"value\":0.000001}",
+      "payloadHash": "bc1c982dd4e677d72ff5821cc67554e045e838a31ddc55fa0fdb1a32d5a1dce9"
+    },
+    {
+      "input": "-1e-6",
+      "json": "-0.000001",
+      "canonicalPayload": "{\"value\":-0.000001}",
+      "payloadHash": "4fca9df4a2e8ec21779c0a6d0cc87a303df5761f3d8533635372ae4032280bc1"
+    },
+    {
+      "input": "0",
+      "json": "0",
+      "canonicalPayload": "{\"value\":0}",
+      "payloadHash": "23d7b286bd429460b92a2a1c21b6afc34110446c5034c17363fda363aa0a7c5d"
+    },
+    {
+      "input": "-0",
+      "json": "0",
+      "canonicalPayload": "{\"value\":0}",
+      "payloadHash": "23d7b286bd429460b92a2a1c21b6afc34110446c5034c17363fda363aa0a7c5d"
+    },
+    {
+      "input": "0.1",
+      "json": "0.1",
+      "canonicalPayload": "{\"value\":0.1}",
+      "payloadHash": "097a678e9d1339735cc744964f1c2b1271b2e650d7c59c72d2ff1c93064ceb6e"
+    },
+    {
+      "input": "0.2",
+      "json": "0.2",
+      "canonicalPayload": "{\"value\":0.2}",
+      "payloadHash": "9794f9fe0cbb65b48c25690a04d3bc0864ff3fc05de1177a1c3ed06d0e220ed6"
+    },
+    {
+      "input": "0.3",
+      "json": "0.3",
+      "canonicalPayload": "{\"value\":0.3}",
+      "payloadHash": "e64015c7aaa247b346c2a671e2bf920010a788fe0088f818926c76e7645675af"
+    },
+    {
+      "input": "0.3333333333333333",
+      "json": "0.3333333333333333",
+      "canonicalPayload": "{\"value\":0.3333333333333333}",
+      "payloadHash": "e5ecb2fc1fb0f59742e35b6c8aaf042963d477d901be6bc9bff94b131fc4615c"
+    },
+    {
+      "input": "0.0000010000000000000002",
+      "json": "0.0000010000000000000002",
+      "canonicalPayload": "{\"value\":0.0000010000000000000002}",
+      "payloadHash": "a86a3d1212834cf2736e5523ec02c30504d7816b7bd9ca9213499c20f0681e8f"
+    },
+    {
+      "input": "9.999999999999997e-7",
+      "json": "9.999999999999997e-7",
+      "canonicalPayload": "{\"value\":9.999999999999997e-7}",
+      "payloadHash": "f1ad5ca9e0c403a896658b2c5125b3dbfb0336899ab21ca1eb6ce1c875825a3a"
+    },
+    {
+      "input": "5e-324",
+      "json": "5e-324",
+      "canonicalPayload": "{\"value\":5e-324}",
+      "payloadHash": "8f275eb622ce665f3cf21739b40600308dcea7c36627451f1c210a4152343c85"
+    },
+    {
+      "input": "-5e-324",
+      "json": "-5e-324",
+      "canonicalPayload": "{\"value\":-5e-324}",
+      "payloadHash": "ab7b8bf379e41464b0e5750cbcbd9747ea2d326b5a1140c916352769663ecc85"
+    },
+    {
+      "input": "2.2250738585072014e-308",
+      "json": "2.2250738585072014e-308",
+      "canonicalPayload": "{\"value\":2.2250738585072014e-308}",
+      "payloadHash": "d4f55b1dc9e7cc034151fe75693c281a4cf27370127416c58c194ac0659e1110"
+    },
+    {
+      "input": "1.234567890123456e-200",
+      "json": "1.234567890123456e-200",
+      "canonicalPayload": "{\"value\":1.234567890123456e-200}",
+      "payloadHash": "1b439e191514b8fb55bc2704d0152b77a6e598aed3a5b6c629f5db28f2eb9462"
+    },
+    {
+      "input": "9007199254740991",
+      "json": "9007199254740991",
+      "canonicalPayload": "{\"value\":9007199254740991}",
+      "payloadHash": "16c63bddb910905c4ee8abf36273baa20dba53020dbaf265da5936013ded185d"
+    },
+    {
+      "input": "-9007199254740991",
+      "json": "-9007199254740991",
+      "canonicalPayload": "{\"value\":-9007199254740991}",
+      "payloadHash": "4fcd1f34a0ba00a639b9a6a805c6952838e7f403c126290440bc71e64d01693a"
+    },
+    {
+      "input": "9007199254740990",
+      "json": "9007199254740990",
+      "canonicalPayload": "{\"value\":9007199254740990}",
+      "payloadHash": "cc84de4c6262b555a51fcf908680612da525d886ddc7c10f79ef8115dc20d36d"
+    },
+    {
+      "input": "4503599627370495.5",
+      "json": "4503599627370495.5",
+      "canonicalPayload": "{\"value\":4503599627370495.5}",
+      "payloadHash": "2faf11fd7448ed89c5001f8a54478229534ac137a13cc49eb3cb2b481646916d"
+    },
+    {
+      "input": "0.30000000000000004",
+      "json": "0.30000000000000004",
+      "canonicalPayload": "{\"value\":0.30000000000000004}",
+      "payloadHash": "036c1902dbf44cd0afd8ccc8665d3156840d0278a131877c0b67dc483efdf4bf"
+    },
+    {
+      "input": "1.2345678901234567",
+      "json": "1.2345678901234567",
+      "canonicalPayload": "{\"value\":1.2345678901234567}",
+      "payloadHash": "edc4c14832b6ab6ed1460858ab3d13336f8e57d02f4ae8e5c2bacc391fa9f265"
+    },
+    {
+      "input": "999999.9999999999",
+      "json": "999999.9999999999",
+      "canonicalPayload": "{\"value\":999999.9999999999}",
+      "payloadHash": "06b5d354af486025534a3648488001e801d94ed56317c410e73a4097d855783d"
+    },
+    {
+      "input": "2.945445109158754e-121",
+      "json": "2.945445109158754e-121",
+      "canonicalPayload": "{\"value\":2.945445109158754e-121}",
+      "payloadHash": "d12dc40538a3641886d6912a64f18926136636f189f249bb83fa62c40ee68302"
+    },
+    {
+      "input": "-2.945445109158754e-121",
+      "json": "-2.945445109158754e-121",
+      "canonicalPayload": "{\"value\":-2.945445109158754e-121}",
+      "payloadHash": "c9f3315322ba7cd5b629af529238e7c138fde7ba89d613506ccfcfbb7522710e"
+    },
+    {
+      "input": "1.0543378153815866e-27",
+      "json": "1.0543378153815866e-27",
+      "canonicalPayload": "{\"value\":1.0543378153815866e-27}",
+      "payloadHash": "734942102b8170a4ebae48c1a89832e781d93f5c7840734cc2bd4818dd70058d"
+    },
+    {
+      "input": "-1.0543378153815866e-27",
+      "json": "-1.0543378153815866e-27",
+      "canonicalPayload": "{\"value\":-1.0543378153815866e-27}",
+      "payloadHash": "bb4a413a5eea3fdbaccad0f3ab999bb47c395060043eb92784b25cac670f73fe"
+    },
+    {
+      "input": "1.0494218220934272e-256",
+      "json": "1.0494218220934272e-256",
+      "canonicalPayload": "{\"value\":1.0494218220934272e-256}",
+      "payloadHash": "76e9221a033a53fa1a85901249e9acb698db0087e85b7b56b1c7a1295dd658a4"
+    },
+    {
+      "input": "-1.0494218220934272e-256",
+      "json": "-1.0494218220934272e-256",
+      "canonicalPayload": "{\"value\":-1.0494218220934272e-256}",
+      "payloadHash": "72f04c23c51ae57993dbfdd293eeca361652d441e443c28ba7ec5826bbe25864"
+    },
+    {
+      "input": "5.3206581799313425e-75",
+      "json": "5.3206581799313425e-75",
+      "canonicalPayload": "{\"value\":5.3206581799313425e-75}",
+      "payloadHash": "60440eb0d82611149e7985f13a182c0887f22f9e84f9f509ba8f62aef592f831"
+    },
+    {
+      "input": "-5.3206581799313425e-75",
+      "json": "-5.3206581799313425e-75",
+      "canonicalPayload": "{\"value\":-5.3206581799313425e-75}",
+      "payloadHash": "61b8b29ecfacbb622e921064178eb306b22cbe419ef95740bafed69e2b5887e7"
+    },
+    {
+      "input": "6.347359143197536e-17",
+      "json": "6.347359143197536e-17",
+      "canonicalPayload": "{\"value\":6.347359143197536e-17}",
+      "payloadHash": "d7bbc98c8b48992a20942cf29114c5d234705040e627eb9de760d00d09f8928a"
+    },
+    {
+      "input": "-6.347359143197536e-17",
+      "json": "-6.347359143197536e-17",
+      "canonicalPayload": "{\"value\":-6.347359143197536e-17}",
+      "payloadHash": "7653eeb988bbd27bed184e0c310156708c20cf82c4c126ac873088b80e105515"
+    },
+    {
+      "input": "7.73018612433225e-155",
+      "json": "7.73018612433225e-155",
+      "canonicalPayload": "{\"value\":7.73018612433225e-155}",
+      "payloadHash": "997130a4c1fcd5b8f6eeead30a70c6d9a91c314afaaa339cb52843fd6177d5ed"
+    },
+    {
+      "input": "-7.73018612433225e-155",
+      "json": "-7.73018612433225e-155",
+      "canonicalPayload": "{\"value\":-7.73018612433225e-155}",
+      "payloadHash": "6daf985800e49e564520d6c5c4c2f8e759fbdbdfc9e546f4e92c46655a44f1e7"
+    },
+    {
+      "input": "6.836876714602113e-305",
+      "json": "6.836876714602113e-305",
+      "canonicalPayload": "{\"value\":6.836876714602113e-305}",
+      "payloadHash": "b9f0fd36c9d09e4893cd9c630bf3cbffe1d69f7481ffd7e5d1152adf99513684"
+    },
+    {
+      "input": "-6.836876714602113e-305",
+      "json": "-6.836876714602113e-305",
+      "canonicalPayload": "{\"value\":-6.836876714602113e-305}",
+      "payloadHash": "474876c2559322cd25c7134a992ec742806f79866dad11e2ab2ed7dd572fb661"
+    },
+    {
+      "input": "3.614583349786698e-279",
+      "json": "3.614583349786698e-279",
+      "canonicalPayload": "{\"value\":3.614583349786698e-279}",
+      "payloadHash": "c1f3bc1c378d537773e4c74b4a1aeadc5e2e0a727231b5400548355d33ab0ec6"
+    },
+    {
+      "input": "-3.614583349786698e-279",
+      "json": "-3.614583349786698e-279",
+      "canonicalPayload": "{\"value\":-3.614583349786698e-279}",
+      "payloadHash": "9b14bec8c69cdfe6acdcd5591ec67ec120ae0923c43917a19cc4b4855b293190"
+    },
+    {
+      "input": "8.059985157102345e-97",
+      "json": "8.059985157102345e-97",
+      "canonicalPayload": "{\"value\":8.059985157102345e-97}",
+      "payloadHash": "9af50aae04504328950a5b46d17220035326813415afcfb8b9569c7609b6dd3e"
+    },
+    {
+      "input": "-8.059985157102345e-97",
+      "json": "-8.059985157102345e-97",
+      "canonicalPayload": "{\"value\":-8.059985157102345e-97}",
+      "payloadHash": "53890b98006af5439c7cc983313d77c2df711cd139691b851f2f75468217b1b7"
+    },
+    {
+      "input": "8.742408835329116e-139",
+      "json": "8.742408835329116e-139",
+      "canonicalPayload": "{\"value\":8.742408835329116e-139}",
+      "payloadHash": "c2a344d68799bf82d5bafcba3363de842ed933822b7663611650b2b6308a640a"
+    },
+    {
+      "input": "-8.742408835329116e-139",
+      "json": "-8.742408835329116e-139",
+      "canonicalPayload": "{\"value\":-8.742408835329116e-139}",
+      "payloadHash": "a9ed08316de72f9e3e2ec7b193e169fa747ee91e9075a5891d8ef4e96e9d9e72"
+    },
+    {
+      "input": "9.754226146265863e-253",
+      "json": "9.754226146265863e-253",
+      "canonicalPayload": "{\"value\":9.754226146265863e-253}",
+      "payloadHash": "53daad0d4dd14005f992cd67ed8f90e7461f7895bf37fc291388edcc7570db70"
+    },
+    {
+      "input": "-9.754226146265863e-253",
+      "json": "-9.754226146265863e-253",
+      "canonicalPayload": "{\"value\":-9.754226146265863e-253}",
+      "payloadHash": "453193266a97b360b98cf5cc730a8cde9284a3fc49e5d11b29106c3820e39109"
+    },
+    {
+      "input": "1.089748720638454e-83",
+      "json": "1.089748720638454e-83",
+      "canonicalPayload": "{\"value\":1.089748720638454e-83}",
+      "payloadHash": "fb662d3f721848933eba00c4b88922eaf6aafc599563880aaba988a456d7170b"
+    },
+    {
+      "input": "-1.089748720638454e-83",
+      "json": "-1.089748720638454e-83",
+      "canonicalPayload": "{\"value\":-1.089748720638454e-83}",
+      "payloadHash": "bb640f99db48330cca130b64be9c62c31f7f2355d2050e6eaba56cd605865c0e"
+    },
+    {
+      "input": "6.408919006586075e-237",
+      "json": "6.408919006586075e-237",
+      "canonicalPayload": "{\"value\":6.408919006586075e-237}",
+      "payloadHash": "cd4d1fee333cad813364dae3ac28bf3410f14a8f221ea188fa93b2b3fa8ab0da"
+    },
+    {
+      "input": "-6.408919006586075e-237",
+      "json": "-6.408919006586075e-237",
+      "canonicalPayload": "{\"value\":-6.408919006586075e-237}",
+      "payloadHash": "35fd5fc5b5b619aafe046d253fe60e1d94aa38149d29e0b2c6e9dea4529d1b55"
+    },
+    {
+      "input": "5.550299313850701e-143",
+      "json": "5.550299313850701e-143",
+      "canonicalPayload": "{\"value\":5.550299313850701e-143}",
+      "payloadHash": "148105e56c53303e46796818bc2dc77a63d42930813a7ee2626066f0964646ce"
+    },
+    {
+      "input": "-5.550299313850701e-143",
+      "json": "-5.550299313850701e-143",
+      "canonicalPayload": "{\"value\":-5.550299313850701e-143}",
+      "payloadHash": "a646fca4afd1c1c33a635d3f4eadf4d7ff182732521a49568694301548f052de"
+    },
+    {
+      "input": "5.144189031794667e-213",
+      "json": "5.144189031794667e-213",
+      "canonicalPayload": "{\"value\":5.144189031794667e-213}",
+      "payloadHash": "7404404c199e25ab2dff7e488e813fb9720a01a4abd391ad8b3f5447da60b98d"
+    },
+    {
+      "input": "-5.144189031794667e-213",
+      "json": "-5.144189031794667e-213",
+      "canonicalPayload": "{\"value\":-5.144189031794667e-213}",
+      "payloadHash": "c7c38f91a8312bb8f7b76917368164017a1776a068bb652ef1b3db554912c8c1"
+    },
+    {
+      "input": "2.366153224371374e-271",
+      "json": "2.366153224371374e-271",
+      "canonicalPayload": "{\"value\":2.366153224371374e-271}",
+      "payloadHash": "2bdeaa6e85611b4d005ba910e3a134d931af3c1b48fac3c515686231d0cdc09f"
+    },
+    {
+      "input": "-2.366153224371374e-271",
+      "json": "-2.366153224371374e-271",
+      "canonicalPayload": "{\"value\":-2.366153224371374e-271}",
+      "payloadHash": "7ea0e3263dc775e225b93d893bd6567f19bbb704efee00f65cad0afbaf5e0f5d"
+    },
+    {
+      "input": "2.3888239301741127e-277",
+      "json": "2.3888239301741127e-277",
+      "canonicalPayload": "{\"value\":2.3888239301741127e-277}",
+      "payloadHash": "b1825ca9ca50212ca91a1362354e8257ce13298b9222851f2a93ddd6fa02a026"
+    },
+    {
+      "input": "-2.3888239301741127e-277",
+      "json": "-2.3888239301741127e-277",
+      "canonicalPayload": "{\"value\":-2.3888239301741127e-277}",
+      "payloadHash": "f8b0b32aec219176a491fb0be39a1f6ac2c5d25d3691490c047276843bcd6ffc"
+    },
+    {
+      "input": "2.5605386206880212e-23",
+      "json": "2.5605386206880212e-23",
+      "canonicalPayload": "{\"value\":2.5605386206880212e-23}",
+      "payloadHash": "4d9fc7f59678eb0b18e8636f71bdc7fe4a84c268400212f811a10a9754ad55c0"
+    },
+    {
+      "input": "-2.5605386206880212e-23",
+      "json": "-2.5605386206880212e-23",
+      "canonicalPayload": "{\"value\":-2.5605386206880212e-23}",
+      "payloadHash": "872a22f717a13c31349243a0fea88a9a7d42f0cd2abb10a26e3987e6238baa60"
+    },
+    {
+      "input": "3.888208394870162e-101",
+      "json": "3.888208394870162e-101",
+      "canonicalPayload": "{\"value\":3.888208394870162e-101}",
+      "payloadHash": "a168f9b08369c2eb6392a51bc2aa42f53ed343e8b3cc04e3ab8328bcbaa3ef36"
+    },
+    {
+      "input": "-3.888208394870162e-101",
+      "json": "-3.888208394870162e-101",
+      "canonicalPayload": "{\"value\":-3.888208394870162e-101}",
+      "payloadHash": "b9b7ffebc9b765f4707821588554841222ab92410a8cb5d0cee600380b5e28d7"
+    },
+    {
+      "input": "6.153761613182723e-127",
+      "json": "6.153761613182723e-127",
+      "canonicalPayload": "{\"value\":6.153761613182723e-127}",
+      "payloadHash": "2c5d41a51def2b1984d55ee6007f23a9c09ccbc9fdda05611a40c9b0553afbe7"
+    },
+    {
+      "input": "-6.153761613182723e-127",
+      "json": "-6.153761613182723e-127",
+      "canonicalPayload": "{\"value\":-6.153761613182723e-127}",
+      "payloadHash": "782c0c64171f6312aab31acb451e20b4964a53a8d51e911abc948514c4f558b5"
+    },
+    {
+      "input": "5.073586799204349e-205",
+      "json": "5.073586799204349e-205",
+      "canonicalPayload": "{\"value\":5.073586799204349e-205}",
+      "payloadHash": "0fcb0338e68a87b29de28ecd29898ee577247bd9dd8ead41fe2e5288b78a675b"
+    },
+    {
+      "input": "-5.073586799204349e-205",
+      "json": "-5.073586799204349e-205",
+      "canonicalPayload": "{\"value\":-5.073586799204349e-205}",
+      "payloadHash": "0630d258e91531da42211dabc71c47d5d4d2fc50c00ff6f502184f66cc3bd2dc"
+    },
+    {
+      "input": "1.443601761944592e-63",
+      "json": "1.443601761944592e-63",
+      "canonicalPayload": "{\"value\":1.443601761944592e-63}",
+      "payloadHash": "6abb830c5f53cbdff1c44e9c49cab98784bac5947370c1befe79aa4ea6a26ef1"
+    },
+    {
+      "input": "-1.443601761944592e-63",
+      "json": "-1.443601761944592e-63",
+      "canonicalPayload": "{\"value\":-1.443601761944592e-63}",
+      "payloadHash": "7bce748058787fe9b49ca70c0542c1e8e2769dbdf5328eea189450532fa19a3b"
+    },
+    {
+      "input": "1.3239040169864892e-133",
+      "json": "1.3239040169864892e-133",
+      "canonicalPayload": "{\"value\":1.3239040169864892e-133}",
+      "payloadHash": "283b8a4a822cc55072ad50d8ec9d7059a4ef6a21b1dcc246a839d346b1aade8c"
+    },
+    {
+      "input": "-1.3239040169864892e-133",
+      "json": "-1.3239040169864892e-133",
+      "canonicalPayload": "{\"value\":-1.3239040169864892e-133}",
+      "payloadHash": "405cf50203e9b20d4e3d7a72a8045db82b5dfad18b819be4dec8ba0affb450f0"
+    },
+    {
+      "input": "6.131410709582269e-187",
+      "json": "6.131410709582269e-187",
+      "canonicalPayload": "{\"value\":6.131410709582269e-187}",
+      "payloadHash": "5a2ebf6615ba85db374fc280112fbb44e2d8db6864d89bc119283fd0c0b469d1"
+    },
+    {
+      "input": "-6.131410709582269e-187",
+      "json": "-6.131410709582269e-187",
+      "canonicalPayload": "{\"value\":-6.131410709582269e-187}",
+      "payloadHash": "0a9e3fe59d4b1dfa2bba37cde9c3916e88eef3c6b3c2fd1b916f47af8c6f6b9b"
+    },
+    {
+      "input": "1.0151474367827177e-24",
+      "json": "1.0151474367827177e-24",
+      "canonicalPayload": "{\"value\":1.0151474367827177e-24}",
+      "payloadHash": "cb1c4b34c9e5aaeb3ce222b726f48ad3197bc62d4b4eddd769d515873d85ee9c"
+    },
+    {
+      "input": "-1.0151474367827177e-24",
+      "json": "-1.0151474367827177e-24",
+      "canonicalPayload": "{\"value\":-1.0151474367827177e-24}",
+      "payloadHash": "1a86f22f6a1b053b3a74524d2fd02fb98cd3fab6c3c02b98acb600bea10c5ab2"
+    },
+    {
+      "input": "3.5751639390364284e-75",
+      "json": "3.5751639390364284e-75",
+      "canonicalPayload": "{\"value\":3.5751639390364284e-75}",
+      "payloadHash": "59c8fc1d97aeef459b894b7869ce338c37c8b3baafbe03505c7fc6496724d38a"
+    },
+    {
+      "input": "-3.5751639390364284e-75",
+      "json": "-3.5751639390364284e-75",
+      "canonicalPayload": "{\"value\":-3.5751639390364284e-75}",
+      "payloadHash": "0112288bc9b3484307e01643d182b0e9ce6c4267f9eb66a9ab9bbd55c6ec9c5b"
+    },
+    {
+      "input": "9.842728687450289e-49",
+      "json": "9.842728687450289e-49",
+      "canonicalPayload": "{\"value\":9.842728687450289e-49}",
+      "payloadHash": "1b1090706d67da748c4ff651c73125c5fc5474f40a41d6e22e4e30ba82826b9f"
+    },
+    {
+      "input": "-9.842728687450289e-49",
+      "json": "-9.842728687450289e-49",
+      "canonicalPayload": "{\"value\":-9.842728687450289e-49}",
+      "payloadHash": "a8f9057ee8a851b8e1c964cfc72aa22fb6657209e0e92e9b24d5934c99d7abef"
+    },
+    {
+      "input": "9.950715656392276e-207",
+      "json": "9.950715656392276e-207",
+      "canonicalPayload": "{\"value\":9.950715656392276e-207}",
+      "payloadHash": "9a7487040c75b137b68100080bd2430d8654e78865f326d9f9dadba06c1c2087"
+    },
+    {
+      "input": "-9.950715656392276e-207",
+      "json": "-9.950715656392276e-207",
+      "canonicalPayload": "{\"value\":-9.950715656392276e-207}",
+      "payloadHash": "5cf8544215422dce624a049972c7e7f434e1588583e601aab2b6dcf3b5ae2339"
+    },
+    {
+      "input": "1.5852895230054856e-257",
+      "json": "1.5852895230054856e-257",
+      "canonicalPayload": "{\"value\":1.5852895230054856e-257}",
+      "payloadHash": "2fb36b0046e30504470991ab6ab04618cbd349a3f175c8615141f99660b30128"
+    },
+    {
+      "input": "-1.5852895230054856e-257",
+      "json": "-1.5852895230054856e-257",
+      "canonicalPayload": "{\"value\":-1.5852895230054856e-257}",
+      "payloadHash": "1692cf26472048dccf455f1717bc95cf63769eb0e5249785d9691bf148c8d41a"
+    },
+    {
+      "input": "1.060250679869205e-22",
+      "json": "1.060250679869205e-22",
+      "canonicalPayload": "{\"value\":1.060250679869205e-22}",
+      "payloadHash": "e393b942c4ceb4a1422afd33fc93a514c682c2b8c688b0ded7933e0f37aa1a2d"
+    },
+    {
+      "input": "-1.060250679869205e-22",
+      "json": "-1.060250679869205e-22",
+      "canonicalPayload": "{\"value\":-1.060250679869205e-22}",
+      "payloadHash": "f9db3c452d0d578f9868e78d631c6932861dcd8bc653f5a68c68548201c6bef7"
+    },
+    {
+      "input": "4.6126244533807036e-225",
+      "json": "4.6126244533807036e-225",
+      "canonicalPayload": "{\"value\":4.6126244533807036e-225}",
+      "payloadHash": "8468ea818af3b2ea87a53e1fb73fa379a67420a9b4ac6c53577ebaed1e60b370"
+    },
+    {
+      "input": "-4.6126244533807036e-225",
+      "json": "-4.6126244533807036e-225",
+      "canonicalPayload": "{\"value\":-4.6126244533807036e-225}",
+      "payloadHash": "d2756d1675200fb837985c0954a5b23d8de06db7b75bc90267dea76ae962b53a"
+    },
+    {
+      "input": "6.36497616674751e-51",
+      "json": "6.36497616674751e-51",
+      "canonicalPayload": "{\"value\":6.36497616674751e-51}",
+      "payloadHash": "ba5d40dc455af4d171ccf5faf146d1cc23c341edf7a880b0ad2372d8f186b116"
+    },
+    {
+      "input": "-6.36497616674751e-51",
+      "json": "-6.36497616674751e-51",
+      "canonicalPayload": "{\"value\":-6.36497616674751e-51}",
+      "payloadHash": "35780d21ca7dac57d8910b34c1896d2fc5a39bbfb9ee1af7356127f513e7fcc5"
+    },
+    {
+      "input": "6.397527534514665e-33",
+      "json": "6.397527534514665e-33",
+      "canonicalPayload": "{\"value\":6.397527534514665e-33}",
+      "payloadHash": "78c371cd20a72a96e74957e272cf40379c898c2b783da2ec488b926c49031d8e"
+    },
+    {
+      "input": "-6.397527534514665e-33",
+      "json": "-6.397527534514665e-33",
+      "canonicalPayload": "{\"value\":-6.397527534514665e-33}",
+      "payloadHash": "db07b5a09ed1ffe10e30537d3726cae98f84b5526b501e12a367eac4fb2dc26d"
+    },
+    {
+      "input": "3.1359246829524634e-259",
+      "json": "3.1359246829524634e-259",
+      "canonicalPayload": "{\"value\":3.1359246829524634e-259}",
+      "payloadHash": "64af3a190b59e6dfd8de078488be1cc388661feb992f44254ec5f37339acb9a6"
+    },
+    {
+      "input": "-3.1359246829524634e-259",
+      "json": "-3.1359246829524634e-259",
+      "canonicalPayload": "{\"value\":-3.1359246829524634e-259}",
+      "payloadHash": "47c8653180b4ae87fb73a36e99756ad7f9416153ab79796266b13e26c40abfac"
+    },
+    {
+      "input": "2.4256788697093726e-301",
+      "json": "2.4256788697093726e-301",
+      "canonicalPayload": "{\"value\":2.4256788697093726e-301}",
+      "payloadHash": "12552fb951d305064e3335d0267f7f22f6b532462bf6c3b7c95fd8da89306d7d"
+    },
+    {
+      "input": "-2.4256788697093726e-301",
+      "json": "-2.4256788697093726e-301",
+      "canonicalPayload": "{\"value\":-2.4256788697093726e-301}",
+      "payloadHash": "76c9c86df3299a91a44b98339a5a523a8de6ea204cfe541723116a2d43ef1d57"
+    },
+    {
+      "input": "1.0483082774095238e-62",
+      "json": "1.0483082774095238e-62",
+      "canonicalPayload": "{\"value\":1.0483082774095238e-62}",
+      "payloadHash": "0d107bdce61a48d1177c197d536c0ce1c8d9f658ad2cc689aacf1a25ab0dd4f9"
+    },
+    {
+      "input": "-1.0483082774095238e-62",
+      "json": "-1.0483082774095238e-62",
+      "canonicalPayload": "{\"value\":-1.0483082774095238e-62}",
+      "payloadHash": "8003bcccdf7ff8cd9ba7ec37cb1689ac0a20c66b67f8f1b274323a44c344c457"
+    },
+    {
+      "input": "2.5805323049426074e-13",
+      "json": "2.5805323049426074e-13",
+      "canonicalPayload": "{\"value\":2.5805323049426074e-13}",
+      "payloadHash": "e07907c9e32fb71145a890729b6678f5a34775e91b6ae7f767e8d8952c3e5e64"
+    },
+    {
+      "input": "-2.5805323049426074e-13",
+      "json": "-2.5805323049426074e-13",
+      "canonicalPayload": "{\"value\":-2.5805323049426074e-13}",
+      "payloadHash": "06ad07e90ba09d589487a714c141712695c128af7be5043a993a253a0c5bb5a0"
+    },
+    {
+      "input": "7.565130879171193e-63",
+      "json": "7.565130879171193e-63",
+      "canonicalPayload": "{\"value\":7.565130879171193e-63}",
+      "payloadHash": "05e4af50fa1df0f1d009a36b2f3673b44b436efceb080835e955ec2baf53e44b"
+    },
+    {
+      "input": "-7.565130879171193e-63",
+      "json": "-7.565130879171193e-63",
+      "canonicalPayload": "{\"value\":-7.565130879171193e-63}",
+      "payloadHash": "df369432a82d576b12cd8f84e1963ba4d99110f716db60b9946525484c7ecc55"
+    },
+    {
+      "input": "3.670781249180436e-9",
+      "json": "3.670781249180436e-9",
+      "canonicalPayload": "{\"value\":3.670781249180436e-9}",
+      "payloadHash": "289545da0f3593f8d3b95dc811dd3ab2e762815aa63a34396bb88af0ed39f7e7"
+    },
+    {
+      "input": "-3.670781249180436e-9",
+      "json": "-3.670781249180436e-9",
+      "canonicalPayload": "{\"value\":-3.670781249180436e-9}",
+      "payloadHash": "8e4a2662659b0982fc832940b7901dbed776ec59104df37747c4faa41f93a4cf"
+    },
+    {
+      "input": "7.148423082195222e-263",
+      "json": "7.148423082195222e-263",
+      "canonicalPayload": "{\"value\":7.148423082195222e-263}",
+      "payloadHash": "1c2969f319c8769996da43c75c88a0bf2cd5ff82c7d9e89fa4ebc5d027ba61f1"
+    },
+    {
+      "input": "-7.148423082195222e-263",
+      "json": "-7.148423082195222e-263",
+      "canonicalPayload": "{\"value\":-7.148423082195222e-263}",
+      "payloadHash": "98fb1811ea7f1656c4d4b1bb811b70893304d62d1f470d860dbc42402da18642"
+    },
+    {
+      "input": "1.0131652619689703e-160",
+      "json": "1.0131652619689703e-160",
+      "canonicalPayload": "{\"value\":1.0131652619689703e-160}",
+      "payloadHash": "77d2d881242027aec605a690db1419218d02d0c8798905534a5f707c68514704"
+    },
+    {
+      "input": "-1.0131652619689703e-160",
+      "json": "-1.0131652619689703e-160",
+      "canonicalPayload": "{\"value\":-1.0131652619689703e-160}",
+      "payloadHash": "3ac30c2dac74b6f2da63f5eea203a7671f598453d578bbe68108481a5c9ed00c"
+    },
+    {
+      "input": "1.0006638700142502e-75",
+      "json": "1.0006638700142502e-75",
+      "canonicalPayload": "{\"value\":1.0006638700142502e-75}",
+      "payloadHash": "f3902fe32af94c376b1d1512f8e2c8b2c68e43b66fcb38de9dfab175ab562517"
+    },
+    {
+      "input": "-1.0006638700142502e-75",
+      "json": "-1.0006638700142502e-75",
+      "canonicalPayload": "{\"value\":-1.0006638700142502e-75}",
+      "payloadHash": "a4eb41a6f65af9ce2cec144127ebdf65b627078c280d2c6df9416f4c8d4ad10c"
+    },
+    {
+      "input": "7.431278912350534e-21",
+      "json": "7.431278912350534e-21",
+      "canonicalPayload": "{\"value\":7.431278912350534e-21}",
+      "payloadHash": "c8badb38bc3b12bdc39696c0eb332fe917edcea4b94b36b81be0f2c14f5bca3e"
+    },
+    {
+      "input": "-7.431278912350534e-21",
+      "json": "-7.431278912350534e-21",
+      "canonicalPayload": "{\"value\":-7.431278912350534e-21}",
+      "payloadHash": "fb20eb5512bb18bffe076d27e0dd48f538039ef39bf5e6f4a770a6e5bf2a6592"
+    },
+    {
+      "input": "2.4427880151197315e-239",
+      "json": "2.4427880151197315e-239",
+      "canonicalPayload": "{\"value\":2.4427880151197315e-239}",
+      "payloadHash": "1d2fb8fef9885ee5411c359d724556e010012419b62f6ea9d6029b57cd4063bc"
+    },
+    {
+      "input": "-2.4427880151197315e-239",
+      "json": "-2.4427880151197315e-239",
+      "canonicalPayload": "{\"value\":-2.4427880151197315e-239}",
+      "payloadHash": "3c597430b0e83796e3805d6911abe1fa70ad77a0c63569cb5be4d814fe23c15d"
+    },
+    {
+      "input": "5.213398396968842e-301",
+      "json": "5.213398396968842e-301",
+      "canonicalPayload": "{\"value\":5.213398396968842e-301}",
+      "payloadHash": "59aa2f1f9aed3b0a2f8e21047fdcbf73b8c3e2a153f4598ef89548b10e5c7da7"
+    },
+    {
+      "input": "-5.213398396968842e-301",
+      "json": "-5.213398396968842e-301",
+      "canonicalPayload": "{\"value\":-5.213398396968842e-301}",
+      "payloadHash": "545536e0590e019dab02db5b2b8cce34b864ab09d0e8ab9c84329522c4647b47"
+    },
+    {
+      "input": "4.340293583460152e-251",
+      "json": "4.340293583460152e-251",
+      "canonicalPayload": "{\"value\":4.340293583460152e-251}",
+      "payloadHash": "9e3badf609095b6ccfed99419f9911a17d3167d42a6df5c2ff189e8c1a43d9b6"
+    },
+    {
+      "input": "-4.340293583460152e-251",
+      "json": "-4.340293583460152e-251",
+      "canonicalPayload": "{\"value\":-4.340293583460152e-251}",
+      "payloadHash": "f2224cf203c9dffa3fcf4af268bbdcbfb81c30f268808a05621871e5513ac54b"
+    },
+    {
+      "input": "9.707633437588811e-81",
+      "json": "9.707633437588811e-81",
+      "canonicalPayload": "{\"value\":9.707633437588811e-81}",
+      "payloadHash": "639878f6ccce320c88553a5fa869d96c2d1f466341a763eafbc638a39308c538"
+    },
+    {
+      "input": "-9.707633437588811e-81",
+      "json": "-9.707633437588811e-81",
+      "canonicalPayload": "{\"value\":-9.707633437588811e-81}",
+      "payloadHash": "9e91ae3577f07e1f6cb1bbc4058770bf6a152e5b0eee4a8639279ae48812cc8d"
+    },
+    {
+      "input": "3.31527806725353e-159",
+      "json": "3.31527806725353e-159",
+      "canonicalPayload": "{\"value\":3.31527806725353e-159}",
+      "payloadHash": "ca712d2aae4aa2080f9605caf6f3889eb96841d27b568563b713b70e4b68c738"
+    },
+    {
+      "input": "-3.31527806725353e-159",
+      "json": "-3.31527806725353e-159",
+      "canonicalPayload": "{\"value\":-3.31527806725353e-159}",
+      "payloadHash": "331f7844a9dbaa04f192d21ef72486a5c825e356cdf143155703520490f2f541"
+    },
+    {
+      "input": "7.438596937805415e-217",
+      "json": "7.438596937805415e-217",
+      "canonicalPayload": "{\"value\":7.438596937805415e-217}",
+      "payloadHash": "6cce85f0b1e446d07e8af0092ce33915b09fd85a4fd7cb22ea4454afbd00ab94"
+    },
+    {
+      "input": "-7.438596937805415e-217",
+      "json": "-7.438596937805415e-217",
+      "canonicalPayload": "{\"value\":-7.438596937805415e-217}",
+      "payloadHash": "6b06daa0655290d229a511d7711afaacb4fdb77c057a9343e37b6c18d4470d17"
+    },
+    {
+      "input": "3.4604276427999136e-211",
+      "json": "3.4604276427999136e-211",
+      "canonicalPayload": "{\"value\":3.4604276427999136e-211}",
+      "payloadHash": "960858335d9173fda1935266fca4ce94ec386ff89cea59be5c4b59cce966b9eb"
+    },
+    {
+      "input": "-3.4604276427999136e-211",
+      "json": "-3.4604276427999136e-211",
+      "canonicalPayload": "{\"value\":-3.4604276427999136e-211}",
+      "payloadHash": "1127088b09953f0f99deda1eaa865174b463a5c41b0104cdac12f925a9d597d5"
+    },
+    {
+      "input": "4.7650769110769034e-157",
+      "json": "4.7650769110769034e-157",
+      "canonicalPayload": "{\"value\":4.7650769110769034e-157}",
+      "payloadHash": "5991acf0aa9adce94b2ea1cbd203db685cacd3ddb8ed36d740a92d516f293084"
+    },
+    {
+      "input": "-4.7650769110769034e-157",
+      "json": "-4.7650769110769034e-157",
+      "canonicalPayload": "{\"value\":-4.7650769110769034e-157}",
+      "payloadHash": "7cab629fbfccb291379d9895ac67ed584f23401dc36b1b3a78b41a8d5c155bc5"
+    },
+    {
+      "input": "5.336209553293884e-55",
+      "json": "5.336209553293884e-55",
+      "canonicalPayload": "{\"value\":5.336209553293884e-55}",
+      "payloadHash": "043d2e9c4bfb502695adb15113aca8d428d3035d17f616ffa39ec1c94367b628"
+    },
+    {
+      "input": "-5.336209553293884e-55",
+      "json": "-5.336209553293884e-55",
+      "canonicalPayload": "{\"value\":-5.336209553293884e-55}",
+      "payloadHash": "312d5c2096b0959ef780e8de956bf0922aad95cf6b1a0066bf431e78f4cea56a"
+    },
+    {
+      "input": "1.0280549176037312e-72",
+      "json": "1.0280549176037312e-72",
+      "canonicalPayload": "{\"value\":1.0280549176037312e-72}",
+      "payloadHash": "648198e52e5d2a99147c4d1f611136410797514b9d3668380f55d504c3a5bef5"
+    },
+    {
+      "input": "-1.0280549176037312e-72",
+      "json": "-1.0280549176037312e-72",
+      "canonicalPayload": "{\"value\":-1.0280549176037312e-72}",
+      "payloadHash": "dad80fc9bea4ef2bc76415dc98b1317c86f59aa87d97bed6f2ab1724e0896609"
+    },
+    {
+      "input": "8.532517616637051e-211",
+      "json": "8.532517616637051e-211",
+      "canonicalPayload": "{\"value\":8.532517616637051e-211}",
+      "payloadHash": "b9628ad596c1c6e9a1fe1d2427445aadf57d9fe74ea78a08757f284077243ed3"
+    },
+    {
+      "input": "-8.532517616637051e-211",
+      "json": "-8.532517616637051e-211",
+      "canonicalPayload": "{\"value\":-8.532517616637051e-211}",
+      "payloadHash": "cfd09b60c10c8615ffa43e8561fdfacdfe5e5fdb87d6ffe020e9df10290acf9a"
+    },
+    {
+      "input": "9.606268176808954e-205",
+      "json": "9.606268176808954e-205",
+      "canonicalPayload": "{\"value\":9.606268176808954e-205}",
+      "payloadHash": "bbbd6496b09a4d383c171b02152e119ec6454cdc819c4fe6ab91cff98e8186ae"
+    },
+    {
+      "input": "-9.606268176808954e-205",
+      "json": "-9.606268176808954e-205",
+      "canonicalPayload": "{\"value\":-9.606268176808954e-205}",
+      "payloadHash": "6a8efb5f4e6c24c1318d8c88f1bdf5e823d4e4bcdd0a34536250f856bd27f164"
+    },
+    {
+      "input": "8.576020858250558e-171",
+      "json": "8.576020858250558e-171",
+      "canonicalPayload": "{\"value\":8.576020858250558e-171}",
+      "payloadHash": "c2913a0547e43d892d3b4287bac489ad4709c059565f7560b9c0c34cdd85924f"
+    },
+    {
+      "input": "-8.576020858250558e-171",
+      "json": "-8.576020858250558e-171",
+      "canonicalPayload": "{\"value\":-8.576020858250558e-171}",
+      "payloadHash": "29f1d4c1a15bd0d1f1050bfeabd70f48a93f19c8cd4701b60232a7b8150c36c0"
+    },
+    {
+      "input": "4.6081859283149243e-69",
+      "json": "4.6081859283149243e-69",
+      "canonicalPayload": "{\"value\":4.6081859283149243e-69}",
+      "payloadHash": "fd26165bb7c3038d0d6a1988873d554beed03539e4a62bdc56a7bc76da61d730"
+    },
+    {
+      "input": "-4.6081859283149243e-69",
+      "json": "-4.6081859283149243e-69",
+      "canonicalPayload": "{\"value\":-4.6081859283149243e-69}",
+      "payloadHash": "fb6b93f8e0fab0db68cb34d7dbe72f5ba13ea38735bbf32e22c300b527303c7a"
+    },
+    {
+      "input": "1.4644652688875795e-295",
+      "json": "1.4644652688875795e-295",
+      "canonicalPayload": "{\"value\":1.4644652688875795e-295}",
+      "payloadHash": "d2bba921d730ade19eeb0c11cccd7191c5b05053ef1e421229f0da9b2f4086b1"
+    },
+    {
+      "input": "-1.4644652688875795e-295",
+      "json": "-1.4644652688875795e-295",
+      "canonicalPayload": "{\"value\":-1.4644652688875795e-295}",
+      "payloadHash": "02f97fdfe39e0f75fc518a23b7e70aeda0863a4514352aca2ad9285e1809dd1f"
+    },
+    {
+      "input": "1.5689490865916013e-125",
+      "json": "1.5689490865916013e-125",
+      "canonicalPayload": "{\"value\":1.5689490865916013e-125}",
+      "payloadHash": "e1d903e80394f96c5028ca206128e714b9739a175c406794542c8c5dbff9360a"
+    },
+    {
+      "input": "-1.5689490865916013e-125",
+      "json": "-1.5689490865916013e-125",
+      "canonicalPayload": "{\"value\":-1.5689490865916013e-125}",
+      "payloadHash": "8999e9b3ab28b5502b66293bb7c2fe983a6b63738080e9aea91ea1f1aa4a1d6a"
+    },
+    {
+      "input": "1.6091786874458195e-43",
+      "json": "1.6091786874458195e-43",
+      "canonicalPayload": "{\"value\":1.6091786874458195e-43}",
+      "payloadHash": "7399d1e6cbc8ad008cbd347ed06a58fcf258f4f1a6648aa6ba56179503f2e3b3"
+    },
+    {
+      "input": "-1.6091786874458195e-43",
+      "json": "-1.6091786874458195e-43",
+      "canonicalPayload": "{\"value\":-1.6091786874458195e-43}",
+      "payloadHash": "be80dfbe6aa61e18ee63a864ce4994fa2d92298ac1cfa8b4863e467f3f3317f4"
+    },
+    {
+      "input": "5.346224144101143e-277",
+      "json": "5.346224144101143e-277",
+      "canonicalPayload": "{\"value\":5.346224144101143e-277}",
+      "payloadHash": "ff7df6ab9f02c2142970f018a0238194e9681433080f4d61d105e7fabacf80da"
+    },
+    {
+      "input": "-5.346224144101143e-277",
+      "json": "-5.346224144101143e-277",
+      "canonicalPayload": "{\"value\":-5.346224144101143e-277}",
+      "payloadHash": "a0d6771ac94710b885ff0f4cca5b6b769099e2dfbe7560e395d73f1efb0f404d"
+    },
+    {
+      "input": "1.4670288087800147e-291",
+      "json": "1.4670288087800147e-291",
+      "canonicalPayload": "{\"value\":1.4670288087800147e-291}",
+      "payloadHash": "b5085a7a57a808bf7ec6ff9dfaca5c99691ae6fa496f074b558e773cdf8ecb5d"
+    },
+    {
+      "input": "-1.4670288087800147e-291",
+      "json": "-1.4670288087800147e-291",
+      "canonicalPayload": "{\"value\":-1.4670288087800147e-291}",
+      "payloadHash": "e7adfff48287633841f31cc7ccfb9ab2545ed16d5b5c535d71c5c8340d2236ec"
+    },
+    {
+      "input": "9.048600750043989e-233",
+      "json": "9.048600750043989e-233",
+      "canonicalPayload": "{\"value\":9.048600750043989e-233}",
+      "payloadHash": "d046304e33b7dd906a1c1d346740b5ca026cbdfc77a9c0fdd4c436a7ba486ce3"
+    },
+    {
+      "input": "-9.048600750043989e-233",
+      "json": "-9.048600750043989e-233",
+      "canonicalPayload": "{\"value\":-9.048600750043989e-233}",
+      "payloadHash": "da0bbe262f94a356c12ffb8d7e283dcb8e2d9cbe123454cabdc2dacb3459800f"
+    },
+    {
+      "input": "3.643084316514433e-167",
+      "json": "3.643084316514433e-167",
+      "canonicalPayload": "{\"value\":3.643084316514433e-167}",
+      "payloadHash": "b114a1a2d06379718dcc45b1c6803cc98f02687d810cd6cf498bc2d494819cee"
+    },
+    {
+      "input": "-3.643084316514433e-167",
+      "json": "-3.643084316514433e-167",
+      "canonicalPayload": "{\"value\":-3.643084316514433e-167}",
+      "payloadHash": "9370d0fed8e134e08d88b75d3a9ccadaec40c107828338db0794420d709632a9"
+    },
+    {
+      "input": "1.2603231556713583e-173",
+      "json": "1.2603231556713583e-173",
+      "canonicalPayload": "{\"value\":1.2603231556713583e-173}",
+      "payloadHash": "5943aecd59990cc6f5854b2903e1daeda82cc4595a96f677a7eba4b26182e3c9"
+    },
+    {
+      "input": "-1.2603231556713583e-173",
+      "json": "-1.2603231556713583e-173",
+      "canonicalPayload": "{\"value\":-1.2603231556713583e-173}",
+      "payloadHash": "0b92ac9356975217f41fb0dbeb38a086100e3a9a5451346080bf9d8e24759dae"
+    },
+    {
+      "input": "8.745229140855372e-155",
+      "json": "8.745229140855372e-155",
+      "canonicalPayload": "{\"value\":8.745229140855372e-155}",
+      "payloadHash": "a593acd00d43cccf584d8d3e4962a233f4ff0dfb0917963b57ef655502240231"
+    },
+    {
+      "input": "-8.745229140855372e-155",
+      "json": "-8.745229140855372e-155",
+      "canonicalPayload": "{\"value\":-8.745229140855372e-155}",
+      "payloadHash": "80133a1b15caab6683b4814f105360bb9a8b0d7f301a16ccee6287115de24372"
+    },
+    {
+      "input": "5.346099784597754e-229",
+      "json": "5.346099784597754e-229",
+      "canonicalPayload": "{\"value\":5.346099784597754e-229}",
+      "payloadHash": "2cf3ac9f332d34f9f33213a7eecd041f25328554845ae4eef59290a733c1aab5"
+    },
+    {
+      "input": "-5.346099784597754e-229",
+      "json": "-5.346099784597754e-229",
+      "canonicalPayload": "{\"value\":-5.346099784597754e-229}",
+      "payloadHash": "5285c24d3b9f23866d4c509da517768e6053cdeb9348a6d589bafa682ee9c51f"
+    },
+    {
+      "input": "4.771979841403663e-207",
+      "json": "4.771979841403663e-207",
+      "canonicalPayload": "{\"value\":4.771979841403663e-207}",
+      "payloadHash": "3ff9dbecf04f69426203ea3f9e8605198b856cdd0761899bbbb4403bee91b3d7"
+    },
+    {
+      "input": "-4.771979841403663e-207",
+      "json": "-4.771979841403663e-207",
+      "canonicalPayload": "{\"value\":-4.771979841403663e-207}",
+      "payloadHash": "cc8eb2e2e5496f0316f2d4b3f7ec3e1764738602b26380cdb15cc0e26874ba03"
+    },
+    {
+      "input": "7.86724092811346e-301",
+      "json": "7.86724092811346e-301",
+      "canonicalPayload": "{\"value\":7.86724092811346e-301}",
+      "payloadHash": "5f955f3033f3a18f1df78dd98a60d3586f1851b3a50ebc2350aae4a95230dc0b"
+    },
+    {
+      "input": "-7.86724092811346e-301",
+      "json": "-7.86724092811346e-301",
+      "canonicalPayload": "{\"value\":-7.86724092811346e-301}",
+      "payloadHash": "db94dad49248bd013ef15d424df91b396a559a9aa3c6a7e618026656bf2cc91e"
+    },
+    {
+      "input": "6.314756114967167e-307",
+      "json": "6.314756114967167e-307",
+      "canonicalPayload": "{\"value\":6.314756114967167e-307}",
+      "payloadHash": "98f6608086fb35cc1599855e2eed3000fa21d4dd66380d9aee66b0da940c6b32"
+    },
+    {
+      "input": "-6.314756114967167e-307",
+      "json": "-6.314756114967167e-307",
+      "canonicalPayload": "{\"value\":-6.314756114967167e-307}",
+      "payloadHash": "5fcea3051fa777bc478a23a0c743ab48e7ea820c79b2ef7c0040192af50c15fd"
+    },
+    {
+      "input": "5.64037456549704e-297",
+      "json": "5.64037456549704e-297",
+      "canonicalPayload": "{\"value\":5.64037456549704e-297}",
+      "payloadHash": "618f6b511ebe86643d85531102c54a462efaed38293e7e75c7bf8179ab1d490a"
+    },
+    {
+      "input": "-5.64037456549704e-297",
+      "json": "-5.64037456549704e-297",
+      "canonicalPayload": "{\"value\":-5.64037456549704e-297}",
+      "payloadHash": "7e7ea6ebe32ed82146bb61f461242a35f58994bc8f24afb09eebb94ea2f3249b"
+    },
+    {
+      "input": "4.355854428373277e-239",
+      "json": "4.355854428373277e-239",
+      "canonicalPayload": "{\"value\":4.355854428373277e-239}",
+      "payloadHash": "74933963f93e62450896ace2fcac872e2193fdf90f56bcf204b6dec5f10b633b"
+    },
+    {
+      "input": "-4.355854428373277e-239",
+      "json": "-4.355854428373277e-239",
+      "canonicalPayload": "{\"value\":-4.355854428373277e-239}",
+      "payloadHash": "dafb8ea56d3d90eeb5eebd137fee3fb3649eb5ad2852e8f70ea0db951cdcb3e1"
+    },
+    {
+      "input": "3.4699903093278405e-241",
+      "json": "3.4699903093278405e-241",
+      "canonicalPayload": "{\"value\":3.4699903093278405e-241}",
+      "payloadHash": "f9cf4b58ae36bee45f805425b122bbca78459508d04172dca2cf174201bbcb9b"
+    },
+    {
+      "input": "-3.4699903093278405e-241",
+      "json": "-3.4699903093278405e-241",
+      "canonicalPayload": "{\"value\":-3.4699903093278405e-241}",
+      "payloadHash": "c1a03cffc66a467aeb247eb8d94c66837e24aa57bdcd226cb95ed463867d4b2f"
+    },
+    {
+      "input": "9.943374776281416e-75",
+      "json": "9.943374776281416e-75",
+      "canonicalPayload": "{\"value\":9.943374776281416e-75}",
+      "payloadHash": "3d2d544a2be09385a4d951c88b539307e08827d6d453b7fa387078e5114fc4f3"
+    },
+    {
+      "input": "-9.943374776281416e-75",
+      "json": "-9.943374776281416e-75",
+      "canonicalPayload": "{\"value\":-9.943374776281416e-75}",
+      "payloadHash": "ceab8db1a6130855a0862f9255d9a2b70b43a84cce58961b824e9c3ba433bfb4"
+    },
+    {
+      "input": "7.086061475798488e-169",
+      "json": "7.086061475798488e-169",
+      "canonicalPayload": "{\"value\":7.086061475798488e-169}",
+      "payloadHash": "1731bec78db7eb89c68138a17032385442ac0877e9a3c88452dcbff75cefce14"
+    },
+    {
+      "input": "-7.086061475798488e-169",
+      "json": "-7.086061475798488e-169",
+      "canonicalPayload": "{\"value\":-7.086061475798488e-169}",
+      "payloadHash": "5e175a10c8552cf3740c2c937608df1feb46ab001f99d1de964f4ad8bb23b592"
+    },
+    {
+      "input": "7.52435056399554e-291",
+      "json": "7.52435056399554e-291",
+      "canonicalPayload": "{\"value\":7.52435056399554e-291}",
+      "payloadHash": "6061f0976d8c79336f64d9da74d66b9095a3d26f6f108917a24c6bfa1563e61d"
+    },
+    {
+      "input": "-7.52435056399554e-291",
+      "json": "-7.52435056399554e-291",
+      "canonicalPayload": "{\"value\":-7.52435056399554e-291}",
+      "payloadHash": "adcb0c8319006bd9fe6d78135d942c42455f6a0850dbe809b2bbb0cfeadd1224"
+    },
+    {
+      "input": "8.317995280027389e-57",
+      "json": "8.317995280027389e-57",
+      "canonicalPayload": "{\"value\":8.317995280027389e-57}",
+      "payloadHash": "1ceeb9c46158168262ace2a0d93da8045acc14d0e5b848d31f62315780460a13"
+    },
+    {
+      "input": "-8.317995280027389e-57",
+      "json": "-8.317995280027389e-57",
+      "canonicalPayload": "{\"value\":-8.317995280027389e-57}",
+      "payloadHash": "25792acb15c748f39d822d506758cefa522ecf7ab6777b277e4b6a6795485561"
+    },
+    {
+      "input": "6.217331615276635e-123",
+      "json": "6.217331615276635e-123",
+      "canonicalPayload": "{\"value\":6.217331615276635e-123}",
+      "payloadHash": "1d8199ee970ded8cef99451c94ee83611fb9a9875a8cfd31a0c77b31a2101bb5"
+    },
+    {
+      "input": "-6.217331615276635e-123",
+      "json": "-6.217331615276635e-123",
+      "canonicalPayload": "{\"value\":-6.217331615276635e-123}",
+      "payloadHash": "4eb03001a427e809e5d70e5f703f264f3fa1d53a0d4c128698216fc86622a7e4"
+    },
+    {
+      "input": "2.036161156371236e-33",
+      "json": "2.036161156371236e-33",
+      "canonicalPayload": "{\"value\":2.036161156371236e-33}",
+      "payloadHash": "137729073b6dd1e713f3104aa3ffed5824b295e90caefb005e8876a28caf4a77"
+    },
+    {
+      "input": "-2.036161156371236e-33",
+      "json": "-2.036161156371236e-33",
+      "canonicalPayload": "{\"value\":-2.036161156371236e-33}",
+      "payloadHash": "7761a0736935fcb3db1e8b08d594fa7c45a784191c966b4fdcc83520f10b90e8"
+    },
+    {
+      "input": "9.805670305155218e-115",
+      "json": "9.805670305155218e-115",
+      "canonicalPayload": "{\"value\":9.805670305155218e-115}",
+      "payloadHash": "78eaa22b0dba35ef609f69d1df3186c6276a01ece8a3f2c9a1b3149830d90ff6"
+    },
+    {
+      "input": "-9.805670305155218e-115",
+      "json": "-9.805670305155218e-115",
+      "canonicalPayload": "{\"value\":-9.805670305155218e-115}",
+      "payloadHash": "b7a4852e8a7c693010fb3f1e184b8f24a101033ebb5172507e49fa4c7b8e8738"
+    },
+    {
+      "input": "6.892247203737497e-185",
+      "json": "6.892247203737497e-185",
+      "canonicalPayload": "{\"value\":6.892247203737497e-185}",
+      "payloadHash": "8a538acd64179d8f1128da7816da1dc2a8241a8bdaf874343d60916bfe093b8f"
+    },
+    {
+      "input": "-6.892247203737497e-185",
+      "json": "-6.892247203737497e-185",
+      "canonicalPayload": "{\"value\":-6.892247203737497e-185}",
+      "payloadHash": "6dfe3726e4666410bb69f8100776b150975a16e9653a5cb6a0d313f5f489f7e3"
+    },
+    {
+      "input": "8.732760817743838e-47",
+      "json": "8.732760817743838e-47",
+      "canonicalPayload": "{\"value\":8.732760817743838e-47}",
+      "payloadHash": "6b25e6973a0ac1d772f36ad1356cc37f8d5269a269ed5c0b1c299be355ba0f27"
+    },
+    {
+      "input": "-8.732760817743838e-47",
+      "json": "-8.732760817743838e-47",
+      "canonicalPayload": "{\"value\":-8.732760817743838e-47}",
+      "payloadHash": "efb2088697c54415bbc1e021738b782b2ddb71f20c4245fbc12d69920d7946ea"
+    },
+    {
+      "input": "4.389694755896926e-29",
+      "json": "4.389694755896926e-29",
+      "canonicalPayload": "{\"value\":4.389694755896926e-29}",
+      "payloadHash": "7924fed94d03fbe415f13e9f943d9272abc6e4d6fbe85116490462288402a5b7"
+    },
+    {
+      "input": "-4.389694755896926e-29",
+      "json": "-4.389694755896926e-29",
+      "canonicalPayload": "{\"value\":-4.389694755896926e-29}",
+      "payloadHash": "1b5565a8f7640d259b838511bfeff4d0f991b89622d9460fe61c0dc428535003"
+    },
+    {
+      "input": "9.880481529049576e-23",
+      "json": "9.880481529049576e-23",
+      "canonicalPayload": "{\"value\":9.880481529049576e-23}",
+      "payloadHash": "5c40f6700534bcd9876ae93e3e6f081a2506e720866181366a02f0880cb2fe9f"
+    },
+    {
+      "input": "-9.880481529049576e-23",
+      "json": "-9.880481529049576e-23",
+      "canonicalPayload": "{\"value\":-9.880481529049576e-23}",
+      "payloadHash": "12d978c94cfebbdb5e2f7e6cfa14bba9da69979afe3ed3eeebdc88d8e0796ccd"
+    },
+    {
+      "input": "3.3154610767960545e-93",
+      "json": "3.3154610767960545e-93",
+      "canonicalPayload": "{\"value\":3.3154610767960545e-93}",
+      "payloadHash": "c724246031dddeee4bd0f8e904907ef4f5b7b3d1a65aa6426ffcb333280e7855"
+    },
+    {
+      "input": "-3.3154610767960545e-93",
+      "json": "-3.3154610767960545e-93",
+      "canonicalPayload": "{\"value\":-3.3154610767960545e-93}",
+      "payloadHash": "858e47cf1d74d199ff8477117b3ee9080e9b7fd40a214ab9fd5c7d7ec2b93608"
+    },
+    {
+      "input": "2.4120905147865416e-287",
+      "json": "2.4120905147865416e-287",
+      "canonicalPayload": "{\"value\":2.4120905147865416e-287}",
+      "payloadHash": "9e3b5a7fdbf21d34ff9640547dbf8d3f41497f320b4652f2fc765f4903602b70"
+    },
+    {
+      "input": "-2.4120905147865416e-287",
+      "json": "-2.4120905147865416e-287",
+      "canonicalPayload": "{\"value\":-2.4120905147865416e-287}",
+      "payloadHash": "e411385592c04dd1ac5b65fd14154974048bf4441a47126e9693d09c24ed6254"
+    },
+    {
+      "input": "9.064360180869698e-65",
+      "json": "9.064360180869698e-65",
+      "canonicalPayload": "{\"value\":9.064360180869698e-65}",
+      "payloadHash": "92541cc4e32672cc17e55181ec63dda6919072120b4c71842c10254662f48eb9"
+    },
+    {
+      "input": "-9.064360180869698e-65",
+      "json": "-9.064360180869698e-65",
+      "canonicalPayload": "{\"value\":-9.064360180869698e-65}",
+      "payloadHash": "2cc1674b8a95bf5ddbeb6de78962cce1cb13f22ab8dc044fd5d8822f38c3c976"
+    },
+    {
+      "input": "1.046082418318838e-62",
+      "json": "1.046082418318838e-62",
+      "canonicalPayload": "{\"value\":1.046082418318838e-62}",
+      "payloadHash": "2772580b0fa50c7b0184491ca26f5b0c62d8b0aa862418407a5791f39054b574"
+    },
+    {
+      "input": "-1.046082418318838e-62",
+      "json": "-1.046082418318838e-62",
+      "canonicalPayload": "{\"value\":-1.046082418318838e-62}",
+      "payloadHash": "469dc293a29da5ed5745238e6b936fb43708126e5278d2692978da36b189d854"
+    },
+    {
+      "input": "9.887231778353453e-193",
+      "json": "9.887231778353453e-193",
+      "canonicalPayload": "{\"value\":9.887231778353453e-193}",
+      "payloadHash": "5bbee68a94c85427b657586a87d30ab0bcf6e3e118c077c0b447360141263bde"
+    },
+    {
+      "input": "-9.887231778353453e-193",
+      "json": "-9.887231778353453e-193",
+      "canonicalPayload": "{\"value\":-9.887231778353453e-193}",
+      "payloadHash": "53a1946ac6db28102d058e3684c03377cbf5240f92cfccdb00cd2298983da272"
+    },
+    {
+      "input": "5.945449032820761e-39",
+      "json": "5.945449032820761e-39",
+      "canonicalPayload": "{\"value\":5.945449032820761e-39}",
+      "payloadHash": "fbe6eee18198113676733e3f845e7e1144cc2920b40a467e125aeaba03d2d98e"
+    },
+    {
+      "input": "-5.945449032820761e-39",
+      "json": "-5.945449032820761e-39",
+      "canonicalPayload": "{\"value\":-5.945449032820761e-39}",
+      "payloadHash": "8a3e6075c8cef382c73c785bdda35ccb4c5bd344f0adadcdb31e0e3d8cf4ce29"
+    },
+    {
+      "input": "4.594188345596194e-9",
+      "json": "4.594188345596194e-9",
+      "canonicalPayload": "{\"value\":4.594188345596194e-9}",
+      "payloadHash": "18841630b58948ee3acaf07954fcd63c0f656a372d0be05bb73ed3c972412029"
+    },
+    {
+      "input": "-4.594188345596194e-9",
+      "json": "-4.594188345596194e-9",
+      "canonicalPayload": "{\"value\":-4.594188345596194e-9}",
+      "payloadHash": "35f114a8ca7691f714dab6da768354a6229a4ba11ca23b0d1001e7288e2346ee"
+    },
+    {
+      "input": "7.294016535393893e-75",
+      "json": "7.294016535393893e-75",
+      "canonicalPayload": "{\"value\":7.294016535393893e-75}",
+      "payloadHash": "609b6fe10be190f049a773fc0f6646e52fc35b2cf16c825ed8002a568977d12f"
+    },
+    {
+      "input": "-7.294016535393893e-75",
+      "json": "-7.294016535393893e-75",
+      "canonicalPayload": "{\"value\":-7.294016535393893e-75}",
+      "payloadHash": "b0c0c85b7e8b0bbdb40fa4396e46c8f703c9ec8755b17ea1dce330162a204516"
+    },
+    {
+      "input": "8.744190320372582e-101",
+      "json": "8.744190320372582e-101",
+      "canonicalPayload": "{\"value\":8.744190320372582e-101}",
+      "payloadHash": "93127940de0f00abf9bb884653606afe19a49d7d1bae805568a1ebe6f123ed07"
+    },
+    {
+      "input": "-8.744190320372582e-101",
+      "json": "-8.744190320372582e-101",
+      "canonicalPayload": "{\"value\":-8.744190320372582e-101}",
+      "payloadHash": "1581bc5efa08f80afd31db060615f12a9b8ebd64073960363f90137f16a28c19"
+    },
+    {
+      "input": "2.357071143575013e-291",
+      "json": "2.357071143575013e-291",
+      "canonicalPayload": "{\"value\":2.357071143575013e-291}",
+      "payloadHash": "38e073585fcc1002741b3f4cfd582a5695a602959d97d2e17cb8a7b2ae385878"
+    },
+    {
+      "input": "-2.357071143575013e-291",
+      "json": "-2.357071143575013e-291",
+      "canonicalPayload": "{\"value\":-2.357071143575013e-291}",
+      "payloadHash": "3f9a341bef72307df0e8fe9433d033525986403648642ee645149c55f786f0b0"
+    },
+    {
+      "input": "8.852199422195553e-133",
+      "json": "8.852199422195553e-133",
+      "canonicalPayload": "{\"value\":8.852199422195553e-133}",
+      "payloadHash": "0e1fa9282b503c0179c11ccc3d9fc6e2ca6e5af448c3a81c5ad1cda887460ace"
+    },
+    {
+      "input": "-8.852199422195553e-133",
+      "json": "-8.852199422195553e-133",
+      "canonicalPayload": "{\"value\":-8.852199422195553e-133}",
+      "payloadHash": "43c4bbf8b69d32932d2c441179c9bce634e26889e4628bb7323ea412aa8254eb"
+    },
+    {
+      "input": "6.291561423800885e-303",
+      "json": "6.291561423800885e-303",
+      "canonicalPayload": "{\"value\":6.291561423800885e-303}",
+      "payloadHash": "522f2b6a8c12bfd4d35cb86947e77ff906aa482652aaa4d7638f37920c3e123b"
+    },
+    {
+      "input": "-6.291561423800885e-303",
+      "json": "-6.291561423800885e-303",
+      "canonicalPayload": "{\"value\":-6.291561423800885e-303}",
+      "payloadHash": "a7b5aeec085a7260f7053a9d56bf385e3f38693139d206d6c06498d8ce827074"
+    },
+    {
+      "input": "6.645160097628831e-253",
+      "json": "6.645160097628831e-253",
+      "canonicalPayload": "{\"value\":6.645160097628831e-253}",
+      "payloadHash": "6824646ab7b20bea9f5a30fc010f03583c5732e596a4fea0fc883de6d5bb91ae"
+    },
+    {
+      "input": "-6.645160097628831e-253",
+      "json": "-6.645160097628831e-253",
+      "canonicalPayload": "{\"value\":-6.645160097628831e-253}",
+      "payloadHash": "44f4a3793997084800e1c4335787ab40db1c7e2eac15d0b0d1db0b4389488fb2"
+    },
+    {
+      "input": "7.696704314090312e-135",
+      "json": "7.696704314090312e-135",
+      "canonicalPayload": "{\"value\":7.696704314090312e-135}",
+      "payloadHash": "df43325f255488b033dd9271e8f3b8f7e8765e17355219c0330539a20a7d1198"
+    },
+    {
+      "input": "-7.696704314090312e-135",
+      "json": "-7.696704314090312e-135",
+      "canonicalPayload": "{\"value\":-7.696704314090312e-135}",
+      "payloadHash": "b82b059ae7e4ddba822ef3a509a89231c29f345b886b0bb18dcffe9de2301b02"
+    },
+    {
+      "input": "7.898059090599417e-213",
+      "json": "7.898059090599417e-213",
+      "canonicalPayload": "{\"value\":7.898059090599417e-213}",
+      "payloadHash": "5ddf821efba5350a4acb3fcb342a6652e97fafeb923c02e3252a5573433a8690"
+    },
+    {
+      "input": "-7.898059090599417e-213",
+      "json": "-7.898059090599417e-213",
+      "canonicalPayload": "{\"value\":-7.898059090599417e-213}",
+      "payloadHash": "a39faabf153de2c59a046307d47f897b05f52c9d2ac9e4203e84fdfa9af384d1"
+    },
+    {
+      "input": "8.78305250685662e-127",
+      "json": "8.78305250685662e-127",
+      "canonicalPayload": "{\"value\":8.78305250685662e-127}",
+      "payloadHash": "a774cee16dc3c26e5842e640e3e827b9253af476cdbf671386307424bef34919"
+    },
+    {
+      "input": "-8.78305250685662e-127",
+      "json": "-8.78305250685662e-127",
+      "canonicalPayload": "{\"value\":-8.78305250685662e-127}",
+      "payloadHash": "4693470633d8b21f56609b3abc41643eab9c2951860a74bd497410fd02a6f618"
+    },
+    {
+      "input": "2.881313137710094e-113",
+      "json": "2.881313137710094e-113",
+      "canonicalPayload": "{\"value\":2.881313137710094e-113}",
+      "payloadHash": "6e83892bbd4339446a88c3b5dc33ba201aebdc13d937e3ac15382d684eba80d7"
+    },
+    {
+      "input": "-2.881313137710094e-113",
+      "json": "-2.881313137710094e-113",
+      "canonicalPayload": "{\"value\":-2.881313137710094e-113}",
+      "payloadHash": "5fa99da5852c78c51d5b22236468be7d9b723c8bf8ae0785d44e5b1d1977c7df"
+    },
+    {
+      "input": "7.856014956720174e-27",
+      "json": "7.856014956720174e-27",
+      "canonicalPayload": "{\"value\":7.856014956720174e-27}",
+      "payloadHash": "87db6d1524131b388c70aaae6541b4be0e76a7210c1e8460b8d6fec6ea6aaa09"
+    },
+    {
+      "input": "-7.856014956720174e-27",
+      "json": "-7.856014956720174e-27",
+      "canonicalPayload": "{\"value\":-7.856014956720174e-27}",
+      "payloadHash": "b64ae9e01be06c026dce06495ab096a582ae6d16bcd0a674d6f41cda1445293f"
+    },
+    {
+      "input": "7.950734788551927e-185",
+      "json": "7.950734788551927e-185",
+      "canonicalPayload": "{\"value\":7.950734788551927e-185}",
+      "payloadHash": "d4f30619d390aeb84302f7cc123d7fbe95a185bc261a858aa76de19e8d8311b8"
+    },
+    {
+      "input": "-7.950734788551927e-185",
+      "json": "-7.950734788551927e-185",
+      "canonicalPayload": "{\"value\":-7.950734788551927e-185}",
+      "payloadHash": "0aac38ba3cd81c0a3fe4744e9b57bed75b46cb5eeb66b6b471b6f28e90b55f8d"
+    },
+    {
+      "input": "4.895080513320863e-99",
+      "json": "4.895080513320863e-99",
+      "canonicalPayload": "{\"value\":4.895080513320863e-99}",
+      "payloadHash": "fda88d97d7871f03a8c53a9616d20c9f36c4eeade4343330cf7476033625002f"
+    },
+    {
+      "input": "-4.895080513320863e-99",
+      "json": "-4.895080513320863e-99",
+      "canonicalPayload": "{\"value\":-4.895080513320863e-99}",
+      "payloadHash": "0b97d41c0e07af00df0fc310027e9e88d9352065da5a2c02eabb38f38697567d"
+    },
+    {
+      "input": "1.0311326351016762e-264",
+      "json": "1.0311326351016762e-264",
+      "canonicalPayload": "{\"value\":1.0311326351016762e-264}",
+      "payloadHash": "b3ea52d41abb8248365ba5e60df665f563674cf4bf1df2cd0661d8496bdaf23e"
+    },
+    {
+      "input": "-1.0311326351016762e-264",
+      "json": "-1.0311326351016762e-264",
+      "canonicalPayload": "{\"value\":-1.0311326351016762e-264}",
+      "payloadHash": "15ec95348da9a425e45419a3f2a894491f6ae4ba65df668a5e651a84ed3dee8a"
+    },
+    {
+      "input": "3.5099946791306137e-203",
+      "json": "3.5099946791306137e-203",
+      "canonicalPayload": "{\"value\":3.5099946791306137e-203}",
+      "payloadHash": "b1031d34cb8922f537609ceca13d096dcf6a7bb0c9e081737df00db98152c9e2"
+    },
+    {
+      "input": "-3.5099946791306137e-203",
+      "json": "-3.5099946791306137e-203",
+      "canonicalPayload": "{\"value\":-3.5099946791306137e-203}",
+      "payloadHash": "1d6e2a882c7520fc06913bcbe437726be4d1f6794e1f1395ebad3c56831c4b84"
+    },
+    {
+      "input": "1.0486151961609722e-160",
+      "json": "1.0486151961609722e-160",
+      "canonicalPayload": "{\"value\":1.0486151961609722e-160}",
+      "payloadHash": "f6a59a7953d633224a3d0029400ab11675594465a4dec8cfdc54e78f5b60ce5e"
+    },
+    {
+      "input": "-1.0486151961609722e-160",
+      "json": "-1.0486151961609722e-160",
+      "canonicalPayload": "{\"value\":-1.0486151961609722e-160}",
+      "payloadHash": "53d096def2f54b82deef1561655ffe9b2769ed28be83df1c73695731efe50060"
+    },
+    {
+      "input": "5.05513949226588e-103",
+      "json": "5.05513949226588e-103",
+      "canonicalPayload": "{\"value\":5.05513949226588e-103}",
+      "payloadHash": "e52be0a923031d6d4e7247cd3affeb3fd401cb84c64109542e1d6a33d5211dbc"
+    },
+    {
+      "input": "-5.05513949226588e-103",
+      "json": "-5.05513949226588e-103",
+      "canonicalPayload": "{\"value\":-5.05513949226588e-103}",
+      "payloadHash": "8e781ae555924eb06e4db49e70e4fde0732479fb5a0db6802ab97ed649f69c2e"
+    },
+    {
+      "input": "9.52153778076172e-233",
+      "json": "9.52153778076172e-233",
+      "canonicalPayload": "{\"value\":9.52153778076172e-233}",
+      "payloadHash": "d3503b32df5e94b67ebf3bc15637795a8b655ea7126995a8d4fb0cc8d2635457"
+    },
+    {
+      "input": "-9.52153778076172e-233",
+      "json": "-9.52153778076172e-233",
+      "canonicalPayload": "{\"value\":-9.52153778076172e-233}",
+      "payloadHash": "bb3cbde4d9d219f48ddebf986f31a7eafab81d7d1024d0fedec5340a861ad7ac"
+    },
+    {
+      "input": "3.1833665343001484e-55",
+      "json": "3.1833665343001484e-55",
+      "canonicalPayload": "{\"value\":3.1833665343001484e-55}",
+      "payloadHash": "5993dd2e0a6436b10ac1ae285864ef9e850ec04dcaead35728823fc3f5702138"
+    },
+    {
+      "input": "-3.1833665343001484e-55",
+      "json": "-3.1833665343001484e-55",
+      "canonicalPayload": "{\"value\":-3.1833665343001484e-55}",
+      "payloadHash": "e4ced6ca3ba547d526540afb88f2db7688bf53055a880d578979fe33c24fbfc6"
+    },
+    {
+      "input": "1.0459850313141942e-188",
+      "json": "1.0459850313141942e-188",
+      "canonicalPayload": "{\"value\":1.0459850313141942e-188}",
+      "payloadHash": "c319c6ee9c68132ba2c5156e54b648cf1e67ab498204784e1f82e78472a0b5fc"
+    },
+    {
+      "input": "-1.0459850313141942e-188",
+      "json": "-1.0459850313141942e-188",
+      "canonicalPayload": "{\"value\":-1.0459850313141942e-188}",
+      "payloadHash": "9152b26364a226bb9eef36c86b82f413b3518444d5ae8360c4c27db1241d9ae7"
+    },
+    {
+      "input": "9.620533063076436e-91",
+      "json": "9.620533063076436e-91",
+      "canonicalPayload": "{\"value\":9.620533063076436e-91}",
+      "payloadHash": "297fe531238014c738be0795abccc3270974dec8155dbac2ebeb68bbf9dcf15f"
+    },
+    {
+      "input": "-9.620533063076436e-91",
+      "json": "-9.620533063076436e-91",
+      "canonicalPayload": "{\"value\":-9.620533063076436e-91}",
+      "payloadHash": "783da999e7bde6a89871dd185830cf6aeef2395c682929525ebe9e49d908cab1"
+    },
+    {
+      "input": "6.111102852970362e-117",
+      "json": "6.111102852970362e-117",
+      "canonicalPayload": "{\"value\":6.111102852970362e-117}",
+      "payloadHash": "bd8abbdfc248f462337f33f98c46b825141198e4f6a32c0006cc7437c21bc61f"
+    },
+    {
+      "input": "-6.111102852970362e-117",
+      "json": "-6.111102852970362e-117",
+      "canonicalPayload": "{\"value\":-6.111102852970362e-117}",
+      "payloadHash": "b244ce7a886432d93801af2b0f6e5c05140d466cc6446a9b56720da2e46cb3d1"
+    },
+    {
+      "input": "4.441991270519792e-255",
+      "json": "4.441991270519792e-255",
+      "canonicalPayload": "{\"value\":4.441991270519792e-255}",
+      "payloadHash": "787d867db4e58c86a21374f955c03782f1adb77a418f3e2f9dc2d953eb6f9629"
+    },
+    {
+      "input": "-4.441991270519792e-255",
+      "json": "-4.441991270519792e-255",
+      "canonicalPayload": "{\"value\":-4.441991270519792e-255}",
+      "payloadHash": "0c754ed42dd2c7b41aa8c50d462637f32ccf046717de6fe7d865efaf646a325f"
+    },
+    {
+      "input": "7.65464005433023e-193",
+      "json": "7.65464005433023e-193",
+      "canonicalPayload": "{\"value\":7.65464005433023e-193}",
+      "payloadHash": "2bbdfff70ada186dc6f520c4c279baa16be1fbc43ad2875f9d3166e2e1c3f856"
+    },
+    {
+      "input": "-7.65464005433023e-193",
+      "json": "-7.65464005433023e-193",
+      "canonicalPayload": "{\"value\":-7.65464005433023e-193}",
+      "payloadHash": "617ef88348bc4802b7e85bd63fbecedcec274c662b5f04ec077c690a0ccb85fc"
+    },
+    {
+      "input": "6.632280665449797e-255",
+      "json": "6.632280665449797e-255",
+      "canonicalPayload": "{\"value\":6.632280665449797e-255}",
+      "payloadHash": "ceea6e272fa62a1964c52c3a50f5e4bd3a542b9c2ecb12381139024b666c0a62"
+    },
+    {
+      "input": "-6.632280665449797e-255",
+      "json": "-6.632280665449797e-255",
+      "canonicalPayload": "{\"value\":-6.632280665449797e-255}",
+      "payloadHash": "174f380470deccc3fda5b34eaac3ee4abeb1862f13926ab55f36229e53f0e4d8"
+    },
+    {
+      "input": "1.1021506264805794e-9",
+      "json": "1.1021506264805794e-9",
+      "canonicalPayload": "{\"value\":1.1021506264805794e-9}",
+      "payloadHash": "5a055d6f008ca8b911d772a2d10996f3eec426489f9d113058ac568def32d86c"
+    },
+    {
+      "input": "-1.1021506264805794e-9",
+      "json": "-1.1021506264805794e-9",
+      "canonicalPayload": "{\"value\":-1.1021506264805794e-9}",
+      "payloadHash": "d35a14cd1da5be30d29bfae2471e3eee4d527cf5dff3826640edee94e0c488c9"
+    },
+    {
+      "input": "3.209273581393063e-243",
+      "json": "3.209273581393063e-243",
+      "canonicalPayload": "{\"value\":3.209273581393063e-243}",
+      "payloadHash": "a7aca44984f6c6c62451c570e4d979e0961160d75a5e766c7b22565c6604ce8c"
+    },
+    {
+      "input": "-3.209273581393063e-243",
+      "json": "-3.209273581393063e-243",
+      "canonicalPayload": "{\"value\":-3.209273581393063e-243}",
+      "payloadHash": "fa1d097cbbc7ddd9a9e0024a4b047166aa3c7299065955da423c6dec2555372f"
+    },
+    {
+      "input": "1.153258154168725e-37",
+      "json": "1.153258154168725e-37",
+      "canonicalPayload": "{\"value\":1.153258154168725e-37}",
+      "payloadHash": "2ecc5791438374743e4fa0bcab59882d322262a4afbf1bbfceabd45644cd0a22"
+    },
+    {
+      "input": "-1.153258154168725e-37",
+      "json": "-1.153258154168725e-37",
+      "canonicalPayload": "{\"value\":-1.153258154168725e-37}",
+      "payloadHash": "57fd9e132e5a137f66bbc20b17f727b74e50c36d87fc0ba2193d741e6296c9d2"
+    },
+    {
+      "input": "7.69402380939573e-71",
+      "json": "7.69402380939573e-71",
+      "canonicalPayload": "{\"value\":7.69402380939573e-71}",
+      "payloadHash": "19700b635f280c650330c7c9e8b58f0c9694ec55d4381258e975b070a3995912"
+    },
+    {
+      "input": "-7.69402380939573e-71",
+      "json": "-7.69402380939573e-71",
+      "canonicalPayload": "{\"value\":-7.69402380939573e-71}",
+      "payloadHash": "7b734a33c8fcc1ff21f2a04a9e20bb4a8f2bd3d3f4bcde5c16ca091a5c1f863f"
+    },
+    {
+      "input": "4.474940042942762e-29",
+      "json": "4.474940042942762e-29",
+      "canonicalPayload": "{\"value\":4.474940042942762e-29}",
+      "payloadHash": "bc81a30da48feb0d3e549b2edd30a18f64aa8ac4f85e6e3f4ef784d7ed199811"
+    },
+    {
+      "input": "-4.474940042942762e-29",
+      "json": "-4.474940042942762e-29",
+      "canonicalPayload": "{\"value\":-4.474940042942762e-29}",
+      "payloadHash": "43d98503cf90172bb4295e79ecb6710ef874776001bf9e395c63712ed421e079"
+    },
+    {
+      "input": "1.2075683558359743e-79",
+      "json": "1.2075683558359743e-79",
+      "canonicalPayload": "{\"value\":1.2075683558359743e-79}",
+      "payloadHash": "4b93725e6390db3076688e93213b6e7d139701c0b6bb773d00c17de56ee90924"
+    },
+    {
+      "input": "-1.2075683558359743e-79",
+      "json": "-1.2075683558359743e-79",
+      "canonicalPayload": "{\"value\":-1.2075683558359743e-79}",
+      "payloadHash": "8e8bf5a26e285f763a78d5649ae048c41e6bef21690cd233f310271997728729"
+    },
+    {
+      "input": "6.936024589464068e-81",
+      "json": "6.936024589464068e-81",
+      "canonicalPayload": "{\"value\":6.936024589464068e-81}",
+      "payloadHash": "b6e867b96f5db74550f7b9d29fcfe4d11b16fe3e8dd2065c4a483f0e137235f0"
+    },
+    {
+      "input": "-6.936024589464068e-81",
+      "json": "-6.936024589464068e-81",
+      "canonicalPayload": "{\"value\":-6.936024589464068e-81}",
+      "payloadHash": "0ab274a486f663bb850556058f3bcc8d6675195ccec2af304197fb18c5f53d19"
+    },
+    {
+      "input": "1.9759323252364994e-195",
+      "json": "1.9759323252364994e-195",
+      "canonicalPayload": "{\"value\":1.9759323252364994e-195}",
+      "payloadHash": "50adc6f95019742b329d7d3a923fa5c82778e6638370b3c00e0453f46d8a4857"
+    },
+    {
+      "input": "-1.9759323252364994e-195",
+      "json": "-1.9759323252364994e-195",
+      "canonicalPayload": "{\"value\":-1.9759323252364994e-195}",
+      "payloadHash": "2477be2a8d69a0df4bb3c746981798c55749d1d99bcf5a92ef704d6f80de3896"
+    },
+    {
+      "input": "1.8280161768198015e-265",
+      "json": "1.8280161768198015e-265",
+      "canonicalPayload": "{\"value\":1.8280161768198015e-265}",
+      "payloadHash": "f2960299a7be64fcd11e8179cf61b2d4da00f196601cb8e672b520aea3842c0b"
+    },
+    {
+      "input": "-1.8280161768198015e-265",
+      "json": "-1.8280161768198015e-265",
+      "canonicalPayload": "{\"value\":-1.8280161768198015e-265}",
+      "payloadHash": "9746722183d87461a316b84aab1e2ae3851d67db442184ddf1a660ada714a2fb"
+    },
+    {
+      "input": "1.524586928077042e-231",
+      "json": "1.524586928077042e-231",
+      "canonicalPayload": "{\"value\":1.524586928077042e-231}",
+      "payloadHash": "88064cd8b6d1a8a350e5a2e09c323838ca7f91186902e928999010049aa01608"
+    },
+    {
+      "input": "-1.524586928077042e-231",
+      "json": "-1.524586928077042e-231",
+      "canonicalPayload": "{\"value\":-1.524586928077042e-231}",
+      "payloadHash": "6f629bc23a9bc6ac4d722eb27f19762d1af387ffbd06432cb8f3b62d29246dc8"
+    },
+    {
+      "input": "8.6034985948354e-257",
+      "json": "8.6034985948354e-257",
+      "canonicalPayload": "{\"value\":8.6034985948354e-257}",
+      "payloadHash": "eedcb84d2faa048d857e9dfa7ee8adad8284fbb85e0b41a7f01e91d7e944f73f"
+    },
+    {
+      "input": "-8.6034985948354e-257",
+      "json": "-8.6034985948354e-257",
+      "canonicalPayload": "{\"value\":-8.6034985948354e-257}",
+      "payloadHash": "6bb34b20b588abdf81d6fbe751bf27f9b4385004699795399c3d773af257c2ec"
+    },
+    {
+      "input": "8.34361061360687e-115",
+      "json": "8.34361061360687e-115",
+      "canonicalPayload": "{\"value\":8.34361061360687e-115}",
+      "payloadHash": "aab2931584c599f3d0ca4e8f0d0ec02ec86230a9a139cfa2c0615f411f33e1ca"
+    },
+    {
+      "input": "-8.34361061360687e-115",
+      "json": "-8.34361061360687e-115",
+      "canonicalPayload": "{\"value\":-8.34361061360687e-115}",
+      "payloadHash": "8a6d76e65299ac1f94519db9720b2984a4fff89cee331914fd040d308664697a"
+    }
+  ]
+}

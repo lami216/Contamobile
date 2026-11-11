@@ -7,6 +7,7 @@ source=repo/'approved-runtime';target=repo/'approved-android/app/src/main/assets
 if (target/'demo-data.js').exists():(target/'demo-data.js').unlink()
 for name,digest in json.loads((source/'reference-sha256.json').read_text()).items():
     assert hashlib.sha256((source/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==digest, 'Reference changed: '+name
+    (target/name).parent.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(source/name,target/name)
 for name in ['native-adapter.js','native.css','activation.html','activation.css','activation.js']:shutil.copyfile(source/name,target/name)
 fonts=target/'assets';fonts.mkdir(exist_ok=True)

@@ -1,7 +1,7 @@
-name: Contatools distribution candidate v27
+name: Contatools distribution candidate v29
 on:
   push:
-    branches: [main, feat/customer-phone-replacement-20261107]
+    branches: [main, feat/android-dual-access-20261111]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: candidate-v27-${{ github.ref }}
+  group: candidate-v29-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verified_bytes:
@@ -18,8 +18,8 @@ jobs:
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/customer-phone-replacement-20261107')
-    runs-on: ubuntu-latest
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/android-dual-access-20261111')
+    runs-on: ubuntu-24.04
     outputs:
       run_id: ${{ steps.prior.outputs.run_id }}
     steps:
@@ -36,17 +36,40 @@ jobs:
           runs=api(f'repos/{repo}/actions/workflows/contatools-candidate.yml/runs?head_sha={sha}&status=completed&per_page=30')['workflow_runs']
           for run in runs:
               if run['head_sha']!=sha or run['conclusion']!='success':continue
-              if run['event'] not in ['push','workflow_dispatch'] or run['head_branch'] not in ['main','feat/customer-phone-replacement-20261107']:continue
+              if run['event'] not in ['push','workflow_dispatch'] or run['head_branch'] not in ['main','feat/android-dual-access-20261111']:continue
               artifacts=api(f'repos/{repo}/actions/runs/{run["id"]}/artifacts')['artifacts']
               names={a['name'] for a in artifacts if not a['expired'] and a['size_in_bytes']>0}
-              if {'alkarna-candidate-v27','alkarna-candidate-v27-proof'}<=names:
+              if {'alkarna-candidate-v29','alkarna-candidate-v29-proof'}<=names:
                   found=str(run['id']);break
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('run_id='+found+'\n')
           if found:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(f'Exact tested APK retained from [verified run {found}](https://github.com/{repo}/actions/runs/{found}) for commit {sha}.\n')
           PY
+  runtime_access:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - name: Install isolated pinned browser test tools
+        run: |
+          npm install --prefix ui-tools --no-save --package-lock=false playwright@1.62.1
+          ui-tools/node_modules/.bin/playwright install chromium
+          python3 scripts/prepare-approved-dependencies.py
+      - name: Verify dual access, financial receipts, privacy, navigation and camera messages
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/ui-tools/node_modules/playwright
+          PLAYWRIGHT_USE_BUNDLED: '1'
+        run: |
+          node --test scripts/test-android-access.mjs
+          node scripts/test-android-access-ux.mjs
+          node scripts/test-play-readiness-ux.mjs
   native_compile:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -68,7 +91,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Prepare exact pinned runtime and independent test-only license fixtures
         run: |
           python3 scripts/prepare-approved-dependencies.py
@@ -76,13 +99,13 @@ jobs:
           node scripts/prepare-license-fixtures.mjs
       - name: Compile native app and instrumentation and run JVM tests without release credentials
         run: |
-          gradle -p approved-android -PalkarnaAuditDebugTests=true -PalkarnaVersionCode=27 -PalkarnaVersionName=1.0.26 :app:testDebugUnitTest :app:compileDebugAndroidTestJavaWithJavac --rerun-tasks --no-daemon --stacktrace
+          gradle -p approved-android -PalkarnaAuditDebugTests=true -PalkarnaVersionCode=29 -PalkarnaVersionName=1.0.28 :app:testDebugUnitTest :app:compileDebugAndroidTestJavaWithJavac --rerun-tasks --no-daemon --stacktrace
           python3 scripts/verify-native-jvm-results.py approved-android/app/build/test-results/testDebugUnitTest approved-android/app/build/test-results/testDebugUnitTest/execution-summary.json
       - name: Retain independent native preflight evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-native-compile-v27-proof
+          name: alkarna-native-compile-v29-proof
           path: |
             approved-android/app/build/reports/tests
             approved-android/app/build/test-results/testDebugUnitTest
@@ -95,8 +118,8 @@ jobs:
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/customer-phone-replacement-20261107')
-    runs-on: ubuntu-latest
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/android-dual-access-20261111')
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +167,42 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Prepare bounded emulator-only root readiness for unchanged v25 tests
+        run: |
+          cat > "$RUNNER_TEMP/current-v25-ready.sh" <<'SH'
+          set -euo pipefail
+          mkdir -p v25-acceptance-proof
+          log=v25-acceptance-proof/root-readiness.txt
+          : > "$log"
+          ready=false
+          for attempt in 1 2 3; do
+            echo "root readiness attempt $attempt" >> "$log"
+            if ! timeout 30s adb wait-for-device >> "$log" 2>&1; then continue; fi
+            emulator=''
+            if emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$log" | tr -d '\r'); then :; else emulator=''; fi
+            if [ "$emulator" != 1 ]; then
+              if [ -n "$emulator" ]; then echo 'Not an emulator; refusing root' >> "$log"; cat "$log"; exit 1; fi
+              continue
+            fi
+            uid=''
+            if uid=$(timeout 10s adb shell id -u 2>> "$log" | tr -d '\r'); then :; else uid=''; fi
+            if [ "$uid" = 0 ]; then ready=true; break; fi
+            if timeout 15s adb root >> "$log" 2>&1; then :; else
+              echo 'Root request transport closed; verifying actual readiness' >> "$log"
+            fi
+            if timeout 30s adb wait-for-device >> "$log" 2>&1; then
+              uid=''; emulator=''
+              if uid=$(timeout 10s adb shell id -u 2>> "$log" | tr -d '\r'); then :; else uid=''; fi
+              if emulator=$(timeout 10s adb shell getprop ro.kernel.qemu 2>> "$log" | tr -d '\r'); then :; else emulator=''; fi
+              if [ "$uid" = 0 ] && [ "$emulator" = 1 ]; then ready=true; break; fi
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 1; fi
+          done
+          cat "$log"
+          test "$ready" = true
+          # No test or business operation is retried or modified.
+          exec bash scripts/test-current-v25-acceptance.sh
+          SH
       - name: Current v25 Android injected-transport cases, v17 upgrade and same-v25 idempotent reinstall
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -151,7 +210,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: bash scripts/test-current-v25-acceptance.sh
+          script: bash "$RUNNER_TEMP/current-v25-ready.sh"
       - name: Keep only synthetic acceptance logs and honest scope
         if: always()
         uses: actions/upload-artifact@v4
@@ -161,20 +220,20 @@ jobs:
           retention-days: 30
           if-no-files-found: error
   candidate:
-    needs: [verified_bytes, native_compile, current_v25_acceptance]
+    needs: [verified_bytes, runtime_access, native_compile, current_v25_acceptance]
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/customer-phone-replacement-20261107') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/android-dual-access-20261111') &&
       needs.verified_bytes.outputs.run_id == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     env:
-      CANDIDATE_VERSION_CODE: '27'
-      CANDIDATE_APK: candidate-output/alkarna-1.0.26-v27.apk
-      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19 20 21 22 23 24 25 26'
-      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '26'
-      ALKARNA_PREVIOUS_APK_SHA256: 7226c40c95aed22d474aa146b7d53681c701a7818b2fed1a89820a41c461df45
+      CANDIDATE_VERSION_CODE: '29'
+      CANDIDATE_APK: candidate-output/alkarna-1.0.28-v29.apk
+      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28'
+      ALKARNA_HIGHEST_DISTRIBUTED_CODE: '28'
+      ALKARNA_PREVIOUS_APK_SHA256: 9fde991e118b464dce9649bb3f86b9d20bbe5ebf01bbce3726f66265bb77bb59
     steps:
       - uses: actions/checkout@v4
         with:
@@ -193,7 +252,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Download the owner-confirmed actually distributed APK, never reconstruct it
         env:
           GH_TOKEN: ${{ github.token }}
@@ -256,9 +315,19 @@ jobs:
           gh run download 42062927038 --repo lami216/Contamobile --name alkarna-candidate-v26 --dir baseline-v26
           mv baseline-v26/alkarna-1.0.25-v26.apk baseline-v26/alkarna-approved.apk
           echo "7226c40c95aed22d474aa146b7d53681c701a7818b2fed1a89820a41c461df45  baseline-v26/alkarna-approved.apk" | sha256sum --check
-          python3 scripts/verify-candidate-apk.py baseline baseline-v26/alkarna-approved.apk > candidate-output/baseline-verified.json
+          test "$(gh api repos/lami216/Contamobile/actions/runs/42388697915 --jq .head_sha)" = f4f65f261c82f0c9693b4a142796ac1def4c2544
+          test "$(gh api repos/lami216/Contamobile/actions/runs/42388697915 --jq .conclusion)" = success
+          gh run download 42388697915 --repo lami216/Contamobile --name alkarna-candidate-v27 --dir baseline-v27
+          mv baseline-v27/alkarna-1.0.26-v27.apk baseline-v27/alkarna-approved.apk
+          echo "174da0f4e076250cda7aa436f9b776d1b6bebd5c60a6cd543d5702b9ac4a55e3  baseline-v27/alkarna-approved.apk" | sha256sum --check
+          test "$(gh api repos/lami216/Contamobile/actions/runs/43057716368 --jq .head_sha)" = fd621872ba20ad2149ad6910d76f9ac30494bf90
+          test "$(gh api repos/lami216/Contamobile/actions/runs/43057716368 --jq .conclusion)" = success
+          gh run download 43057716368 --repo lami216/Contamobile --name alkarna-candidate-v28 --dir baseline-v28
+          mv baseline-v28/alkarna-1.0.27-v28.apk baseline-v28/alkarna-approved.apk
+          echo "9fde991e118b464dce9649bb3f86b9d20bbe5ebf01bbce3726f66265bb77bb59  baseline-v28/alkarna-approved.apk" | sha256sum --check
+          python3 scripts/verify-candidate-apk.py baseline baseline-v28/alkarna-approved.apk > candidate-output/baseline-verified.json
       - name: Verify every original baseline retains the permanent identity
-        run: python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk
+        run: python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk baseline-v27/alkarna-approved.apk baseline-v28/alkarna-approved.apk
       - name: Existing source checks and deterministic scheduling policy
         run: |
           bash -n scripts/test-candidate-upgrade.sh
@@ -284,10 +353,11 @@ jobs:
           PLAYWRIGHT_USE_BUNDLED: '1'
         run: |
           npm install --prefix "$RUNNER_TEMP/release-audit-tools" --no-package-lock --ignore-scripts playwright@1.62.1
-          node "$RUNNER_TEMP/release-audit-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          node "$RUNNER_TEMP/release-audit-tools/node_modules/playwright/cli.js" install chromium
           node scripts/test-storage-integrity.mjs
           node scripts/test-runtime-integrity.mjs
           node scripts/test-invoice-ux.mjs
+          node scripts/test-play-readiness-ux.mjs
           node scripts/test-signed-accounts.mjs
           node scripts/test-accounting-parity.mjs
           node scripts/test-accounting-reset.mjs
@@ -305,22 +375,22 @@ jobs:
         run: python3 scripts/prepare-approved-signing.py
       - name: Build ONCE with actual public production settings and explicit version
         run: |
-          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=27 -PalkarnaVersionName=1.0.26 --rerun-tasks --no-daemon --stacktrace
+          gradle -p approved-android :app:assembleRelease :app:assembleReleaseAndroidTest :app:testReleaseUnitTest -PalkarnaVersionCode=29 -PalkarnaVersionName=1.0.28 --rerun-tasks --no-daemon --stacktrace
           python3 scripts/verify-native-jvm-results.py approved-android/app/build/test-results/testReleaseUnitTest candidate-proof/jvm-release-summary.json
-          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.26-v27.apk
-          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.26-v27.apk > candidate-output/candidate-verified.json
-          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.26-v27.apk
-          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk candidate-output/alkarna-1.0.26-v27.apk
-          sha256sum candidate-output/alkarna-1.0.26-v27.apk > candidate-output/SHA256SUMS.txt
+          cp approved-android/app/build/outputs/apk/release/app-release.apk candidate-output/alkarna-1.0.28-v29.apk
+          python3 scripts/verify-candidate-apk.py candidate candidate-output/alkarna-1.0.28-v29.apk > candidate-output/candidate-verified.json
+          python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.28-v29.apk
+          python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk baseline-v27/alkarna-approved.apk baseline-v28/alkarna-approved.apk candidate-output/alkarna-1.0.28-v29.apk
+          sha256sum candidate-output/alkarna-1.0.28-v29.apk > candidate-output/SHA256SUMS.txt
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact v13 through v26 updates, both license types and approved lifecycle workflows
+      - name: Exact v13 through v28 updates on Android 16, both license types and approved lifecycle workflows
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           arch: x86_64
           profile: pixel_2
           disable-animations: true
@@ -328,8 +398,8 @@ jobs:
       - name: Preserve exact tested customer bytes
         uses: actions/upload-artifact@v4
         with:
-          name: alkarna-candidate-v27
-          path: candidate-output/alkarna-1.0.26-v27.apk
+          name: alkarna-candidate-v29
+          path: candidate-output/alkarna-1.0.28-v29.apk
           compression-level: 0
           retention-days: 90
       - name: Separate integration-test APK and public inspection evidence
@@ -341,7 +411,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: alkarna-candidate-v27-proof
+          name: alkarna-candidate-v29-proof
           path: |
             candidate-proof
             candidate-output/*.json
