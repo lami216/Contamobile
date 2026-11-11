@@ -314,9 +314,10 @@ final class AccountAccessClient {
         }
         // Reserve the complete dispatch envelope budget before any durable pending write.
         JSONObject envelope = new JSONObject().put("operation", "sync.push").put("payload", payload).put("sessionToken", sessionToken)
-                .put("challengeId", "a".repeat(160)).put("signature", "a".repeat(86));
+                .put("challengeId", padding(160)).put("signature", padding(86));
         AccountProtocol.require(envelope.toString().getBytes(StandardCharsets.UTF_8).length <= 1048576, "ACCOUNT_REQUEST_TOO_LARGE");
     }
+    private static String padding(int length) { char[] value = new char[length]; Arrays.fill(value, 'a'); return new String(value); }
     private static JSONObject verifier(String code) throws Exception {
         byte[] salt = new byte[32]; new SecureRandom().nextBytes(salt);
         return new JSONObject().put("iterations", ITERATIONS).put("salt", ProtocolJson.base64(salt)).put("hash", ProtocolJson.base64(derive(code, salt, ITERATIONS)));
