@@ -1,5 +1,19 @@
 # Android account access — interaction plan
 
+## Follow-up: establishment access and direct device approval
+
+Use one customer-facing name, `حساب منشأة` / `Compte d’établissement`. Email and phone remain identifiers for the same entry task; online sharing and local single-phone storage are operating modes explained before consent, not different customer categories. A phone request is an administrative device-approval request following the independent outside-app agreement. Its number and device binding identify the request; approval must never imply that a payment occurred inside the app.
+
+After an authenticated request, show its pending state and refresh it while the entry page is visible and connected, with one request at a time and a manual refresh. Approval reveals one deliberate receive/open action. Never create a replacement local shop merely because approval is pending, declined, unavailable or expired. Native code owns signed deadline/status enforcement and background status checks so leaving the entry screen cannot bypass an administrative stop.
+
+Preserve the normal local login for installed licensed customers. The existing alternate-account action remains available on that login screen, and the owner-only phone-link flow preserves the exact old owner and shop. Do not migrate their local database, credentials, drafts, license clock or backup settings as part of relabeling.
+
+Native entry automatically chooses the usual local runtime when the installed license is valid; account switching is explicit. Approved local account status is refreshed natively while connected and on resume, so a signed administrative stop is enforced without requiring a visit to this page. An offline handset remains governed by its stored fixed deadline. Status or renewal acceptance must never serve as a substitute for the local user's password; native renewal updates only the license/binding, and the ordinary local login remains authoritative.
+
+The manual-license screen retains device code, valid-license details, file/text import, direct Contatools receipt and technical support by telephone. Remove its WhatsApp activation/renewal link and all purchase-like contact prompts in both languages. Technical authorization, fixed deadline, expiry and administrative stop remain explicit and never erase accounting data. This is an implementation plan for the consumption-only model; it does not assert Google Play approval.
+
+Acceptance covers Arabic/French entry and pending approval, narrow screens, error/declined/approved states, one-at-a-time refresh, no activation without explicit acceptance, no activation/renewal WhatsApp destinations, preserved manual file import and unchanged local owner/shop/accounting records.
+
 The approved Arabic/French WebView ledger remains the accounting interface. The new entry page asks for one identifier and one secret. An email identifies a shared institution and requires a live connection; a Mauritanian phone number (eight digits beginning 2, 3 or 4) requests approval for this exact local installation. The disclosure and privacy link appear before submission. No price, payment link or purchase invitation appears.
 
 Pending approval is explicit: check status, then deliberately install the approved activation. A valid existing local license has a separate entry leading to the unchanged local user login. Linking existing accounts is available only to the authenticated local owner and sends that exact owner/shop scope. It cannot select an arbitrary owner or reset a password.

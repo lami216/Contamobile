@@ -51,13 +51,13 @@ public class ApprovedRuntimeTest {
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
         until("document.querySelector('.activation-contact img').naturalWidth>0");
-        assertEquals("true",js("document.querySelector('#contact-whatsapp').href.includes(document.querySelector('#device-code').textContent)"));
+        assertEquals("true",js("!document.querySelector('#contact-whatsapp,#contact-send,a[href*=\"wa.me\"]')&&!!document.querySelector('#license-file')&&!!document.querySelector('#license-text')&&!!document.querySelector('#install-text')"));
         String activationDevice=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
         assertTrue(activationDevice.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
         assertEquals("false",js("NativeHost.licenseAllowed()"));
         String license=TestLicenseIssuer.issue(activationDevice,"perpetual",0);
         js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
-        until("!document.querySelector('#continue').hidden");assertEquals("true",js("new URL(document.querySelector('#contact-whatsapp').href).searchParams.get('text').includes('مساعدة')"));capture("activation-valid");
+        until("!document.querySelector('#continue').hidden");assertEquals("true",js("!document.querySelector('#contact-whatsapp,#contact-send')&&document.querySelector('#contact-call').getAttribute('href')==='tel:49823328'"));capture("activation-valid");
         js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));

@@ -27,6 +27,11 @@ final class ExistingLicenseAccess {
   if(!hasAccessPage())return; // Original signed v13-v27 binaries have no access selector.
   var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertTrue("The legacy entry must have a valid existing fixture license",new DeviceLicense(context).status().getBoolean("valid"));
+  if(context.getPackageManager().getPackageInfo(context.getPackageName(),0).getLongVersionCode()>=29){
+   until(activity,"location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'");
+   assertEquals("Existing customers enter their usual local login directly", "false",js(activity,"!!document.querySelector('#legacy')"));
+   return;
+  }
   until(activity,"!!document.querySelector('#legacy:not(:disabled)')");
   js(activity,"document.querySelector('#legacy').click();true");
   until(activity,"location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'");

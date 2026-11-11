@@ -83,7 +83,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 28
+test "$CANDIDATE_VERSION_CODE" = 29
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -91,9 +91,9 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All fifteen originally distributed versions are mandatory for this candidate.
+# All sixteen originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -109,6 +109,10 @@ assert_offline account-access-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountAccessTest -e accountAccessIsolation true "$runner" | tee "$proof_dir/AccountAccessTest.txt"
 grep -Eq '^OK \(8 tests\)' "$proof_dir/AccountAccessTest.txt"
 assert_offline account-access-network-after
+adb shell pm clear "$app"
+assert_offline offline-account-control-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.OfflineAccountControlTest -e offlineAccountIsolation true "$runner" | tee "$proof_dir/OfflineAccountControlTest.txt"
+assert_offline offline-account-control-network-after
 adb shell pm clear "$app"
 assert_offline cloud-backup-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
@@ -142,12 +146,13 @@ import json,re
 from pathlib import Path
 sources=Path('approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved')
 proof=Path('candidate-proof');suites=[]
-for suite,prefix in [('AccountAccessTest','ACCOUNT ACCESS CASE PASS'),('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS'),('OwnerUsernameRecoveryTest','OWNER USERNAME RECOVERY CASE PASS'),('AccountingParityTest','ACCOUNTING PARITY CASE PASS'),('DeviceCloudLifecycleTest','DEVICE CLOUD LIFECYCLE CASE PASS'),('BootstrapSupportOutcomeTest','BOOTSTRAP SUPPORT OUTCOME CASE PASS'),('PhoneReplacementTest','PHONE REPLACEMENT CASE PASS')]:
+for suite,prefix in [('AccountAccessTest','ACCOUNT ACCESS CASE PASS'),('OfflineAccountControlTest','OFFLINE ACCOUNT CONTROL CASE PASS'),('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS'),('OwnerUsernameRecoveryTest','OWNER USERNAME RECOVERY CASE PASS'),('AccountingParityTest','ACCOUNTING PARITY CASE PASS'),('DeviceCloudLifecycleTest','DEVICE CLOUD LIFECYCLE CASE PASS'),('BootstrapSupportOutcomeTest','BOOTSTRAP SUPPORT OUTCOME CASE PASS'),('PhoneReplacementTest','PHONE REPLACEMENT CASE PASS')]:
  source=(sources/f'{suite}.java').read_text(encoding='utf-8')
  expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
  assert len(expected)>=(1 if suite=='AccountingParityTest' else 6) and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
  if suite=='PhoneReplacementTest':assert len(expected)==8,'All eight customer phone replacement cases are required'
  if suite=='AccountAccessTest':assert len(expected)==8,'All eight durable online account access cases are required'
+ if suite=='OfflineAccountControlTest':assert len(expected)==15,'All fifteen direct activation, renewal and persistent-control cases are required'
  if suite=='AccountingResetTest':
   required={'resetExitRequiresConsumedScopedReceiptAndIsOneShot','ownerConsentExitsTaskBeforeAckAndLauncherReopensFreshSetupWithoutClosingAgain'}
   assert required<=set(expected),'Native owner-consent exit and one-shot receipt scenarios are mandatory'
@@ -215,7 +220,7 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDe
 grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.AccountAccessTest,mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.AccountAccessTest,mr.alkarna.mobile.approved.OfflineAccountControlTest,mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
@@ -228,7 +233,7 @@ import json,re
 from pathlib import Path
 root=Path('candidate-proof')
 checks=[]
-for baseline in range(13,28):
+for baseline in range(13,29):
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
@@ -236,8 +241,8 @@ for baseline in range(13,28):
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==90
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':28,'upgradeScenarios':30,'preservationChecks':90,'checks':checks},indent=2)+'\n',encoding='utf-8')
+assert len(checks)==96
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':29,'upgradeScenarios':32,'preservationChecks':96,'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt

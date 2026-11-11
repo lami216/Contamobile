@@ -107,15 +107,15 @@ public final class AccountAccessTest {
   JSONObject latest=payload("branch-B");push(latest);assertTrue(ack(latest).getBoolean("acknowledged"));rejected("ONLINE_RECEIPT_ACK_INVALID",()->ack(first));recreate();login();assertTrue(ack(latest).getBoolean("acknowledged"));assertFalse(pending().getBoolean("pending"));assertEquals(2,service.applied);assertEquals(2,service.pushCalls);
  }
  @Test public void utf8OversizeIsRejectedBeforeJournalCreationOrFinancialDispatch()throws Exception{
-  login();JSONObject oversized=payload("branch-A");oversized.getJSONArray("commands").getJSONObject(0).getJSONObject("payload").getJSONObject("record").put("note","محاسبة".repeat(100000));
+  login();byte[] before=encryptedBytes();JSONObject oversized=payload("branch-A");oversized.getJSONArray("commands").getJSONObject(0).getJSONObject("payload").getJSONObject("record").put("note","محاسبة".repeat(100000));
   assertTrue("The boundary test must distinguish UTF-8 bytes from Java character count",oversized.toString().length()<1048576&&oversized.toString().getBytes(StandardCharsets.UTF_8).length>1048576);
-  rejected("ACCOUNT_REQUEST_TOO_LARGE",()->push(oversized));assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertFalse(new File(context.getNoBackupFilesDir(),VAULT_FILE).exists());assertFalse(pending().getBoolean("pending"));
+  rejected("ACCOUNT_REQUEST_TOO_LARGE",()->push(oversized));assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertArrayEquals("An oversized command leaves only the unchanged noncredential entry preference",before,encryptedBytes());assertFalse(journal().has("onlinePending"));assertFalse(pending().getBoolean("pending"));
   JSONObject valid=payload("branch-A");push(valid);assertEquals("A corrected operation can proceed without a poisoned pending record",1,service.applied);
  }
  @Test public void journalWriteFailureBlocksDispatchAndFurtherOnlineCommandsUntilReopen()throws Exception{
-  login();JSONObject original=payload("branch-A");File blocker=new File(context.getNoBackupFilesDir(),VAULT_FILE+".new");assertTrue("Only this fixture's AtomicFile staging path is blocked",blocker.mkdir());
+  login();byte[] before=encryptedBytes();JSONObject original=payload("branch-A");File blocker=new File(context.getNoBackupFilesDir(),VAULT_FILE+".new");assertTrue("Only this fixture's AtomicFile staging path is blocked",blocker.mkdir());
   try{
-   rejected("ACCOUNT_STORAGE_INVALID",()->push(original));assertFalse(client.admitted());assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertFalse(new File(context.getNoBackupFilesDir(),VAULT_FILE).exists());
+   rejected("ACCOUNT_STORAGE_INVALID",()->push(original));assertFalse(client.admitted());assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertArrayEquals("The failed write keeps the exact preceding preference-only vault",before,encryptedBytes());assertFalse(journal().has("onlinePending"));
    rejected("ACCOUNT_STORAGE_INVALID",()->pending());rejected("ACCOUNT_STORAGE_INVALID",()->push(original));
   }finally{assertTrue(blocker.isDirectory());assertTrue(blocker.delete());}
   recreate();login();assertFalse(pending().getBoolean("pending"));push(original);assertEquals("The failed local save must never have reached the financial service",1,service.applied);

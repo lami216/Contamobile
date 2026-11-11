@@ -49,8 +49,10 @@ public final class MainActivity extends Activity {
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
     private boolean activationPage,activationTransitionPending,transitionToAccess;
     private volatile boolean activityResumed;
+    private volatile boolean localPollRunning;
+    private long localPollAt;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
-    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();licenseTimer.postDelayed(this,1000);}};
+    private final Runnable licensePulse=new Runnable(){public void run(){pollLocalAccount(false);if(!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
     private final java.util.Set<String> backupTransfers=ConcurrentHashMap.newKeySet();
     private final CloudBackupBridgeScope backupScope=new CloudBackupBridgeScope();
@@ -123,7 +125,7 @@ public final class MainActivity extends Activity {
             @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
         });
         web.addJavascriptInterface(new NativeHost(),"NativeHost");
-        showAccountAccess();
+        if(accounts!=null&&accounts.enterLocalAutomatically())openApp();else showAccountAccess();
         licenseTimer.postDelayed(licensePulse,1000);
     }
     public WebView getWebView(){return web;}
@@ -199,7 +201,20 @@ public final class MainActivity extends Activity {
     }
     private void accountNetworkEvent(boolean connected){
         if(!connected&&accounts!=null)accounts.disconnected();
-        runOnUiThread(()->{if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('"+(connected?"alkarna-network-available":"alkarna-account-offline")+"'))",null);});
+        runOnUiThread(()->{if(connected)pollLocalAccount(true);if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('"+(connected?"alkarna-network-available":"alkarna-account-offline")+"'))",null);});
+    }
+    /** Signed local-account decisions share the expiry gate; a network error never changes local rights. */
+    private void pollLocalAccount(boolean immediately){
+        if(!activityResumed||web==null||accounts==null||onlineMode()||!accounts.hasOfflineBinding()||localPollRunning)return;
+        long now=android.os.SystemClock.elapsedRealtime();if(!immediately&&now-localPollAt<30000)return;
+        localPollRunning=true;localPollAt=now;
+        try{accountQueue.execute(()->{
+            try{
+                JSONObject answer=accounts.command("offline-current",new JSONObject());
+                runOnUiThread(()->{if(trusted()&&!isDestroyed())web.evaluateJavascript("window.dispatchEvent(new CustomEvent('alkarna-local-account-status',{detail:"+answer+"}))",null);});
+            }catch(Exception unavailable){/* Keep the last verified fixed term and any signed suspension. */}
+            finally{localPollRunning=false;}
+        });}catch(java.util.concurrent.RejectedExecutionException busy){localPollRunning=false;}
     }
     private void accountRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||accounts==null||content==null||content.length()>1048576||command==null){accountFailure(id,"ACCOUNT_UNAVAILABLE",0);return;}
@@ -291,6 +306,17 @@ public final class MainActivity extends Activity {
               command.equals("enroll") || command.equals("status") || command.equals("activate");
           if (onlineMode() || (!beforeActivation && (activationPage || !licenseAllowed()))) {
             error(id, "يلزم تفعيل الهاتف أولًا");
+            return;
+          }
+          if (command.equals("activate") && accounts != null && accounts.hasOfflineBinding()) {
+            try { accountQueue.execute(() -> {
+              try {
+                if(isDestroyed()||!backupScope.current(page))throw new IOException("LIFECYCLE_PAGE_CLOSED");
+                JSONObject answer=accounts.command("offline-renew",new JSONObject());
+                if("active".equals(answer.optString("stage")))answer.put("stage","activated");
+                if(!isDestroyed()&&backupScope.current(page))result(id,answer);
+              } catch(Exception failure) {if(backupScope.current(page))accountFailure(id,failure.getMessage(),0);}
+            }); } catch(java.util.concurrent.RejectedExecutionException busy) {accountFailure(id,"ACCOUNT_BUSY",0);}
             return;
           }
           try {
@@ -456,7 +482,7 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){activityResumed=false;if(onlineMode())accountNetworkEvent(false);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
-    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null&&!onlineMode())dataRescue.probe();if(web!=null&&!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();if(onlineMode())accountNetworkEvent(true);if(!onlineMode()&&new File(getNoBackupFilesDir(),"cloud-backup-v1/state.bin").exists())new Thread(()->{try{CloudBackupManager.get(this).resume();}catch(Exception ignored){}},"AlKarnaBackupResume").start();}
+    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null&&!onlineMode())dataRescue.probe();if(web!=null&&!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();if(onlineMode())accountNetworkEvent(true);else pollLocalAccount(true);if(!onlineMode()&&new File(getNoBackupFilesDir(),"cloud-backup-v1/state.bin").exists())new Thread(()->{try{CloudBackupManager.get(this).resume();}catch(Exception ignored){}},"AlKarnaBackupResume").start();}
     @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(accessPage)super.onBackPressed();else showAccountAccess();return;}web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return true;if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
     @Override protected void onDestroy(){cancelBackupTransfers();if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

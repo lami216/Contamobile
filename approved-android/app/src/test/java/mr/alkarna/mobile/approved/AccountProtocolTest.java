@@ -82,4 +82,19 @@ public final class AccountProtocolTest {
         String documentHash=ProtocolJson.hash(bundle.getJSONObject("licenseDocument"));assertEquals(offline.getString("licenseDocumentHash"),documentHash);
         AccountProtocol.offline(bundle.getJSONObject("binding"),keys,request,installation,fingerprint,request.getString("deviceCode"),application,documentHash);
     }
+    private JSONObject localBinding()throws Exception{
+        return new JSONObject().put("purpose","android-offline-account").put("version",1).put("applicationId","app").put("installationId","installation").put("keyFingerprint","fingerprint").put("deviceCode","device").put("requestId","request").put("phone","22345678").put("credentialId","credential").put("credentialVersion",1).put("customerId","customer").put("localOwnerId","owner").put("localShopId","shop").put("licenseId","old-license").put("licenseDocumentHash","old-hash");
+    }
+    @Test public void legitimateRenewalChangesOnlyItsLicenseBindingNotAccountIdentity()throws Exception{
+        JSONObject old=localBinding(),renewed=copy(old).put("licenseId","new-license").put("licenseDocumentHash","new-hash").put("issuedAt",iso(NOW));
+        AccountProtocol.sameOfflineScope(old,renewed);
+        for(String name:new String[]{"purpose","version","applicationId","installationId","keyFingerprint","deviceCode","requestId","phone","credentialId","credentialVersion","customerId","localOwnerId","localShopId"})rejects(()->AccountProtocol.sameOfflineScope(old,copy(renewed).put(name,"changed")));
+    }
+    @Test public void aFreshSignedBindingCannotTakeOverTheFirstApprovedOwnerOrShop()throws Exception{
+        JSONObject request=new JSONObject().put("requestId","request").put("identifier","22345678"),old=localBinding();
+        JSONObject changed=copy(old).put("localOwnerId","another-owner").put("licenseId","new-license").put("licenseDocumentHash","new-hash");
+        JSONObject signedClaim=AccountProtocol.offline(signed("alkarna-android-offline-account",changed),issuers,request,"installation","fingerprint","device","app","new-hash");
+        rejects(()->AccountProtocol.sameOfflineScope(old,signedClaim));
+        JSONObject coerced=copy(old).put("credentialVersion","1");rejects(()->AccountProtocol.sameOfflineScope(old,coerced));
+    }
 }

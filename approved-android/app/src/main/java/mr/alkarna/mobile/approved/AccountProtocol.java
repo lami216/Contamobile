@@ -60,4 +60,8 @@ final class AccountProtocol {
         require(p.getLong("credentialVersion") > 0 && !p.getString("credentialId").isEmpty() && !p.getString("licenseId").isEmpty(), "OFFLINE_BINDING_INVALID");
         return p;
     }
+    static void sameOfflineScope(JSONObject previous, JSONObject next) throws Exception {
+        for (String key : new String[]{"purpose", "version", "applicationId", "installationId", "keyFingerprint", "deviceCode", "requestId", "phone", "credentialId", "credentialVersion", "customerId", "localOwnerId", "localShopId"})
+            require(ProtocolJson.canonical(previous.get(key)).equals(ProtocolJson.canonical(next.get(key))), "OFFLINE_BINDING_SCOPE");
+    }
 }

@@ -36,6 +36,8 @@ final class AccountAccessClient {
     private String pendingCode;
     private volatile long onlineChecked;
     private volatile boolean networkInvalid;
+    private volatile boolean offlineBound;
+    private volatile boolean localSetupRequired;
     private static final int ITERATIONS = 210000;
 
     AccountAccessClient(Context context, DeviceLicense license) throws Exception {
@@ -48,16 +50,24 @@ final class AccountAccessClient {
         try { stored = vault.read(); } catch (Exception corrupted) { storageFailed = true; stored = new JSONObject().put("version", 1); }
         this.issuers = ProtocolJson.copy(issuers);
         this.transport = transport;
+        refreshLocalFlags();
+        if (!storageFailed) try { recoverInitialBinding(); recoverRenewalBinding(); } catch (Exception invalid) { storageFailed = true; }
+        refreshLocalFlags();
     }
     boolean onlineMode() { return "online".equals(mode); }
+    boolean hasOfflineBinding() { return offlineBound; }
+    synchronized boolean enterLocalAutomatically() {
+        if (!license.status().optBoolean("valid") || localSetupRequired || stored.optBoolean("preferOnlineEntry")) return false;
+        try { command("legacy", new JSONObject()); return true; } catch (Exception unavailable) { return false; }
+    }
     synchronized DeviceLifecycleClient lifecycleClient() throws Exception {
-        if (lifecycle == null) lifecycle = new DeviceLifecycleClient(context, license);
+        if (lifecycle == null) lifecycle = transport instanceof AccountTransport ? new DeviceLifecycleClient(context, license) : new DeviceLifecycleClient(context, license, issuers, transport);
         return lifecycle;
     }
     boolean admitted() {
         if (storageFailed && !"legacy".equals(mode)) return false;
         if ("online".equals(mode)) return sessionToken != null && onlineContext != null && !networkInvalid && SystemClock.elapsedRealtime() - onlineChecked < 15000;
-        return ("legacy".equals(mode) || "offline".equals(mode)) && license.status().optBoolean("valid");
+        return ("offline".equals(mode) || "legacy".equals(mode) && !localSetupRequired) && license.status().optBoolean("valid");
     }
     void disconnected() { networkInvalid = true; }
     private void persist() throws Exception {
@@ -84,13 +94,15 @@ final class AccountAccessClient {
         if (storageFailed) AccountProtocol.require(Arrays.asList("state", "legacy", "logout").contains(command) || ("legacy".equals(mode) && Arrays.asList("bootstrap", "bootstrap-complete").contains(command)), "ACCOUNT_STORAGE_INVALID");
         switch (command) {
             case "state": return state();
-            case "legacy": AccountProtocol.require(license.status().optBoolean("valid"), "LOCAL_LICENSE_REQUIRED"); clearSession(); pendingCode = null; bootstrapCredential = null; mode = "legacy"; return active("legacy");
+            case "legacy": AccountProtocol.require(license.status().optBoolean("valid"), "LOCAL_LICENSE_REQUIRED"); AccountProtocol.require(!localSetupRequired, "OFFLINE_SETUP_CREDENTIAL_REQUIRED"); preferOnline(false); clearSession(); pendingCode = null; bootstrapCredential = null; mode = "legacy"; return active("legacy");
             case "login": return login(input);
             case "offline-request": return request(input);
             case "offline-status": return offline(false);
             case "offline-activate": return offline(true);
+            case "offline-current": return currentLocal();
+            case "offline-renew": return renewLocal();
             case "bootstrap": return bootstrap();
-            case "bootstrap-complete": bootstrapCredential = null; return acknowledgeOffline().put("completed", true);
+            case "bootstrap-complete": return completeBootstrap();
             case "online-status": return refresh();
             case "online-pending": refresh(); return pending();
             case "online-ack": return acknowledgeOnline(input);
@@ -107,10 +119,14 @@ final class AccountAccessClient {
                 .put("deviceName", (Build.MANUFACTURER + " " + Build.MODEL).trim()).put("publicJwk", identity.publicJwk());
     }
     private JSONObject active(String selected) throws Exception { return new JSONObject().put("stage", "active").put("mode", selected); }
+    private void preferOnline(boolean selected) throws Exception {
+        if (stored.optBoolean("preferOnlineEntry") == selected) return;
+        stored.put("preferOnlineEntry", selected); persist();
+    }
     private JSONObject state() throws Exception {
         JSONObject response = new JSONObject().put("mode", mode).put("legacyAvailable", license.status().optBoolean("valid")).put("deviceId", license.deviceCode());
         JSONObject record = stored.optJSONObject("offline"), request = stored.optJSONObject("request");
-        if (record != null) response.put("offline", new JSONObject().put("phone", record.getJSONObject("binding").getJSONObject("payload").getString("phone")).put("status", "active"));
+        if (record != null) response.put("offline", localState(record));
         else if (request != null) response.put("offline", new JSONObject().put("phone", request.getString("identifier")).put("status", "pending"));
         if ("online".equals(mode)) response.put("online", new JSONObject().put("connected", admitted()).put("context", onlineContext == null ? JSONObject.NULL : ProtocolJson.copy(onlineContext)));
         return response;
@@ -129,7 +145,11 @@ final class AccountAccessClient {
             JSONObject record = stored.optJSONObject("offline");
             if (record != null && identifier.equals(record.getJSONObject("binding").getJSONObject("payload").optString("phone"))) {
                 AccountProtocol.require(matches(secret, record.getJSONObject("verifier")), "ACCOUNT_AUTH_INVALID");
-                validatedBinding(record); bootstrapCredential = new JSONObject().put("phone", identifier).put("code", secret); clearSession(); mode = "offline"; return active("offline");
+                if (!license.status().optBoolean("valid")) {
+                    bindingClaims(record, record.getJSONObject("binding"), license.documentHash()); preferOnline(false); clearSession(); bootstrapCredential = null; pendingCode = null; mode = "none";
+                    JSONObject state = localState(record); return state.put("stage", state.getString("status")).put("mode", "offline");
+                }
+                validatedBinding(record); preferOnline(false); bootstrapCredential = new JSONObject().put("phone", identifier).put("code", secret); clearSession(); mode = "offline"; return active("offline");
             }
             JSONObject request = stored.optJSONObject("request");
             if (request != null && identifier.equals(request.optString("identifier"))) {
@@ -145,7 +165,7 @@ final class AccountAccessClient {
         JSONObject claims = AccountProtocol.online(answer, issuers, identity.id(), identity.fingerprint(), BuildConfig.APPLICATION_ID, System.currentTimeMillis());
         JSONObject pending = unresolved();
         if (pending != null) AccountProtocol.require(pending.getString("organizationId").equals(claims.getString("organizationId")) && pending.getString("memberId").equals(claims.getString("memberId")), "ONLINE_PENDING_OTHER_ACCOUNT");
-        clearSession(); pendingCode = null; bootstrapCredential = null; sessionToken = token; mode = "online"; acceptOnline(answer);
+        preferOnline(true); clearSession(); pendingCode = null; bootstrapCredential = null; sessionToken = token; mode = "online"; acceptOnline(answer);
         return active("online").put("context", ProtocolJson.copy(onlineContext));
     }
     private JSONObject request(JSONObject input) throws Exception {
@@ -189,25 +209,128 @@ final class AccountAccessClient {
         JSONObject entitlement = answer.optJSONObject("phoneEntitlement");
         JSONObject activation = answer.optJSONObject("activation");
         AccountProtocol.require(activation != null || entitlement != null || license.documentHash().equals(ProtocolJson.hash(verified)), "OFFLINE_ACTIVATION_REQUIRED");
-        if (activation != null) lifecycleClient().validateAccountActivation(activation, verified);
+        if (activation != null) { lifecycleClient().validateAccountActivation(activation, verified); AccountProtocol.require(claims.getString("customerId").equals(activation.getJSONObject("payload").getString("clientId")), "OFFLINE_BINDING_SCOPE"); }
+        if (entitlement != null) AccountProtocol.require(claims.getString("customerId").equals(PhoneEntitlement.snapshot(entitlement, issuers, identity.id(), identity.fingerprint(), license.deviceCode()).getString("clientId")), "OFFLINE_BINDING_SCOPE");
+        JSONObject record = new JSONObject().put("binding", binding).put("request", request.getJSONObject("payload")).put("verifier", request.getJSONObject("verifier"))
+                .put("setupRequired", !request.getJSONObject("payload").has("localOwnerId"));
+        if (activation != null) record.put("activation", activation).put("activationDocument", verified).put("ackPending", true);
+        JSONObject prepared = new JSONObject().put("record", record).put("document", verified);
+        if (entitlement != null) prepared.put("phoneEntitlement", entitlement);
+        stored.put("pendingActivation", prepared); refreshLocalFlags(); persist();
         JSONObject status = entitlement == null ? license.installOnline(document) : license.installEntitlement(document, entitlement, issuers, identity.id(), identity.fingerprint(), observed);
         AccountProtocol.require(status.optBoolean("valid"), "LOCAL_LICENSE_REQUIRED");
-        JSONObject record = new JSONObject().put("binding", binding).put("request", request.getJSONObject("payload")).put("verifier", request.getJSONObject("verifier"));
-        if (answer.optJSONObject("activation") != null) record.put("activation", answer.getJSONObject("activation")).put("activationDocument", verified).put("ackPending", true);
-        stored.put("offline", record); stored.remove("request"); persist();
+        finishInitialBinding(record);
         bootstrapCredential = new JSONObject().put("phone", claims.getString("phone")).put("code", pendingCode);
         clearSession(); pendingCode = null; mode = "offline"; return active("offline");
     }
     private JSONObject validatedBinding(JSONObject record) throws Exception {
         AccountProtocol.require(license.status().optBoolean("valid"), "LOCAL_LICENSE_REQUIRED");
-        return AccountProtocol.offline(record.getJSONObject("binding"), issuers, record.getJSONObject("request"), identity.id(), identity.fingerprint(), license.deviceCode(), BuildConfig.APPLICATION_ID, license.documentHash());
+        return bindingClaims(record, record.getJSONObject("binding"), license.documentHash());
+    }
+    private JSONObject bindingClaims(JSONObject record, JSONObject binding, String documentHash) throws Exception {
+        return AccountProtocol.offline(binding, issuers, record.getJSONObject("request"), identity.id(), identity.fingerprint(), license.deviceCode(), BuildConfig.APPLICATION_ID, documentHash);
+    }
+    private void refreshLocalFlags() {
+        JSONObject record=stored.optJSONObject("offline"),pending=stored.optJSONObject("pendingActivation");
+        JSONObject staged=pending==null?null:pending.optJSONObject("record");
+        offlineBound=record!=null;localSetupRequired=record!=null&&record.optBoolean("setupRequired")||pending!=null&&(staged==null||staged.optBoolean("setupRequired"));
+    }
+    private void finishInitialBinding(JSONObject record) throws Exception {
+        stored.put("offline",record);stored.remove("request");stored.remove("pendingActivation");stored.put("preferOnlineEntry",false);persist();refreshLocalFlags();
+    }
+    /** A crash after licence installation cannot fall back to an unrelated fresh local owner. */
+    private void recoverInitialBinding() throws Exception {
+        JSONObject pending=stored.optJSONObject("pendingActivation");if(pending==null)return;
+        JSONObject record=pending.getJSONObject("record"),document=LicenseVerifier.verify(pending.getJSONObject("document").toString(),license.deviceCode());
+        JSONObject claims=bindingClaims(record,record.getJSONObject("binding"),ProtocolJson.hash(document));
+        if(!license.documentHash().equals(ProtocolJson.hash(document)))return;
+        JSONObject activation=record.optJSONObject("activation");if(activation!=null){lifecycleClient().validateAccountActivation(activation,document);AccountProtocol.require(claims.getString("customerId").equals(activation.getJSONObject("payload").getString("clientId")),"OFFLINE_BINDING_SCOPE");}
+        JSONObject entitlement=pending.optJSONObject("phoneEntitlement");if(entitlement!=null){
+            JSONObject staged=PhoneEntitlement.snapshot(entitlement,issuers,identity.id(),identity.fingerprint(),license.deviceCode());AccountProtocol.require(claims.getString("customerId").equals(staged.getString("clientId")),"OFFLINE_BINDING_SCOPE");
+            JSONObject current=license.status().optJSONObject("entitlement");boolean newer=false;if(current!=null)try{PhoneEntitlement.monotonic(staged,current);newer=true;}catch(Exception older){}
+            if(!newer)license.entitlement(entitlement,issuers,identity.id(),identity.fingerprint());
+        }
+        finishInitialBinding(record);
+    }
+    private JSONObject completeBootstrap() throws Exception {
+        JSONObject record=stored.optJSONObject("offline");
+        if(record!=null&&record.optBoolean("setupRequired")){
+            AccountProtocol.require("offline".equals(mode)&&bootstrapCredential!=null&&admitted(),"OFFLINE_SETUP_CREDENTIAL_REQUIRED");
+            record.put("setupRequired",false);persist();refreshLocalFlags();
+        }
+        bootstrapCredential=null;return acknowledgeOffline().put("completed",true);
+    }
+    private JSONObject localState(JSONObject record) throws Exception {
+        JSONObject status = license.status(); String code = status.optString("code");
+        String selected = status.optBoolean("valid") ? "active" : code.equals("ENTITLEMENT_SUSPENDED") ? "suspended" : code.contains("EXPIRED") ? "expired" : code.equals("ENTITLEMENT_REPLACED") ? "replaced" : "unavailable";
+        return new JSONObject().put("phone", record.getJSONObject("binding").getJSONObject("payload").getString("phone"))
+                .put("bound", true).put("status", selected).put("setupRequired", record.optBoolean("setupRequired")).put("renewalAvailable", record.optBoolean("renewalAvailable"));
+    }
+    /** A server response can refresh the same installed binding, never silently install a new document. */
+    private JSONObject currentLocal() throws Exception {
+        JSONObject record = stored.optJSONObject("offline"); AccountProtocol.require(record != null, "OFFLINE_ACCOUNT_REQUIRED");
+        recoverRenewalBinding(); record = stored.getJSONObject("offline"); lifecycleClient().ensureCurrentEnrollment(); acknowledgeOffline();
+        long observed = SystemClock.elapsedRealtime(); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
+        applyLocalCurrent(record, answer, Math.max(0, SystemClock.elapsedRealtime() - observed));
+        try { lifecycleClient().acknowledgeInstalledAccountEntitlement(); } catch (Exception retryLater) { /* Keep the durable accepted receipt and original clock. */ }
+        JSONObject state = localState(stored.getJSONObject("offline")); return state.put("stage", state.getString("status")).put("mode", "offline");
+    }
+    private JSONObject checkedCurrent(JSONObject record, JSONObject answer) throws Exception {
+        JSONObject document = LicenseVerifier.verify(answer.get("licenseDocument").toString(), license.deviceCode());
+        JSONObject binding = answer.getJSONObject("binding"), previous = record.getJSONObject("binding");
+        JSONObject old = bindingClaims(record, previous, previous.getJSONObject("payload").getString("licenseDocumentHash"));
+        JSONObject next = bindingClaims(record, binding, ProtocolJson.hash(document)); AccountProtocol.sameOfflineScope(old, next);
+        AccountProtocol.require(next.getString("licenseId").equals(document.getJSONObject("payload").getString("licenseId")), "OFFLINE_BINDING_INVALID");
+        AccountProtocol.require(record.getJSONObject("request").getString("requestId").equals(answer.getString("requestId")), "OFFLINE_BINDING_INVALID");
+        return document;
+    }
+    private void applyLocalCurrent(JSONObject record, JSONObject answer, long observed) throws Exception {
+        JSONObject document = checkedCurrent(record, answer), entitlement = answer.optJSONObject("phoneEntitlement");
+        if (entitlement != null) {
+            JSONObject p = PhoneEntitlement.snapshot(entitlement, issuers, identity.id(), identity.fingerprint(), license.deviceCode());
+            AccountProtocol.require(p.getString("licenseDocumentHash").equals(ProtocolJson.hash(document)) && p.getString("licenseId").equals(document.getJSONObject("payload").getString("licenseId")), "OFFLINE_BINDING_INVALID");
+            AccountProtocol.require(p.getString("clientId").equals(answer.getJSONObject("binding").getJSONObject("payload").getString("customerId")), "OFFLINE_BINDING_SCOPE");
+            license.entitlement(entitlement, issuers, identity.id(), identity.fingerprint(), observed);
+        }
+        boolean sameDocument = license.documentHash().equals(ProtocolJson.hash(document));
+        if (sameDocument) record.put("binding", ProtocolJson.copy(answer.getJSONObject("binding")));
+        record.put("renewalAvailable", answer.optJSONObject("entitlementOffer") != null || !sameDocument); persist();
+    }
+    /** Stage the new signed same-account binding BEFORE the licence's atomic write. */
+    private void stageRenewalBinding(JSONObject document, JSONObject entitlement, long observed) throws Exception {
+        JSONObject record = stored.getJSONObject("offline"); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
+        JSONObject current = checkedCurrent(record, answer), p = PhoneEntitlement.snapshot(entitlement, issuers, identity.id(), identity.fingerprint(), license.deviceCode());
+        JSONObject fresh = PhoneEntitlement.snapshot(answer.getJSONObject("phoneEntitlement"), issuers, identity.id(), identity.fingerprint(), license.deviceCode());
+        PhoneEntitlement.monotonic(p, fresh);
+        AccountProtocol.require(p.getString("clientId").equals(answer.getJSONObject("binding").getJSONObject("payload").getString("customerId")), "OFFLINE_BINDING_SCOPE");
+        if (!"active".equals(fresh.getString("status"))) license.entitlement(answer.getJSONObject("phoneEntitlement"), issuers, identity.id(), identity.fingerprint(), observed);
+        AccountProtocol.require("active".equals(fresh.getString("status")) && p.getLong("sequence") == fresh.getLong("sequence") && p.getLong("bindingGeneration") == fresh.getLong("bindingGeneration") && ProtocolJson.hash(document).equals(ProtocolJson.hash(current)), "ENTITLEMENT_STATUS_CHANGED");
+        record.put("pendingBinding", new JSONObject().put("binding", ProtocolJson.copy(answer.getJSONObject("binding"))).put("document", ProtocolJson.copy(document))); persist();
+    }
+    private void recoverRenewalBinding() throws Exception {
+        JSONObject record = stored.optJSONObject("offline"), pending = record == null ? null : record.optJSONObject("pendingBinding");
+        if (pending == null) return;
+        JSONObject document = LicenseVerifier.verify(pending.getJSONObject("document").toString(), license.deviceCode());
+        JSONObject previous = record.getJSONObject("binding"); JSONObject old = bindingClaims(record, previous, previous.getJSONObject("payload").getString("licenseDocumentHash"));
+        JSONObject next = bindingClaims(record, pending.getJSONObject("binding"), ProtocolJson.hash(document)); AccountProtocol.sameOfflineScope(old, next);
+        if (!license.documentHash().equals(ProtocolJson.hash(document))) return;
+        record.put("binding", ProtocolJson.copy(pending.getJSONObject("binding"))).put("renewalAvailable", false); record.remove("pendingBinding"); persist();
+    }
+    private JSONObject renewLocal() throws Exception {
+        AccountProtocol.require(stored.has("offline"), "OFFLINE_ACCOUNT_REQUIRED"); currentLocal();
+        JSONObject answer = lifecycleClient().activateWithGuard(this::stageRenewalBinding); recoverRenewalBinding();
+        if (!license.status().optBoolean("valid")) { JSONObject state = localState(stored.getJSONObject("offline")); return state.put("stage", state.getString("status")); }
+        validatedBinding(stored.getJSONObject("offline")); preferOnline(false); clearSession(); pendingCode = null; bootstrapCredential = null;
+        if(localSetupRequired){mode="none";return localState(stored.getJSONObject("offline")).put("stage","setup-required").put("mode","none");}mode = "legacy";
+        return active("legacy").put("license", license.status()).put("ackPending", answer.optBoolean("ackPending"));
     }
     private JSONObject acknowledgeOffline() throws Exception {
         JSONObject record = stored.optJSONObject("offline");
-        if (!"offline".equals(mode) || record == null || !record.optBoolean("ackPending")) return new JSONObject().put("ackPending", false);
-        validatedBinding(record);
+        if (record == null || !record.optBoolean("ackPending")) return new JSONObject().put("ackPending", false);
+        bindingClaims(record, record.getJSONObject("binding"), license.documentHash());
         if (!networkAvailable()) return new JSONObject().put("ackPending", true);
         try {
+            lifecycleClient().ensureCurrentEnrollment();
             JSONObject receipt = lifecycleClient().acknowledgeAccountActivation(record.getJSONObject("activation"), record.getJSONObject("activationDocument"));
             if (!receipt.optBoolean("ackPending", true)) { record.put("ackPending", false); persist(); }
             return receipt;

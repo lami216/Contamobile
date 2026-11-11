@@ -76,4 +76,25 @@ public final class PhoneEntitlementTest {
     JSONObject temporary=EntitlementClock.begin(payload,null,1000000,1000);EntitlementClock.remaining(payload,temporary,1010000,11000);rejects(()->EntitlementClock.remaining(payload,temporary,1000,12000));
     rejects(()->verify(copy(payload).put("type","perpetual")));rejects(()->verify(copy(payload).put("endsAt",JSONObject.NULL)));
   }
+  @Test public void signedSuspensionRequiresExactScopeAndAnAdvancedDecisionGeneration()throws Exception{
+    JSONObject active=verify(payload),paused=verify(copy(payload).put("status","suspended").put("reasonCode","OWNER_SUSPENDED").put("bindingGeneration",3).put("issuedAt",2000));
+    PhoneEntitlement.monotonic(active,paused);
+    rejects(()->verify(copy(paused).put("reasonCode","REPLACED_PHONE")));
+    rejects(()->verify(copy(paused).put("currentInstallationId","another-installation")));
+    rejects(()->PhoneEntitlement.monotonic(active,verify(copy(paused).put("bindingGeneration",2))));
+    rejects(()->PhoneEntitlement.monotonic(paused,active));
+    rejects(()->PhoneEntitlement.monotonic(active,verify(copy(paused).put("endsAt",200000))));
+  }
+  @Test public void resumingTheSameAssignmentNeverExtendsItsFixedDeadline()throws Exception{
+    JSONObject active=verify(payload),paused=verify(copy(payload).put("status","suspended").put("reasonCode","OWNER_SUSPENDED").put("bindingGeneration",3).put("issuedAt",12000));
+    JSONObject resumed=verify(copy(payload).put("bindingGeneration",4).put("issuedAt",16000));
+    PhoneEntitlement.monotonic(paused,resumed);
+    rejects(()->PhoneEntitlement.monotonic(paused,verify(copy(resumed).put("endsAt",200000))));
+    rejects(()->PhoneEntitlement.monotonic(paused,verify(copy(resumed).put("licenseDocumentHash","b".repeat(64)))));
+    JSONObject clock=EntitlementClock.begin(active,null,1000000,1000);
+    JSONObject pausedClock=EntitlementClock.begin(paused,clock,1011000,12000);
+    JSONObject resumedClock=EntitlementClock.begin(resumed,pausedClock,1015000,16000);
+    assertEquals(84000,EntitlementClock.remaining(resumed,resumedClock,1015000,16000));
+    assertEquals(0,EntitlementClock.remaining(resumed,resumedClock,1100000,101000));
+  }
 }
