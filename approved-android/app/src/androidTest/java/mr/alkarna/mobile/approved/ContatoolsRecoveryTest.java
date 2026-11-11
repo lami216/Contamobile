@@ -37,7 +37,7 @@ public class ContatoolsRecoveryTest {
  @Test public void ownerRecoveryBeforeLoginAndDurableCrashRetry() throws Exception {
   JSONObject keys=wire.post("/fixture/config",new JSONObject()).getJSONObject("publicKeys");
   DeviceLicense license=new DeviceLicense(InstrumentationRegistry.getInstrumentation().getTargetContext());String licenseId=license.status().getJSONObject("license").getString("licenseId");double remaining=license.status().getJSONObject("license").getDouble("remainingSeconds");
-  activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");ContatoolsClient client=client(keys);inject(client);
+  activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:login\"]')");ContatoolsClient client=client(keys);inject(client);
   async("const {ShopDatabase,passwordDigest}=await import('https://appassets.androidplatform.net/assets/approved/database.js');window.__ctDb=await new ShopDatabase().open();await __ctDb.put('users',{id:'worker-fixture',username:'worker-fixture',name:'العامل',role:'sales',active:true,password:await passwordDigest('worker-5678')});");
   js("location.reload();true");Thread.sleep(1000);
   until("!!document.querySelector('[data-action=\"site:login\"]')");inject(client);

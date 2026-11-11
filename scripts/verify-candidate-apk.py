@@ -12,10 +12,13 @@ match=re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^'
 assert match,'Missing APK identity'
 app,code,name=match.groups();code=int(code)
 assert app=='mr.alkarna.mobile.approved'
-# The baseline is the exact signed v26 from successful run 42062927038,
-# source 8ca7cf0058b6a7c8ccf774023babb7d206e78519; it must never be rebuilt.
-assert (code,name)==((26,'1.0.25') if mode=='baseline' else (27,'1.0.26'))
-if mode=='baseline':assert actual=='7226c40c95aed22d474aa146b7d53681c701a7818b2fed1a89820a41c461df45'
+# The baseline is the exact signed v27 from successful run 42388697915,
+# source f4f65f261c82f0c9693b4a142796ac1def4c2544; it must never be rebuilt.
+assert (code,name)==((27,'1.0.26') if mode=='baseline' else (28,'1.0.27'))
+if mode=='baseline':assert actual=='174da0f4e076250cda7aa436f9b776d1b6bebd5c60a6cd543d5702b9ac4a55e3'
+if mode=='candidate':
+ target=re.search(r"^targetSdkVersion:'(\d+)'",badging,re.M)
+ assert target and int(target.group(1))==36,'Candidate must target Android API 36'
 signature=subprocess.check_output([str(sdk/'apksigner'),'verify','--verbose','--print-certs',str(apk)],text=True)
 certs=re.findall(r'Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]+)',signature)
 assert certs==[expected_cert],'Permanent signing identity changed'

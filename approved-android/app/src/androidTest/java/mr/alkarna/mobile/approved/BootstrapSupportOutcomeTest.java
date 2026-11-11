@@ -436,7 +436,7 @@ public class BootstrapSupportOutcomeTest {
   }
 
   private void openDatabase() throws Exception {
-    activity = ActivityScenario.launch(MainActivity.class);
+    activity = ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
     inject();
     until("!!document.querySelector('[data-action=\"site:setup\"]')");
     async(
@@ -469,7 +469,7 @@ public class BootstrapSupportOutcomeTest {
   private void closeAndReopen() throws Exception {
     async("__supportDb.db.close()");
     activity.close();
-    activity = ActivityScenario.launch(MainActivity.class);
+    activity = ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
     inject();
     until("!!document.querySelector('[data-action=\"site:login\"]')");
     async(

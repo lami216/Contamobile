@@ -136,7 +136,7 @@ public class AccountingResetTest {
   // the deployment origin, even while exercising the production native bridge.
   backupSingleton().set(null,new CloudBackupManager(context,(path,body)->{throw new IOException("Isolated backup outage");},true));
   Intent launcher=Intent.makeMainActivity(new ComponentName(context,MainActivity.class));
-  activity=ActivityScenario.launch(launcher);
+  activity=ActivityScenario.launch(launcher);ExistingLicenseAccess.enter(activity);
   injectResetTransport();
   until("!!document.querySelector('[data-action=\"site:setup\"]')");
   connectSyntheticResetEndpoint();
@@ -177,7 +177,7 @@ public class AccountingResetTest {
   assertTrue(AccountingResetStore.localResume(context,license).getBoolean("ackPending"));
   activationUnchanged();
 
-  activity=ActivityScenario.launch(Intent.makeMainActivity(new ComponentName(context,MainActivity.class)));
+  activity=ActivityScenario.launch(Intent.makeMainActivity(new ComponentName(context,MainActivity.class)));ExistingLicenseAccess.enter(activity);
   injectResetTransport();
   until("!!document.querySelector('[data-action=\"site:setup\"]')");
   connectSyntheticResetEndpoint();
@@ -254,13 +254,13 @@ public class AccountingResetTest {
   rejected(()->new ContatoolsClient(context,license,service.issuers,service));
   var queueField=MainActivity.class.getDeclaredField("administrationQueue");queueField.setAccessible(true);ThreadPoolExecutor supportQueue=(ThreadPoolExecutor)queueField.get(null);CountDownLatch supportHeld=new CountDownLatch(1),supportStarted=new CountDownLatch(1);
   supportQueue.execute(()->{supportStarted.countDown();try{supportHeld.await(60,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});assertTrue(supportStarted.await(10,TimeUnit.SECONDS));for(int i=0;i<8;i++)supportQueue.execute(()->{});
-  try{activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:setup\"]')");}finally{supportHeld.countDown();}
+  try{activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:setup\"]')");}finally{supportHeld.countDown();}
   async("const {ShopDatabase,passwordDigest}=await import('https://appassets.androidplatform.net/assets/approved/database.js');const {prepareFeatureState}=await import('https://appassets.androidplatform.net/assets/approved/features.js');window.__resetDb=await new ShopDatabase().open();window.__resetBlank={originId:'reset-fixture-shop',products:[],parties:[],records:[],users:[],accounts:[],warehouses:['المخزن الرئيسي'],warehouse:'المخزن الرئيسي',branding:'متجر الفحص',opening:{accounts:{},parties:{},stocks:{}}};prepareFeatureState(__resetBlank);window.__resetBusiness=structuredClone(__resetBlank);__resetBusiness.accounts=[{id:1,name:'نقدي',balance:123}];__resetBusiness.opening.accounts={1:123};await __resetDb.replace(__resetBusiness,[{id:'reset-fixture-owner',name:'مالك الفحص',username:'old-owner',role:'owner',active:true,password:await passwordDigest('1234')},{id:'worker-reset-fixture',name:'عامل',username:'worker',role:'sales',active:true,password:await passwordDigest('5678')}]);await __resetDb.put('meta',{id:'session:old-fixture',user:'reset-fixture-owner'});await __resetDb.put('snapshots',{id:'old-fixture',state:__resetBusiness});");
   JSONObject prepared=client.prepare(accepted(client.poll(target)));async("window.__resetReceipt=await __resetDb.resetAccounting("+prepared+",__resetBlank);window.__resetUsers=await __resetDb.all('users');window.__resetBootstrap=await __resetDb.accountingResetBootstrap();window.__resetSession=await __resetDb.get('meta','session:old-fixture');");
   assertEquals("0",js("__resetUsers.length"));assertEquals("reset-fixture-owner",text("__resetBootstrap.ownerId"));assertEquals("\"undefined\"",js("typeof __resetSession"));
   // Crash after IndexedDB commit and before native finish: same intent must be idempotent.
   recreate();JSONObject resumed=client.resumeLocal();async("window.__resetRetried=await __resetDb.resetAccounting("+resumed+",__resetBlank)");assertEquals("true",js("__resetRetried.alreadyApplied"));client.finish(receipt(resumed));client.acknowledge();
-  async("__resetDb.db.close()");activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:setup\"]')");assertEquals("false",js("!!document.querySelector('[name=name], [name=shop]')"));assertEquals("true",js("!!document.querySelector('[name=username]')&&!!document.querySelector('[name=password]')"));
+  async("__resetDb.db.close()");activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:setup\"]')");assertEquals("false",js("!!document.querySelector('[name=name], [name=shop]')"));assertEquals("true",js("!!document.querySelector('[name=username]')&&!!document.querySelector('[name=password]')"));
   js("document.querySelector('[name=username]').value='fresh-owner';document.querySelector('[name=password]').value='4321';document.querySelector('[data-action=\"site:setup\"]').click();true");until("!!document.querySelector('.nav')");
   async("const {ShopDatabase,verifyPassword}=await import('https://appassets.androidplatform.net/assets/approved/database.js');window.__resetDb=await new ShopDatabase().open();window.__resetAfter=await __resetDb.load();window.__resetOwners=await __resetDb.all('users');window.__resetPassword=await verifyPassword('4321',__resetOwners[0].password)");assertEquals("reset-fixture-shop",text("__resetAfter.originId"));assertEquals("reset-fixture-owner",text("__resetOwners[0].id"));assertEquals("true",js("__resetPassword"));assertEquals("0",js("__resetAfter.records.length"));activationUnchanged();
  }

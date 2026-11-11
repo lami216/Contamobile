@@ -536,6 +536,34 @@ final class DeviceLifecycleClient {
     }
   }
 
+  /** Account approval already installed this exact signed document. ACK is not a new activation. */
+  synchronized void validateAccountActivation(JSONObject grant, JSONObject document) throws Exception {
+    JSONObject offer = new JSONObject().put("grant", grant).put("licenseDocument", document);
+    boolean applied = installed(offer);
+    JSONObject p = activation(offer, !applied);
+    sequence(p);
+    noDowngrade(document);
+  }
+
+  /** Account approval already installed this exact signed document. ACK is not a new activation. */
+  synchronized JSONObject acknowledgeAccountActivation(JSONObject grant, JSONObject document) throws Exception {
+    JSONObject offer = new JSONObject().put("grant", grant).put("licenseDocument", document);
+    JSONObject p = activation(offer, false);
+    if (!installed(offer)) throw new IOException("ACCOUNT_ACTIVATION_NOT_INSTALLED");
+    sequence(p);
+    disk.state.put("activationPending", offer).put("licenseSequence", p.getLong("sequence"))
+        .put("lastIssuanceId", p.getString("issuanceId")).put("lastLicenseHash", p.getString("licenseDocumentHash"));
+    disk.save();
+    JSONObject result = new JSONObject().put("issuanceId", p.getString("issuanceId"));
+    try {
+      JSONObject receipt = call("license.accept", new JSONObject().put("issuanceId", p.getString("issuanceId")));
+      if (!p.getString("issuanceId").equals(receipt.optString("issuanceId"))) throw new IOException("INVALID_ACTIVATION_ACK");
+      JSONObject pending = disk.state.optJSONObject("activationPending");
+      if (pending != null && p.getString("issuanceId").equals(pending.getJSONObject("grant").getJSONObject("payload").optString("issuanceId"))) disk.state.remove("activationPending");
+      disk.save();return result.put("ackPending", false);
+    } catch (Exception unavailable) { return result.put("ackPending", true); }
+  }
+
   private JSONObject bootstrapGrant(JSONObject grant, boolean current) throws Exception {
     JSONObject p = bound(grant, "contatools-cloud-bootstrap", current);
     if (p.length() != 16

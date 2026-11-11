@@ -32,7 +32,7 @@ public class AccountingParityTest {
   assertFalse("Never replace an existing customer's activation preferences",context.getSharedPreferences("activation-v2",0).contains("state"));
   originalKeys=new HashMap<>(LicenseCompatibilityTest.keys());
   license=new DeviceLicense(context);license.install(TestLicenseIssuer.issue(license.deviceCode(),"perpetual",0));
-  activity=ActivityScenario.launch(MainActivity.class);
+  activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
   until("!!document.querySelector('[data-action=\"site:setup\"]')");
   js("document.querySelector('[name=username]').value='parity-owner';document.querySelector('[name=password]').value='1234';true");action("site:setup");
   until("!!document.querySelector('.nav')");
@@ -93,7 +93,7 @@ public class AccountingParityTest {
   check("Final negative account persisted","S.accounts[0].balance===-470&&S.products[0].qty===11");
   String before=js("JSON.stringify({accounts:S.accounts,parties:S.parties,stocks:S.products.map(p=>p.stocks),records:S.records})");
   String licenseId=license.status().getJSONObject("license").getString("licenseId");
-  activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");
+  activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:login\"]')");
   js("document.querySelector('[name=username]').value='parity-owner';document.querySelector('[name=password]').value='1234';true");action("site:login");until("!!document.querySelector('.nav')");
   assertEquals("Every accounting field survives cold start",before,js("JSON.stringify({accounts:S.accounts,parties:S.parties,stocks:S.products.map(p=>p.stocks),records:S.records})"));
   assertTrue("Activation stays valid",license.status().getBoolean("valid"));assertEquals("Activation identity unchanged",licenseId,license.status().getJSONObject("license").getString("licenseId"));

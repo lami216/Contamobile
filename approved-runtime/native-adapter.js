@@ -31,6 +31,7 @@
   activation:()=>NativeHost.openActivation()
  };
  window.NativeFiles.ownerRecovery=(command,value='')=>call('ownerRecovery',command,value);
+ window.NativeFiles.accountAccess=(command,payload={})=>{const id=crypto.randomUUID();return request(id,60000,()=>NativeHost.accountAccess(id,command,JSON.stringify(payload)))};
  window.NativeFiles.deviceLifecycle=(command,payload={})=>{const id=crypto.randomUUID();return request(id,command==='bootstrap-preview'?600000:60000,()=>NativeHost.deviceLifecycle(id,command,JSON.stringify(payload)))};
  window.NativeFiles.accountingReset=(command,payload={})=>call('accountingReset',command,JSON.stringify(payload));
  window.NativeFiles.closeAfterAccountingReset=receipt=>call('accountingReset','exit-after-reset',JSON.stringify({...receipt,purpose:'accounting-reset-exit'}));

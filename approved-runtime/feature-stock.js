@@ -3,14 +3,16 @@ import {openingState,planOpeningRecord,stockOperationRecord,adjustmentLineCount}
 
 export function installStockFeatures(api){
  let draft=null,signature='',lineId=null,opening=null,openingProduct=0,pendingNavigation=null,passNavigation=false,expenseDraft=null,removeAfterSave=null;
- const key=kind=>'alkarna-workflow-draft:'+api.actor?.id+':'+kind;
- const read=kind=>{try{return JSON.parse(localStorage.getItem(key(kind))||'null')}catch{return null}};
- const store=kind=>{if(editingId)return;try{localStorage.setItem(key(kind),JSON.stringify(kind==='expense'?expenseDraft:draft))}catch{throw Error('تعذّر حفظ المسودة. أبقِ الصفحة مفتوحة حتى إتمام العملية.')}};
- const remove=kind=>{try{localStorage.removeItem(key(kind))}catch{}};
+ const storage=globalThis.karnaWorkflowDraftStorage||localStorage;
+ const scope=()=>globalThis.karnaWorkflowScope?.()||api.actor?.id;
+ const key=kind=>'alkarna-workflow-draft:'+scope()+':'+kind;
+ const read=kind=>{try{return JSON.parse(storage.getItem(key(kind))||'null')}catch{return null}};
+ const store=kind=>{if(editingId)return;try{storage.setItem(key(kind),JSON.stringify(kind==='expense'?expenseDraft:draft))}catch{throw Error('تعذّر حفظ المسودة. أبقِ الصفحة مفتوحة حتى إتمام العملية.')}};
+ const remove=kind=>{try{storage.removeItem(key(kind))}catch{}};
  const counted=(record,line)=>{try{return adjustmentLineCount(S,record,line).after}catch{return ''}};
  const fixedCorrection=()=>view==='adjustment'&&Boolean(editingId);
  function init(){
-  const mode=view==='transfer'?'transfer':'adjustment',next=api.actor?.id+':'+mode+':'+(editingId||'new');if(signature===next&&draft)return draft;
+  const mode=view==='transfer'?'transfer':'adjustment',next=scope()+':'+mode+':'+(editingId||'new');if(signature===next&&draft)return draft;
   const record=S.records.find(r=>r.id===editingId),saved=record?null:read(mode),warehouses=activeWarehouses(S);
   draft=record?{from:record.from||record.warehouse,to:record.toWarehouse||'',note:record.note||'',lines:record.lines.map(l=>({product:l.product,quantity:mode==='transfer'?l.qty:counted(record,l)}))}:saved||{from:warehouses.includes(S.warehouse)?S.warehouse:warehouses[0],to:warehouses.find(w=>w!==S.warehouse)||'',note:'',lines:[]};
   if(!record)draft.lines=draft.lines.filter(l=>S.products.some(p=>p.id===l.product&&!p.archived));signature=next;return draft;
@@ -24,6 +26,7 @@ export function installStockFeatures(api){
  document.addEventListener('change',event=>{if(event.target.matches('select[data-feature-stock-field]')){const d=init();d[event.target.name]=event.target.value;if(d.from===d.to)d.to=activeWarehouses(S).find(w=>w!==d.from)||'';store(view==='transfer'?'transfer':'adjustment');render()}});
  return {
   afterSave(){if(removeAfterSave){remove(removeAfterSave);removeAfterSave=null;}},
+  forgetDrafts(kinds){for(const kind of kinds)remove(kind);if(kinds.includes('expense'))expenseDraft=null;if(kinds.some(kind=>kind==='transfer'||kind==='adjustment')){draft=null;signature='';lineId=null;pendingNavigation=null;}if(kinds.includes(removeAfterSave))removeAfterSave=null;},
   async before(action){
    if(action==='open:expense'){expenseDraft=read('expense')||{date:api.today()};}
    if(action==='post-cash'&&modal==='expense'){expenseDraft={...expenseDraft,...api.form()};const date=expenseDraft.date;let valid=false;try{valid=/^\d{4}-\d{2}-\d{2}$/.test(date)&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date}catch{}if(!valid)throw Error('التاريخ غير صالح');}

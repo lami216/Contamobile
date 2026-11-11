@@ -33,6 +33,8 @@ public final class MainActivity extends Activity {
     private String scannerRequest;
     private Export pendingExport;
     private DeviceLicense licensing;
+    private AccountAccessClient accounts;
+    private boolean accessPage;
     private ContatoolsClient administration;
     private AccountingResetClient accountingReset;
     private DeviceLifecycleClient deviceLifecycle;
@@ -44,10 +46,10 @@ public final class MainActivity extends Activity {
     private static final java.util.concurrent.ThreadPoolExecutor backupQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
-    private boolean activationPage,activationTransitionPending;
+    private boolean activationPage,activationTransitionPending,transitionToAccess;
     private volatile boolean activityResumed;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
-    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
+    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
     private final java.util.Set<String> backupTransfers=ConcurrentHashMap.newKeySet();
     private final CloudBackupBridgeScope backupScope=new CloudBackupBridgeScope();
@@ -63,6 +65,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         try{licensing=new DeviceLicense(this);}catch(Exception e){Log.e("AlKarna","Activation storage unavailable");}
+        try{if(licensing!=null)accounts=new AccountAccessClient(this,licensing);}catch(Exception e){Log.e("AlKarna","Account storage unavailable");}
         root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(8,14,25));
         setContentView(root);
         if(Build.VERSION.SDK_INT>=30){
@@ -91,9 +94,10 @@ public final class MainActivity extends Activity {
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){cancelBackupTransfers();}
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 String path=request.getUrl().getPath();
-                boolean activationAsset=path!=null&&(path.matches("/assets/approved/activation\\.(html|css|js)")||path.startsWith("/assets/approved/assets/"));
-                if(!activationAsset&&!licenseAllowed())return new WebResourceResponse("text/plain","UTF-8",403,"Activation required",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
+                boolean activationAsset=path!=null&&(path.matches("/assets/approved/(activation|access|privacy)\\.(html|css|js)")||path.equals("/assets/approved/platform/shared/android-access.mjs")||path.equals("/assets/approved/native-adapter.js")||path.equals("/assets/approved/native.css")||path.startsWith("/assets/approved/assets/"));
+                if(!activationAsset&&!appAllowed())return new WebResourceResponse("text/plain","UTF-8",403,"Activation required",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
                 WebResourceResponse response=assets.shouldInterceptRequest(request.getUrl());
+                if(response!=null&&path!=null&&path.endsWith(".mjs"))response.setMimeType("text/javascript");
                 return response!=null?response:new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
@@ -118,14 +122,29 @@ public final class MainActivity extends Activity {
             @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
         });
         web.addJavascriptInterface(new NativeHost(),"NativeHost");
-        if(licenseAllowed())openApp();else showActivation();
+        showAccountAccess();
         licenseTimer.postDelayed(licensePulse,1000);
     }
     public WebView getWebView(){return web;}
     private boolean licenseAllowed(){return licensing!=null&&licensing.status().optBoolean("valid");}
+    private boolean onlineMode(){return accounts!=null&&accounts.onlineMode();}
+    private boolean appAllowed(){return accounts!=null&&accounts.admitted();}
+    private void showAccountAccess(){
+        if(web==null||isFinishing()||isDestroyed())return;
+        String current=web.getUrl();
+        if(!activationPage&&current!=null&&current.startsWith(ORIGIN+"/assets/approved/index.html")){
+            if(activationTransitionPending)return;
+            transitionToAccess=true;activationTransitionPending=true;continueActivationTransition();return;
+        }
+        loadAccountAccess();
+    }
+    private void loadAccountAccess(){
+        activationTransitionPending=false;activationPage=true;accessPage=true;
+        web.loadUrl(ORIGIN+"/assets/approved/access.html");
+    }
     private void showActivation(){
-        if(activationPage||activationTransitionPending||web==null||isFinishing()||isDestroyed())return;
-        activationTransitionPending=true;continueActivationTransition();
+        if((activationPage&&!accessPage)||activationTransitionPending||web==null||isFinishing()||isDestroyed())return;
+        transitionToAccess=false;activationTransitionPending=true;continueActivationTransition();
     }
     private void continueActivationTransition(){
         if(!activationTransitionPending||web==null||isFinishing()||isDestroyed()){activationTransitionPending=false;return;}
@@ -134,17 +153,18 @@ public final class MainActivity extends Activity {
         web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return false;if(typeof window.karnaSavePosDraft==='function')window.karnaSavePosDraft();return true})()",ready->{
             if(!activationTransitionPending||isFinishing()||isDestroyed())return;
             if("false".equals(ready)){licenseTimer.postDelayed(this::continueActivationTransition,250);return;}
-            activationTransitionPending=false;activationPage=true;web.loadUrl(ORIGIN+"/assets/approved/activation.html");
+            if(transitionToAccess){loadAccountAccess();return;}
+            activationTransitionPending=false;activationPage=true;accessPage=false;web.loadUrl(ORIGIN+"/assets/approved/activation.html");
         });
     }
-    private void openApp(){if(!licenseAllowed())return;activationTransitionPending=false;activationPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
+    private void openApp(){if(!appAllowed())return;activationTransitionPending=false;activationPage=false;accessPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
     private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
     private void result(String id,JSONObject value){runOnUiThread(()->{if(web!=null&&!isDestroyed())web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null);});}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
     private void error(String id,String message){result(id,value("error",NativeUi.text(this,message)));}
     private boolean trusted(){return web!=null&&web.getUrl()!=null&&web.getUrl().startsWith(ORIGIN+"/assets/approved/");}
     private void administration(String id,String command,String content){runOnUiThread(()->{
-        if(!trusted()||activationPage||!licenseAllowed()){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        if(!trusted()||activationPage||onlineMode()||!licenseAllowed()){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
         try{administrationQueue.execute(()->{
             try{
                 if(!activityResumed&&(command.equals("register")||command.equals("poll")||command.equals("ack"))){result(id,value("stage","paused"));return;}
@@ -168,12 +188,44 @@ public final class MainActivity extends Activity {
     });}
     private void watchNetwork(){
         if(networkCallback!=null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);if(manager==null)return;
-        networkCallback=new android.net.ConnectivityManager.NetworkCallback(){@Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))runOnUiThread(()->{if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('alkarna-network-available'))",null);});}};
+        networkCallback=new android.net.ConnectivityManager.NetworkCallback(){
+            @Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){
+                if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))accountNetworkEvent(true);else accountNetworkEvent(false);
+            }
+            @Override public void onLost(android.net.Network network){accountNetworkEvent(false);}
+        };
         try{manager.registerDefaultNetworkCallback(networkCallback);}catch(Exception unavailable){networkCallback=null;}
+    }
+    private void accountNetworkEvent(boolean connected){
+        if(!connected&&accounts!=null)accounts.disconnected();
+        runOnUiThread(()->{if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('"+(connected?"alkarna-network-available":"alkarna-account-offline")+"'))",null);});
+    }
+    private void accountRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
+        if(!trusted()||accounts==null||content==null||content.length()>1048576||command==null){accountFailure(id,"ACCOUNT_UNAVAILABLE",0);return;}
+        String url=web.getUrl();boolean index=url!=null&&url.split("\\?",2)[0].equals(ORIGIN+"/assets/approved/index.html");
+        boolean entry=url!=null&&url.split("\\?",2)[0].equals(ORIGIN+"/assets/approved/access.html");
+        if(!(index||entry)||(!entry&&java.util.Arrays.asList("login","legacy","offline-status","offline-activate").contains(command))
+            ||(!index&&java.util.Arrays.asList("bootstrap","bootstrap-complete","online-call","online-status","online-pending","online-ack").contains(command))){accountFailure(id,"ACCOUNT_PAGE_INVALID",0);return;}
+        try{JSONObject payload=new JSONObject(content);
+            if(!index&&"offline-request".equals(command)&&(payload.has("localOwnerId")||payload.has("localShopId"))){accountFailure(id,"OFFLINE_LOCAL_SCOPE_REQUIRED",0);return;}
+            administrationQueue.execute(()->{
+                try{
+                    if(!backupScope.current(page)||isDestroyed()||!activityResumed)throw new IOException("ACCOUNT_PAGE_CLOSED");
+                    JSONObject response=accounts.command(command,payload);
+                    if(backupScope.current(page)&&!isDestroyed())result(id,response);
+                }catch(Exception failure){if(backupScope.current(page))accountFailure(id,failure instanceof AccountAccessClient.Failure?((AccountAccessClient.Failure)failure).code:failure.getMessage(),failure instanceof AccountAccessClient.Failure?((AccountAccessClient.Failure)failure).status:0);}
+            });
+        }catch(java.util.concurrent.RejectedExecutionException busy){accountFailure(id,"ACCOUNT_BUSY",0);}
+        catch(Exception invalid){accountFailure(id,"ACCOUNT_REQUEST_INVALID",0);}
+    });}
+    private void accountFailure(String id,String code,int status){
+        String safe=code!=null&&code.matches("[A-Z0-9_]{3,100}")?code:"ACCOUNT_UNAVAILABLE";
+        JSONObject answer=value("error",NativeUi.french(this)?"Impossible de terminer la demande. Vérifiez la connexion et réessayez.":"تعذّر إكمال الطلب. تحقّق من الاتصال وأعد المحاولة.");
+        try{answer.put("code",safe).put("status",status);}catch(Exception ignored){}result(id,answer);
     }
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
     private void accountingResetRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
-        if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        if(!trusted()||activationPage||onlineMode()||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
         // No support queue, server response or ACK is needed to close after a
         // locally committed reset. Never expose a general remote close command.
         if("exit-after-reset".equals(command)){
@@ -236,7 +288,7 @@ public final class MainActivity extends Activity {
           }
           boolean beforeActivation =
               command.equals("enroll") || command.equals("status") || command.equals("activate");
-          if (!beforeActivation && (activationPage || !licenseAllowed())) {
+          if (onlineMode() || (!beforeActivation && (activationPage || !licenseAllowed()))) {
             error(id, "يلزم تفعيل الهاتف أولًا");
             return;
           }
@@ -249,7 +301,7 @@ public final class MainActivity extends Activity {
                         || content == null
                         || content.length() > 16384) throw new IOException("LIFECYCLE_PAGE_CLOSED");
                     if (deviceLifecycle == null)
-                      deviceLifecycle = new DeviceLifecycleClient(this, licensing);
+                      deviceLifecycle = accounts == null ? new DeviceLifecycleClient(this, licensing) : accounts.lifecycleClient();
                     JSONObject input = new JSONObject(content), answer;
                     switch (command) {
                       case "enroll":
@@ -303,12 +355,16 @@ public final class MainActivity extends Activity {
   }
     private interface BackupAction { JSONObject run(CloudBackupManager manager) throws Exception; }
     private void backupRequest(String id,boolean immediate,BackupAction action){long page=backupScope.page();runOnUiThread(()->{
-        if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){backupScope.cancel(id);error(id,"تعذّر التحقق من التفعيل المحلي");return;}
+        if(!trusted()||activationPage||onlineMode()||!licenseAllowed()||!backupScope.current(page)){backupScope.cancel(id);error(id,"تعذّر التحقق من التفعيل المحلي");return;}
         Runnable work=()->{try{if(isDestroyed()||activationPage||!backupScope.current(page))throw new IOException("PAGE_CLOSED");CloudBackupManager manager=CloudBackupManager.get(this);JSONObject answer=action.run(manager);if(!backupScope.current(page)){manager.cancelStage(id);backupTransfers.remove(id);throw new IOException("PAGE_CLOSED");}result(id,answer);}catch(Exception failure){backupScope.cancel(id);JSONObject value=value("error",NativeUi.text(this,"تعذّر تجهيز النسخ الاحتياطي. بيانات المحل محفوظة على الجهاز."));try{value.put("code",CloudBackupManager.errorCode(failure));if(failure instanceof ContatoolsClient.ServiceFailure){ContatoolsClient.ServiceFailure service=(ContatoolsClient.ServiceFailure)failure;value.put("status",service.status).put("retryAt",service.retryAt).put("permanent",service.permanent);}}catch(Exception ignored){}result(id,value);}};
         try{if(immediate)new Thread(work,"AlKarnaBackupPause").start();else backupQueue.execute(work);}catch(java.util.concurrent.RejectedExecutionException full){backupScope.cancel(id);JSONObject value=value("error","هناك طلب نسخ احتياطي جارٍ. أعد المحاولة بعد قليل.");try{value.put("code","STAGE_BUSY");}catch(Exception ignored){}result(id,value);}
     });}
     private void cancelBackupTransfers(){backupScope.changed();for(String id:backupTransfers)try{CloudBackupManager.get(this).cancelStage(id);}catch(Exception ignored){}backupTransfers.clear();}
     public final class NativeHost {
+        @JavascriptInterface public void accountAccess(String id,String command,String content){accountRequest(id,command,content);}
+        @JavascriptInterface public void openAccountAccess(){runOnUiThread(()->{if(trusted())showAccountAccess();});}
+        @JavascriptInterface public void accountContinue(){runOnUiThread(()->{if(trusted()&&accessPage&&appAllowed())openApp();});}
+        @JavascriptInterface public void openPrivacy(){runOnUiThread(()->{if(trusted())startActivity(new Intent(MainActivity.this,PrivacyActivity.class));});}
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
         @JavascriptInterface public void deviceLifecycle(String id,String command,String content){lifecycleRequest(id,command,content);}
         @JavascriptInterface public void accountingReset(String id,String command,String content){accountingResetRequest(id,command,content);}
@@ -331,11 +387,11 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void cloudBackupFinish(String id){backupRequest(id,false,manager->{try{return manager.finish(id);}finally{backupTransfers.remove(id);}});}
         @JavascriptInterface public void cloudBackupCancel(String id){backupScope.cancel(id);runOnUiThread(()->{if(trusted())new Thread(()->{try{CloudBackupManager.get(MainActivity.this).cancelStage(id);}catch(Exception ignored){}backupTransfers.remove(id);},"AlKarnaBackupCancel").start();});}
         @JavascriptInterface public void language(String language){runOnUiThread(()->{if(trusted()&&("ar".equals(language)||"fr".equals(language)))getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("language",language).apply();});}
-        @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.licenseAllowed();}
+        @JavascriptInterface public boolean licenseAllowed(){return MainActivity.this.appAllowed();}
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
         @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
-        @JavascriptInterface public void closeApp(){runOnUiThread(()->{if(trusted()&&licenseAllowed())finish();});}
-        @JavascriptInterface public void activationContinue(){runOnUiThread(()->openApp());}
+        @JavascriptInterface public void closeApp(){runOnUiThread(()->{if(trusted()&&appAllowed())finish();});}
+        @JavascriptInterface public void activationContinue(){runOnUiThread(()->{if(!trusted()||!activationPage||accessPage||!MainActivity.this.licenseAllowed()||accounts==null)return;try{accounts.command("legacy",new JSONObject());openApp();}catch(Exception failure){showAccountAccess();}});}
         @JavascriptInterface public void copyDeviceCode(){runOnUiThread(()->{if(trusted()&&licensing!=null)((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("AlKarna device",licensing.deviceCode()));});}
         @JavascriptInterface public void installActivation(String id,String content){
             try{if(licensing==null)throw new IOException();JSONObject status=licensing.install(content);result(id,status);}
@@ -347,7 +403,7 @@ public final class MainActivity extends Activity {
         });}
         @JavascriptInterface public void beginExport(String id,String name,String mime){
             try{
-                if(!licenseAllowed())throw new IOException();
+                if(!appAllowed())throw new IOException();
                 if(!id.matches("[a-f0-9-]{36}")||exports.size()>2)throw new IOException();
                 if(!name.matches("[A-Za-z0-9_.-]{1,140}")||!(name.endsWith(".json")||name.endsWith(".pdf")||name.endsWith(".xlsx")))throw new IOException();
                 mime=name.endsWith(".json")?"application/json":name.endsWith(".pdf")?"application/pdf":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -356,26 +412,26 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void appendExport(String id,String chunk){
             Export item=exports.get(id);if(item==null)return;
-            try{if(!licenseAllowed())throw new IOException();byte[] bytes=Base64.decode(chunk,Base64.NO_WRAP);if(bytes.length>65536||item.size+bytes.length>MAX_FILE)throw new IOException();item.output.write(bytes);item.size+=bytes.length;}
+            try{if(!appAllowed())throw new IOException();byte[] bytes=Base64.decode(chunk,Base64.NO_WRAP);if(bytes.length>65536||item.size+bytes.length>MAX_FILE)throw new IOException();item.output.write(bytes);item.size+=bytes.length;}
             catch(Exception e){exports.remove(id);item.cleanup();error(id,"تعذّر كتابة الملف");}
         }
         @JavascriptInterface public void finishExport(String id){
             Export item=exports.get(id);if(item==null){error(id,"تعذّر تجهيز الملف");return;}
             try{item.output.getFD().sync();item.output.close();}catch(Exception e){exports.remove(id);item.cleanup();error(id,"تعذّر كتابة الملف");return;}
             runOnUiThread(()->{
-                if(!trusted()||!licenseAllowed()||pendingExport!=null){exports.remove(id);item.cleanup();error(id,"انتظر اكتمال حفظ الملف الحالي");return;}
+                if(!trusted()||!appAllowed()||pendingExport!=null){exports.remove(id);item.cleanup();error(id,"انتظر اكتمال حفظ الملف الحالي");return;}
                 pendingExport=item;
                 try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(item.mime).putExtra(Intent.EXTRA_TITLE,item.name),SAVE_FILE);}
                 catch(Exception e){pendingExport=null;exports.remove(id);item.cleanup();error(id,"لا توجد خدمة لحفظ الملفات على هذا الجهاز");}
             });
         }
         @JavascriptInterface public void printDocument(){runOnUiThread(()->{
-            if(!trusted()||!licenseAllowed())return;
+            if(!trusted()||!appAllowed())return;
             try{((PrintManager)getSystemService(PRINT_SERVICE)).print(NativeUi.french(MainActivity.this)?"AlKarna":"الكرنه",web.createPrintDocumentAdapter(NativeUi.french(MainActivity.this)?"AlKarna":"الكرنه"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());}
             catch(Exception e){Toast.makeText(MainActivity.this,NativeUi.text(MainActivity.this,"تعذّر فتح الطباعة"),Toast.LENGTH_LONG).show();}
         });}
         @JavascriptInterface public void scanBarcode(String id){runOnUiThread(()->{
-            if(!trusted()||!licenseAllowed())return;if(scannerRequest!=null){error(id,"قارئ الباركود مفتوح بالفعل");return;}
+            if(!trusted()||!appAllowed())return;if(scannerRequest!=null){error(id,"قارئ الباركود مفتوح بالفعل");return;}
             scannerRequest=id;
             if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA);else startScanner();
         });}
@@ -398,8 +454,8 @@ public final class MainActivity extends Activity {
             }).start();
         }
     }
-    @Override protected void onPause(){activityResumed=false;stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
-    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null)dataRescue.probe();if(web!=null&&!activationPage&&!licenseAllowed())showActivation();if(new File(getNoBackupFilesDir(),"cloud-backup-v1/state.bin").exists())new Thread(()->{try{CloudBackupManager.get(this).resume();}catch(Exception ignored){}},"AlKarnaBackupResume").start();}
-    @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(licenseAllowed())openApp();else super.onBackPressed();return;}web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return true;if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
+    @Override protected void onPause(){activityResumed=false;if(onlineMode())accountNetworkEvent(false);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();super.onPause();}
+    @Override protected void onResume(){super.onResume();activityResumed=true;watchNetwork();if(dataRescue!=null&&!onlineMode())dataRescue.probe();if(web!=null&&!activationPage&&!onlineMode()&&!appAllowed())showAccountAccess();if(onlineMode())accountNetworkEvent(true);if(!onlineMode()&&new File(getNoBackupFilesDir(),"cloud-backup-v1/state.bin").exists())new Thread(()->{try{CloudBackupManager.get(this).resume();}catch(Exception ignored){}},"AlKarnaBackupResume").start();}
+    @Override public void onBackPressed(){if(dataRescue!=null&&dataRescue.back())return;if(web==null){super.onBackPressed();return;}if(activationPage){if(accessPage)super.onBackPressed();else showAccountAccess();return;}web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return true;if(typeof modal!=='undefined'&&modal){act('close');return true}if(typeof view!=='undefined'&&view!=='home'){act('back');return true}if(window.karnaBeforeExit&&window.karnaBeforeExit())return true;return false})()",handled->{if(!"true".equals(handled))super.onBackPressed();});}
     @Override protected void onDestroy(){cancelBackupTransfers();if(dataRescue!=null)dataRescue.destroy();licenseTimer.removeCallbacksAndMessages(null);stopWatchingNetwork();if(licensing!=null)licensing.checkpoint();for(Export item:exports.values())item.cleanup();exports.clear();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("NativeHost");web.destroy();}super.onDestroy();}
 }

@@ -47,7 +47,7 @@ public class ApprovedRuntimeTest {
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
     }
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
-        activity=ActivityScenario.launch(MainActivity.class);
+        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.openManualActivation(activity);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
         until("document.querySelector('.activation-contact img').naturalWidth>0");
@@ -160,7 +160,7 @@ public class ApprovedRuntimeTest {
             save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
         }
         assertEquals("false",js("(()=>{modal='site-export';render();return !!document.querySelector('[data-action=\"site:export-print\"]')})()"));action("close");
-        activity.close();activity=ActivityScenario.launch(MainActivity.class);
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';act('site:login');true");
         until("!!document.querySelector('.nav')&&!document.querySelector('.busy')");
@@ -178,7 +178,7 @@ public class ApprovedRuntimeTest {
         var statementSave=device.findObject(new UiSelector().resourceId("android:id/button1"));assertTrue("Statement PDF saved directly",statementSave.waitForExists(20000));statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
         action("go:users");action("site:new-user");js("(()=>{for(const [k,v]of Object.entries({name:'Vendeur',username:'seller',password:'1234'}))document.querySelector('#sheet-form [name='+k+']').value=v;return true})()");action("site:feature:permission-toggle:pos.edit:true");capture("french-granular-permissions");action("site:feature:user-save");
         js("window.__qaSql=false;initSqlJs().then(SQL=>{const db=new SQL.Database();db.run('CREATE TABLE offline_test(value INTEGER)');db.run('INSERT INTO offline_test VALUES (7)');window.__qaSql=db.exec('SELECT value FROM offline_test')[0].values[0][0]===7;db.close()});true");until("window.__qaSql===true");
-        activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
         assertEquals("true",js("S.currency.code==='EUR'&&S.categories[0].name==='Épicerie'&&S.products[0].categoryId===S.categories[0].id&&S.users.some(u=>u.username==='seller'&&u.capabilities.includes('pos.edit'))"));
         System.out.println("FEATURES PASS: native direct PDF, statement, display-only currency, categories, granular permissions, offline SQLite and cold persistence.");
         activity.close();

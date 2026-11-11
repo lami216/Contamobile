@@ -107,7 +107,7 @@ public class UpgradePersistenceTest {
     }
     private void verifyReadOnlyRestart(String phase) throws Exception {
         JSONObject before=new JSONObject(read("upgrade-after.json"));DeviceLicense license=nativePreserved(before,false);
-        activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");
+        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);until("!!document.querySelector('[data-action=\"site:login\"]')");
         JSONObject old=new JSONObject(before.getString("database")),next=new JSONObject(databaseSnapshot());
         // Login verification deliberately adds expired session rows in the first phase.
         // This later baseline includes those rows, so a cold boot/reinstall must be fully idempotent.
@@ -121,7 +121,7 @@ public class UpgradePersistenceTest {
         String type=InstrumentationRegistry.getArguments().getString("upgradeLicenseType","temporary");
         String document=TestLicenseIssuer.issue(license.deviceCode(),type,10800);
         assertTrue(license.install(document).getBoolean("valid"));
-        activity=ActivityScenario.launch(MainActivity.class);
+        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         js("document.querySelector('[name=username]').value='upgrade-owner';document.querySelector('[name=password]').value='1234';true");action("site:setup");
         until("!!document.querySelector('.nav')");action("go:inventory");action("open:product");
@@ -141,7 +141,7 @@ public class UpgradePersistenceTest {
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         // Settle the existing first-cold-launch product-name migration on the old
         // version before taking a byte-for-byte baseline of every stored row.
-        activity.close();activity=ActivityScenario.launch(MainActivity.class);
+        activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
@@ -155,7 +155,7 @@ public class UpgradePersistenceTest {
     }
     @Test public void verifyAfterInPlaceUpdate() throws Exception {
         JSONObject before=new JSONObject(read("upgrade-before.json"));boolean chargedOffline="true".equals(InstrumentationRegistry.getArguments().getString("requireOfflineElapsed"));DeviceLicense license=nativePreserved(before,chargedOffline);
-        activity=ActivityScenario.launch(MainActivity.class);
+        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
         businessPreserved(before.getString("database"),databaseSnapshot());
         assertEquals(before.getString("localStorage"),preferences());

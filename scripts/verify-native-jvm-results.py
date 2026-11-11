@@ -30,6 +30,15 @@ phone_actual=[row['name'] for row in cases if row['class']=='mr.alkarna.mobile.a
 assert len(phone_actual)==8 and set(phone_actual)==set(phone_expected),'The customer phone entitlement JVM tests did not actually execute every required case'
 result={'schema':'alkarna-native-jvm-execution','passed':True,'executed':len(cases),'failed':0,'skipped':0,'bootstrapOutcomeExecuted':7,'bootstrapOutcomeCases':sorted(actual),'cases':cases,'scope':'JVM native unit execution; distinct from Android instrumentation and physical-phone acceptance'}
 result.update(phoneEntitlementExecuted=8,phoneEntitlementCases=sorted(phone_actual))
+access_source=repository/'approved-android/app/src/test/java/mr/alkarna/mobile/approved/AccountProtocolTest.java'
+access_expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',access_source.read_text(encoding='utf-8'))
+assert len(access_expected)==len(set(access_expected))==5,'The five required dual-access protocol JVM cases are missing'
+access_actual=[row['name'] for row in cases if row['class']=='mr.alkarna.mobile.approved.AccountProtocolTest']
+assert len(access_actual)==5 and set(access_actual)==set(access_expected),'The dual-access proof and server-vector cases did not all execute'
+result.update(accountProtocolExecuted=5,accountProtocolCases=sorted(access_actual))
+numbers_actual=[row['name'] for row in cases if row['class']=='mr.alkarna.mobile.approved.ProtocolNumbersTest']
+assert set(numbers_actual)=={'finiteNumbersMatchNodeJsonAndPayloadHashes','nonfiniteAndUnsafeNumbersFailBeforeHashing'},'Node/Java financial numeric interoperability checks did not both execute'
+result.update(protocolNumbersExecuted=2,protocolNumbersCases=sorted(numbers_actual))
 output.parent.mkdir(parents=True,exist_ok=True)
 output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(result,indent=2))
