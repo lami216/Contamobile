@@ -149,7 +149,7 @@ public class ApprovedRuntimeTest {
         assertEquals("0",js("document.querySelectorAll('main .list-actions [data-action=\"open:actions\"]').length"));
         action("site:language:fr");assertEquals("true",js("document.querySelector('#phone').dir==='ltr'&&document.documentElement.lang==='fr'"));capture("french-register");
         action("go:settings");assertEquals("false",js("!!document.querySelector('[data-action=\"site:seed-demo\"]')"));
-        action("site:support");assertEquals("true",js("document.querySelector('.support-hint').innerText.includes('renouvellement')"));capture("french-support");action("close");
+        action("site:support");assertEquals("\"Pour obtenir de l’aide sur l’utilisation de l’application, contactez l’assistance.\"",js("document.querySelector('.support-hint').innerText"));capture("french-support");action("close");
         action("go:operations");
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");

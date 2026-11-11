@@ -109,6 +109,24 @@ try{
    await evidence(page,'privacy-'+other);
   }finally{await context.close()}
  });
+ for(const [language,viewport]of [['ar',{width:393,height:851}],['fr',{width:320,height:520}]])await check('expanded '+language+' account menu stays compact and every access, privacy and logout control remains reachable',async()=>{
+  const {context,page}=await fixture(language,viewport);try{
+   await page.evaluate(()=>{window.__accountSurfaceEvents=[];window.NativeHost={licenseAllowed:()=>true,openPrivacy:()=>__accountSurfaceEvents.push('privacy'),openActivation:()=>__accountSurfaceEvents.push('activation')};});
+   await command(page,'site:account-menu');await page.evaluate(()=>document.fonts.ready);
+   const sheet=await page.locator('.account-sheet').boundingBox();assert(sheet.height<Math.min(viewport.height-10,640),JSON.stringify(sheet));
+   assert.equal(await page.locator('.account-links button').count(),4,'the native legacy owner must retain support, license, privacy and link-phone controls');
+   for(const action of ['site:support','site:activation','site:privacy','site:offline-link','site:logout']){
+    const control=page.locator('.account-sheet [data-action="'+action+'"]');await control.scrollIntoViewIfNeeded();
+    const visible=await control.evaluate(node=>{const r=node.getBoundingClientRect(),body=node.closest('.sheet-body').getBoundingClientRect();return r.top>=body.top-1&&r.bottom<=body.bottom+1&&r.width>0&&r.height>=40;});
+    assert.equal(visible,true,'unreachable account control: '+action);
+   }
+   await page.locator('.account-sheet [data-action="site:privacy"]').click();await page.waitForFunction(()=>!karnaPersistenceBusy());assert.deepEqual(await page.evaluate(()=>__accountSurfaceEvents),['privacy']);
+   await page.locator('.account-sheet [data-action="site:offline-link"]').click();await page.locator('.sheet [name=phone]').waitFor();assert.equal(await page.locator('.sheet [name=consent]').isChecked(),false,'linking must still require explicit consent');await command(page,'close');
+   await command(page,'site:support');assert.equal((await page.locator('.support-hint').innerText()).trim(),language==='fr'?'Pour obtenir de l’aide sur l’utilisation de l’application, contactez l’assistance.':'للمساعدة في استخدام التطبيق، تواصل مع الدعم.');await command(page,'close');
+   await command(page,'site:account-menu');await page.locator('.account-sheet [data-action="site:logout"]').scrollIntoViewIfNeeded();await page.locator('.account-sheet').evaluate(node=>Promise.all(node.getAnimations().map(animation=>animation.finished)));await evidence(page,'account-menu-'+language);await page.locator('.account-sheet [data-action="site:logout"]').click();await page.locator('[data-action="site:login"]').waitFor();
+   assert.equal(await page.locator('.nav').count(),0,'logout must leave the authenticated accounting interface');
+  }finally{await context.close()}
+ });
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}
 console.log(JSON.stringify({tests:results.length,passed:results.filter(row=>row.passed).length,failed:results.filter(row=>!row.passed)}));
 assert(results.every(row=>row.passed),'Play readiness UX regressions failed');
