@@ -14,7 +14,15 @@ const server=createServer(async(req,res)=>{try{
  let bytes=await readFile(file);
  // These hooks exist only in the HTTP test response, never in the packaged application.
  if(file.endsWith('features.js'))bytes=Buffer.from(bytes.toString().replace('async afterSave(){','async afterSave(){if(globalThis.__userAfterSaveFailure)throw Error("Synthetic user follow-up failure");'));
- if(file.endsWith('app.js'))bytes=Buffer.from(bytes.toString().replace('const ownerRecovery=installOwnerRecovery(', 'globalThis.__userAuditPersistUser=persistUser;globalThis.__userAuditRevoked=id=>revokedOwnerSessions.has(id);\nconst ownerRecovery=installOwnerRecovery(').replace('const accountingReset=installAccountingReset(', 'globalThis.__userAuditRecovery=ownerRecovery;\nconst accountingReset=installAccountingReset(').replace('if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))','if(pendingUserChanges.length&&globalThis.__beforeUserCommit)await globalThis.__beforeUserCommit();if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))'));
+ if(file.endsWith('app.js')){
+  let source=bytes.toString();
+  for(const [anchor,before]of [
+   ['const ownerRecovery=','globalThis.__userAuditPersistUser=persistUser;globalThis.__userAuditRevoked=id=>revokedOwnerSessions.has(id);\n'],
+   ['const accountingReset=','globalThis.__userAuditRecovery=ownerRecovery;\n'],
+   ['if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))','if(pendingUserChanges.length&&globalThis.__beforeUserCommit)await globalThis.__beforeUserCommit();']
+  ]){assert.equal(source.split(anchor).length-1,1,'The disposable user audit hook must bind exactly once: '+anchor);source=source.replace(anchor,before+anchor)}
+  bytes=Buffer.from(source);
+ }
  const ext=path.extname(file);res.setHeader('content-type',['.js','.mjs'].includes(ext)?'text/javascript':ext==='.css'?'text/css':ext==='.html'?'text/html':'application/octet-stream');res.end(bytes);
  }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
