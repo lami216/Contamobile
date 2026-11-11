@@ -73,6 +73,12 @@ try{
    await page.locator('.product-extra summary').click();await page.locator('#sheet-form [name=sku]').fill('KEEP-DRAFT-123');
    await page.locator('[data-product-scan]').click();await page.locator('#product-barcode-error .error').waitFor({state:'visible'});
    const text=await page.locator('#product-barcode-error').textContent();assert.match(text,language==='fr'?/Caméra|caméra/:/الكاميرا/);
+   // Observe the product's own reveal after layout settles. The test never
+   // scrolls the form or relaxes the requirement that the full notice is visible.
+   await page.waitForFunction(()=>{
+    const error=document.querySelector('#product-barcode-error').getBoundingClientRect(),body=document.querySelector('.sheet-body').getBoundingClientRect(),submit=document.querySelector('.sheet>.primary').getBoundingClientRect();
+    return error.height>0&&error.top>=body.top-1&&error.bottom<=Math.min(body.bottom,submit.top)+1;
+   },null,{timeout:2000});
    const boxes=await page.evaluate(()=>{
     const error=document.querySelector('#product-barcode-error').getBoundingClientRect(),body=document.querySelector('.sheet-body').getBoundingClientRect(),submit=document.querySelector('.sheet>.primary').getBoundingClientRect();
     return {top:error.top,bottom:error.bottom,height:error.height,bodyTop:body.top,bodyBottom:Math.min(body.bottom,submit.top)};
