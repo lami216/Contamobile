@@ -57,6 +57,7 @@ public final class OfflineAccountControlTest {
   else assertEquals("pending",client.command("login",input).getString("stage"));
   service.approve();assertEquals("active",client.command("offline-status",new JSONObject()).getString("stage"));
   assertEquals("offline",client.command("offline-activate",new JSONObject()).getString("mode"));assertTrue(license.status().getBoolean("valid"));
+  if(linked){double remaining=license.status().getJSONObject("license").getDouble("remainingSeconds");double expected=Math.max(0,(service.lifecycle.endsAt-System.currentTimeMillis())/1000d);assertTrue("Only request latency, never Android uptime, may reduce the received fixed term",remaining>=expected-2);}
  }
  private JSONObject current()throws Exception{return client.command("offline-current",new JSONObject());}
  private void completed()throws Exception{client.command("bootstrap-complete",new JSONObject());current();}
@@ -119,7 +120,8 @@ public final class OfflineAccountControlTest {
  }
  @Test public void linkedLegacyShopKeepsItsCanonicalCustomerOwnerAndDeadlineThroughControlAndRenew()throws Exception{
   activated(true);JSONObject before=journal().getJSONObject("offline"),claims=before.getJSONObject("binding").getJSONObject("payload");assertEquals("existing-owner",claims.getString("localOwnerId"));assertEquals("same-client",claims.getString("customerId"));service.enrolledVersion=28;DeviceLifecycleStore oldEnrollment=new DeviceLifecycleStore(context,license.deviceCode()+"|"+new InstallationIdentity().fingerprint());oldEnrollment.state.put("enrolled",true).put("enrolledVersionCode",28).put("enrolledLicenseHash",license.documentHash()).put("lastEnrollmentAt",System.currentTimeMillis());oldEnrollment.save();current();assertEquals(29,service.enrolledVersion);
-  service.control(true);current();assertFalse(license.status().getBoolean("valid"));service.control(false);current();renew();assertEquals("legacy",client.command("offline-renew",new JSONObject()).getString("mode"));
+  double beforePolls=license.status().getJSONObject("license").getDouble("remainingSeconds");Thread.sleep(1100);current();current();double afterPolls=license.status().getJSONObject("license").getDouble("remainingSeconds");assertTrue("Repeated signed polls consume elapsed time rather than Android uptime or a new term",afterPolls<=beforePolls-0.8);
+  service.control(true);current();assertFalse(license.status().getBoolean("valid"));service.control(false);current();assertTrue("Resume cannot restore time already consumed before suspension",license.status().getJSONObject("license").getDouble("remainingSeconds")<=afterPolls);renew();assertEquals("legacy",client.command("offline-renew",new JSONObject()).getString("mode"));
   JSONObject next=journal().getJSONObject("offline");AccountProtocol.sameOfflineScope(claims,next.getJSONObject("binding").getJSONObject("payload"));assertEquals(ProtocolJson.canonical(before.getJSONObject("verifier")),ProtocolJson.canonical(next.getJSONObject("verifier")));assertEquals(1,service.lifecycle.claims);
  }
 
@@ -160,7 +162,7 @@ public final class OfflineAccountControlTest {
  }
 
  private final class Service implements ContatoolsClient.Transport {
-  final PhoneReplacementTest.Service lifecycle;final Map<String,String> proofs=new HashMap<>();JSONObject request,initialDocument,activation;boolean approved,accepted,dropAccept,offline,wrongOwner,blockVaultAfterInstall,blockVaultBeforeStage,blockLicenseAfterClaim,suspendDuringGuard;int acceptedCount,enrolledVersion,currentCalls;long nextEnd,serverNow;
+  final PhoneReplacementTest.Service lifecycle;final Map<String,String> proofs=new HashMap<>();JSONObject request,initialDocument,activation;boolean approved,accepted,dropAccept,offline,wrongOwner,blockVaultAfterInstall,blockVaultBeforeStage,blockLicenseAfterClaim,suspendDuringGuard;int acceptedCount,enrolledVersion,currentCalls;long nextEnd,serverNow;String assignmentDecision="adoption",assignmentIntent="";
   Service(String device)throws Exception{lifecycle=new PhoneReplacementTest.Service(device);}
   void approve()throws Exception{
    approved=true;initialDocument=request.has("licenseDocument")?new JSONObject(request.getString("licenseDocument")):lifecycle.document("contatools-online-v2:fixture");lifecycle.doc=copy(initialDocument);lifecycle.role="active";lifecycle.currentCode=lifecycle.code;lifecycle.currentInstallation=lifecycle.installation;lifecycle.sequence=lifecycle.highestSequence=1;
@@ -171,7 +173,8 @@ public final class OfflineAccountControlTest {
   void redeliver(boolean expired)throws Exception{JSONObject p=copy(activation.getJSONObject("payload"));long now=System.currentTimeMillis();p.put("issuedAt",expired?now-86400001L:now).put("expiresAt",expired?now-1:now+86400000L);activation=lifecycle.sign("contatools-android-activation",p);}
   void control(boolean pause){lifecycle.generation++;lifecycle.role=pause?"suspended":"active";if(lifecycle.prepared==null)lifecycle.offer=null;}
   void renew(long end)throws Exception{nextEnd=end;lifecycle.offer("renew",60000);lifecycle.role="active";}
-  JSONObject snapshot()throws Exception{JSONObject p=lifecycle.snapshot().getJSONObject("payload");if(serverNow>0)p.put("issuedAt",serverNow);return lifecycle.sign(PhoneEntitlement.PURPOSE,p);}
+  JSONObject normalizeSnapshot(JSONObject envelope)throws Exception{JSONObject p=copy(envelope.getJSONObject("payload"));if(lifecycle.offer!=null&&lifecycle.prepared==null&&"active".equals(lifecycle.role)){p.put("decisionId",assignmentDecision).put("intentId",assignmentIntent);}if(serverNow>0)p.put("issuedAt",serverNow);return lifecycle.sign(PhoneEntitlement.PURPOSE,p);}
+  JSONObject snapshot()throws Exception{return normalizeSnapshot(lifecycle.snapshot());}
   JSONObject bundle()throws Exception{
    if(!approved)return new JSONObject().put("stage","pending").put("requestId",request.getString("requestId")).put("identifier",PHONE);
    JSONObject doc=lifecycle.doc,p=new JSONObject().put("purpose","android-offline-account").put("version",1).put("applicationId",BuildConfig.APPLICATION_ID).put("requestId",request.getString("requestId")).put("credentialId",request.getString("requestId")).put("credentialVersion",1).put("phone",PHONE).put("installationId",lifecycle.installation).put("keyFingerprint",lifecycle.fingerprint).put("deviceCode",lifecycle.code).put("localOwnerId",wrongOwner?"foreign-owner":request.optString("localOwnerId","approved-owner")).put("localShopId",request.optString("localShopId","approved-shop")).put("customerId","same-client").put("ownerName","Synthetic owner").put("shopName","Synthetic shop").put("licenseDocumentHash",ProtocolJson.hash(doc)).put("licenseId",doc.getJSONObject("payload").getString("licenseId")).put("term",new JSONObject().put("type","temporary").put("endsAt",lifecycle.endsAt)).put("issuedAt",Instant.now().toString());
@@ -189,7 +192,9 @@ public final class OfflineAccountControlTest {
     }
     if(path.endsWith("dispatch")&&operation.equals("entitlement.claim")&&lifecycle.prepared==null)lifecycle.endsAt=nextEnd;
     if(path.endsWith("dispatch")&&operation.equals("entitlement.finish")&&blockVaultAfterInstall){blockVaultAfterInstall=false;assertTrue(file(VAULT+".new").mkdir());}
-    JSONObject result=lifecycle.post(path,body);if(serverNow>0&&result.optJSONObject("entitlement")!=null){JSONObject clocked=result.getJSONObject("entitlement").getJSONObject("payload");clocked.put("issuedAt",serverNow);result.put("entitlement",lifecycle.sign(PhoneEntitlement.PURPOSE,clocked));}return operation.equals("enroll")&&!accepted&&path.endsWith("dispatch")?new JSONObject().put("status","pending"):result;
+    JSONObject result=lifecycle.post(path,body);
+    if(result.optJSONObject("entitlement")!=null){if(operation.equals("entitlement.claim")&&"entitlement-prepared".equals(result.optString("stage"))){JSONObject assigned=result.getJSONObject("entitlement").getJSONObject("payload");assignmentDecision=assigned.getString("decisionId");assignmentIntent=assigned.getString("intentId");}result.put("entitlement",normalizeSnapshot(result.getJSONObject("entitlement")));}
+    return operation.equals("enroll")&&!accepted&&path.endsWith("dispatch")?new JSONObject().put("status","pending"):result;
    }
    if(path.endsWith("challenge")){
     if(operation.equals("offline.request")){request=copy(p);lifecycle.installation=p.getString("installationId");lifecycle.installationKey=copy(p.getJSONObject("publicJwk"));lifecycle.fingerprint=ProtocolJson.fingerprint(lifecycle.installationKey);}

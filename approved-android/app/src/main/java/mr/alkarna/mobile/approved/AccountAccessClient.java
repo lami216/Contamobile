@@ -197,7 +197,7 @@ final class AccountAccessClient {
     private JSONObject offline(boolean adopt) throws Exception {
         JSONObject request = stored.optJSONObject("request");
         AccountProtocol.require(request != null && pendingCode != null && matches(pendingCode, request.getJSONObject("verifier")), "ACCOUNT_LOGIN_REQUIRED");
-        long observed = SystemClock.elapsedRealtime();
+        long requestStartedAt = SystemClock.elapsedRealtime();
         JSONObject answer = exchange(adopt ? "offline.activate" : "offline.status", installation().put("requestId", request.getString("requestId")).put("identifier", request.getString("identifier")).put("code", pendingCode), null);
         if (!adopt || !"active".equals(answer.optString("stage"))) return answer;
         Object documentValue = answer.get("licenseDocument");
@@ -215,9 +215,12 @@ final class AccountAccessClient {
                 .put("setupRequired", !request.getJSONObject("payload").has("localOwnerId"));
         if (activation != null) record.put("activation", activation).put("activationDocument", verified).put("ackPending", true);
         JSONObject prepared = new JSONObject().put("record", record).put("document", verified);
-        if (entitlement != null) prepared.put("phoneEntitlement", entitlement);
+        if (entitlement != null) {
+            JSONObject snapshot=PhoneEntitlement.snapshot(entitlement,issuers,identity.id(),identity.fingerprint(),license.deviceCode());
+            prepared.put("phoneEntitlement",entitlement).put("entitlementClock",EntitlementClock.begin(snapshot,null,System.currentTimeMillis(),SystemClock.elapsedRealtime(),Math.max(0,SystemClock.elapsedRealtime()-requestStartedAt)));
+        }
         stored.put("pendingActivation", prepared); refreshLocalFlags(); persist();
-        JSONObject status = entitlement == null ? license.installOnline(document) : license.installEntitlement(document, entitlement, issuers, identity.id(), identity.fingerprint(), observed);
+        JSONObject status = entitlement == null ? license.installOnline(document) : license.installEntitlement(document, entitlement, issuers, identity.id(), identity.fingerprint(), Math.max(0, SystemClock.elapsedRealtime() - requestStartedAt));
         AccountProtocol.require(status.optBoolean("valid"), "LOCAL_LICENSE_REQUIRED");
         finishInitialBinding(record);
         bootstrapCredential = new JSONObject().put("phone", claims.getString("phone")).put("code", pendingCode);
@@ -248,7 +251,11 @@ final class AccountAccessClient {
         JSONObject entitlement=pending.optJSONObject("phoneEntitlement");if(entitlement!=null){
             JSONObject staged=PhoneEntitlement.snapshot(entitlement,issuers,identity.id(),identity.fingerprint(),license.deviceCode());AccountProtocol.require(claims.getString("customerId").equals(staged.getString("clientId")),"OFFLINE_BINDING_SCOPE");
             JSONObject current=license.status().optJSONObject("entitlement");boolean newer=false;if(current!=null)try{PhoneEntitlement.monotonic(staged,current);newer=true;}catch(Exception older){}
-            if(!newer)license.entitlement(entitlement,issuers,identity.id(),identity.fingerprint());
+            if(!newer){
+                JSONObject observation=pending.getJSONObject("entitlementClock");
+                long observationDurationMillis=Math.max(0,EntitlementClock.effective(observation,System.currentTimeMillis(),SystemClock.elapsedRealtime())-PhoneEntitlement.number(staged,"issuedAt"));
+                license.entitlement(entitlement,issuers,identity.id(),identity.fingerprint(),observationDurationMillis);
+            }
         }
         finishInitialBinding(record);
     }
@@ -270,8 +277,8 @@ final class AccountAccessClient {
     private JSONObject currentLocal() throws Exception {
         JSONObject record = stored.optJSONObject("offline"); AccountProtocol.require(record != null, "OFFLINE_ACCOUNT_REQUIRED");
         recoverRenewalBinding(); record = stored.getJSONObject("offline"); lifecycleClient().ensureCurrentEnrollment(); acknowledgeOffline();
-        long observed = SystemClock.elapsedRealtime(); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
-        applyLocalCurrent(record, answer, Math.max(0, SystemClock.elapsedRealtime() - observed));
+        long requestStartedAt = SystemClock.elapsedRealtime(); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
+        applyLocalCurrent(record, answer, requestStartedAt);
         try { lifecycleClient().acknowledgeInstalledAccountEntitlement(); } catch (Exception retryLater) { /* Keep the durable accepted receipt and original clock. */ }
         JSONObject state = localState(stored.getJSONObject("offline")); return state.put("stage", state.getString("status")).put("mode", "offline");
     }
@@ -284,26 +291,26 @@ final class AccountAccessClient {
         AccountProtocol.require(record.getJSONObject("request").getString("requestId").equals(answer.getString("requestId")), "OFFLINE_BINDING_INVALID");
         return document;
     }
-    private void applyLocalCurrent(JSONObject record, JSONObject answer, long observed) throws Exception {
+    private void applyLocalCurrent(JSONObject record, JSONObject answer, long requestStartedAt) throws Exception {
         JSONObject document = checkedCurrent(record, answer), entitlement = answer.optJSONObject("phoneEntitlement");
         if (entitlement != null) {
             JSONObject p = PhoneEntitlement.snapshot(entitlement, issuers, identity.id(), identity.fingerprint(), license.deviceCode());
             AccountProtocol.require(p.getString("licenseDocumentHash").equals(ProtocolJson.hash(document)) && p.getString("licenseId").equals(document.getJSONObject("payload").getString("licenseId")), "OFFLINE_BINDING_INVALID");
             AccountProtocol.require(p.getString("clientId").equals(answer.getJSONObject("binding").getJSONObject("payload").getString("customerId")), "OFFLINE_BINDING_SCOPE");
-            license.entitlement(entitlement, issuers, identity.id(), identity.fingerprint(), observed);
+            license.entitlement(entitlement, issuers, identity.id(), identity.fingerprint(), Math.max(0,SystemClock.elapsedRealtime()-requestStartedAt));
         }
         boolean sameDocument = license.documentHash().equals(ProtocolJson.hash(document));
         if (sameDocument) record.put("binding", ProtocolJson.copy(answer.getJSONObject("binding")));
         record.put("renewalAvailable", answer.optJSONObject("entitlementOffer") != null || !sameDocument); persist();
     }
     /** Stage the new signed same-account binding BEFORE the licence's atomic write. */
-    private void stageRenewalBinding(JSONObject document, JSONObject entitlement, long observed) throws Exception {
-        JSONObject record = stored.getJSONObject("offline"); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
+    private void stageRenewalBinding(JSONObject document, JSONObject entitlement, long originalObservationDurationMillis) throws Exception {
+        long requestStartedAt=SystemClock.elapsedRealtime(); JSONObject record = stored.getJSONObject("offline"); JSONObject answer = exchange("offline.current", installation().put("requestId", record.getJSONObject("request").getString("requestId")), null);
         JSONObject current = checkedCurrent(record, answer), p = PhoneEntitlement.snapshot(entitlement, issuers, identity.id(), identity.fingerprint(), license.deviceCode());
         JSONObject fresh = PhoneEntitlement.snapshot(answer.getJSONObject("phoneEntitlement"), issuers, identity.id(), identity.fingerprint(), license.deviceCode());
         PhoneEntitlement.monotonic(p, fresh);
         AccountProtocol.require(p.getString("clientId").equals(answer.getJSONObject("binding").getJSONObject("payload").getString("customerId")), "OFFLINE_BINDING_SCOPE");
-        if (!"active".equals(fresh.getString("status"))) license.entitlement(answer.getJSONObject("phoneEntitlement"), issuers, identity.id(), identity.fingerprint(), observed);
+        if (!"active".equals(fresh.getString("status"))) license.entitlement(answer.getJSONObject("phoneEntitlement"), issuers, identity.id(), identity.fingerprint(), Math.max(0,SystemClock.elapsedRealtime()-requestStartedAt));
         AccountProtocol.require("active".equals(fresh.getString("status")) && p.getLong("sequence") == fresh.getLong("sequence") && p.getLong("bindingGeneration") == fresh.getLong("bindingGeneration") && ProtocolJson.hash(document).equals(ProtocolJson.hash(current)), "ENTITLEMENT_STATUS_CHANGED");
         record.put("pendingBinding", new JSONObject().put("binding", ProtocolJson.copy(answer.getJSONObject("binding"))).put("document", ProtocolJson.copy(document))); persist();
     }
