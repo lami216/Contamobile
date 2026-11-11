@@ -115,9 +115,12 @@ public final class AccountAccessTest {
  @Test public void journalWriteFailureBlocksDispatchAndFurtherOnlineCommandsUntilReopen()throws Exception{
   login();byte[] before=encryptedBytes();JSONObject original=payload("branch-A");File blocker=new File(context.getNoBackupFilesDir(),VAULT_FILE+".new");assertTrue("Only this fixture's AtomicFile staging path is blocked",blocker.mkdir());
   try{
-   rejected("ACCOUNT_STORAGE_INVALID",()->push(original));assertFalse(client.admitted());assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertArrayEquals("The failed write keeps the exact preceding preference-only vault",before,encryptedBytes());assertFalse(journal().has("onlinePending"));
+   rejected("ACCOUNT_STORAGE_INVALID",()->push(original));assertFalse(client.admitted());assertEquals(0,service.pushCalls);assertEquals(0,service.applied);assertArrayEquals("The failed write keeps the exact preceding preference-only vault",before,encryptedBytes());
    rejected("ACCOUNT_STORAGE_INVALID",()->pending());rejected("ACCOUNT_STORAGE_INVALID",()->push(original));
   }finally{assertTrue(blocker.isDirectory());assertTrue(blocker.delete());}
+  // AtomicFile.openRead removes a stale .new directory when the base exists.
+  // Inspect the decrypted state after releasing the deliberate write blocker.
+  assertFalse(journal().has("onlinePending"));
   recreate();login();assertFalse(pending().getBoolean("pending"));push(original);assertEquals("The failed local save must never have reached the financial service",1,service.applied);
  }
 

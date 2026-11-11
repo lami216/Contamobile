@@ -3,6 +3,7 @@ package mr.alkarna.mobile.approved;
 import static org.junit.Assert.*;
 import android.content.Context;
 import android.os.Build;
+import android.util.AtomicFile;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.io.*;
@@ -91,8 +92,8 @@ public final class OfflineAccountControlTest {
   assertTrue(license.status().getBoolean("valid"));assertEquals(hash,license.documentHash());assertEquals(end,license.status().getJSONObject("entitlement").getLong("endsAt"));
  }
  @Test public void renewalBeforeLicenseWriteFailureRetriesOneClaimAndSameOwner()throws Exception{
-  activated(false);completed();String original=license.documentHash();JSONObject before=journal().getJSONObject("offline");renew();File blocker=file("activation-v2.json.new");assertTrue(blocker.mkdir());
-  try{rejects(()->client.command("offline-renew",new JSONObject()));}finally{assertTrue(blocker.delete());}
+  activated(false);completed();String original=license.documentHash();JSONObject before=journal().getJSONObject("offline");renew();service.blockLicenseAfterClaim=true;
+  rejects(()->client.command("offline-renew",new JSONObject()));
   assertEquals(original,new DeviceLicense(context).documentHash());assertTrue(journal().getJSONObject("offline").has("pendingBinding"));
   recreate();JSONObject result=client.command("offline-renew",new JSONObject());assertEquals("legacy",result.getString("mode"));assertEquals(1,service.lifecycle.claims);assertFalse(journal().getJSONObject("offline").has("pendingBinding"));
   assertEquals(ProtocolJson.canonical(before.getJSONObject("verifier")),ProtocolJson.canonical(journal().getJSONObject("offline").getJSONObject("verifier")));assertFalse(client.command("bootstrap",new JSONObject()).has("credential"));
@@ -159,7 +160,7 @@ public final class OfflineAccountControlTest {
  }
 
  private final class Service implements ContatoolsClient.Transport {
-  final PhoneReplacementTest.Service lifecycle;final Map<String,String> proofs=new HashMap<>();JSONObject request,initialDocument,activation;boolean approved,accepted,dropAccept,offline,wrongOwner,blockVaultAfterInstall,blockVaultBeforeStage,suspendDuringGuard;int acceptedCount,enrolledVersion,currentCalls;long nextEnd,serverNow;
+  final PhoneReplacementTest.Service lifecycle;final Map<String,String> proofs=new HashMap<>();JSONObject request,initialDocument,activation;boolean approved,accepted,dropAccept,offline,wrongOwner,blockVaultAfterInstall,blockVaultBeforeStage,blockLicenseAfterClaim,suspendDuringGuard;int acceptedCount,enrolledVersion,currentCalls;long nextEnd,serverNow;
   Service(String device)throws Exception{lifecycle=new PhoneReplacementTest.Service(device);}
   void approve()throws Exception{
    approved=true;initialDocument=request.has("licenseDocument")?new JSONObject(request.getString("licenseDocument")):lifecycle.document("contatools-online-v2:fixture");lifecycle.doc=copy(initialDocument);lifecycle.role="active";lifecycle.currentCode=lifecycle.code;lifecycle.currentInstallation=lifecycle.installation;lifecycle.sequence=lifecycle.highestSequence=1;
@@ -195,7 +196,7 @@ public final class OfflineAccountControlTest {
     long now=System.currentTimeMillis();String id=UUID.randomUUID().toString().replace("-","");JSONObject proof=new JSONObject().put("schema","contatools-android-access-proof").put("version",1).put("method","POST").put("path",AccountProtocol.DISPATCH).put("operation",operation).put("applicationId",BuildConfig.APPLICATION_ID).put("installationId",p.getString("installationId")).put("nonce",UUID.randomUUID().toString().replace("-","")).put("payloadHash",ProtocolJson.hash(p)).put("sessionTokenHash",JSONObject.NULL).put("issuedAt",Instant.ofEpochMilli(now).toString()).put("expiresAt",Instant.ofEpochMilli(now+90000).toString());String message=ProtocolJson.canonical(proof);proofs.put(id,message);return new JSONObject().put("challengeId",id).put("message",message).put("expiresAt",proof.getString("expiresAt"));
    }
    assertEquals(AccountProtocol.DISPATCH,path);String message=proofs.remove(body.getString("challengeId"));assertNotNull(message);JSONObject proof=new JSONObject(message);assertEquals(ProtocolJson.hash(p),proof.getString("payloadHash"));assertEquals(operation,proof.getString("operation"));verify(proof,body);
-   if(operation.equals("offline.current")){currentCalls++;if(suspendDuringGuard&&lifecycle.claims>0){suspendDuringGuard=false;control(true);}if(blockVaultBeforeStage&&lifecycle.claims>0){blockVaultBeforeStage=false;assertTrue(file(VAULT+".new").mkdir());}}
+   if(operation.equals("offline.current")){currentCalls++;if(suspendDuringGuard&&lifecycle.claims>0){suspendDuringGuard=false;control(true);}if(blockVaultBeforeStage&&lifecycle.claims>0){blockVaultBeforeStage=false;assertTrue(file(VAULT+".new").mkdir());}if(blockLicenseAfterClaim&&lifecycle.claims>0){blockLicenseAfterClaim=false;var field=DeviceLicense.class.getDeclaredField("file");field.setAccessible(true);AtomicFile original=(AtomicFile)field.get(license);field.set(license,new AtomicFile(original.getBaseFile()){@Override public FileOutputStream startWrite()throws IOException{throw new IOException("Synthetic no-space after binding stage");}});}}
    if(operation.equals("offline.request"))return new JSONObject().put("stage","pending").put("requestId",request.getString("requestId")).put("identifier",PHONE);
    if(operation.equals("offline.status")||operation.equals("offline.activate"))assertEquals(CODE,p.getString("code"));
    return bundle();
