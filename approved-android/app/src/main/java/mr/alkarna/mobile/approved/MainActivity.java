@@ -43,6 +43,7 @@ public final class MainActivity extends Activity {
     private static volatile boolean webViewWasCreated;
     static boolean hasCreatedWebView(){return webViewWasCreated;}
     private static final java.util.concurrent.ThreadPoolExecutor administrationQueue=createAdministrationQueue();
+    private static final java.util.concurrent.ThreadPoolExecutor accountQueue=createAdministrationQueue();
     private static final java.util.concurrent.ThreadPoolExecutor backupQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
@@ -208,7 +209,7 @@ public final class MainActivity extends Activity {
             ||(!index&&java.util.Arrays.asList("bootstrap","bootstrap-complete","online-call","online-status","online-pending","online-ack").contains(command))){accountFailure(id,"ACCOUNT_PAGE_INVALID",0);return;}
         try{JSONObject payload=new JSONObject(content);
             if(!index&&"offline-request".equals(command)&&(payload.has("localOwnerId")||payload.has("localShopId"))){accountFailure(id,"OFFLINE_LOCAL_SCOPE_REQUIRED",0);return;}
-            administrationQueue.execute(()->{
+            accountQueue.execute(()->{
                 try{
                     if(!backupScope.current(page)||isDestroyed()||!activityResumed)throw new IOException("ACCOUNT_PAGE_CLOSED");
                     JSONObject response=accounts.command(command,payload);
