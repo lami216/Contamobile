@@ -46,7 +46,7 @@ jobs:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(f'Exact tested APK retained from [verified run {found}](https://github.com/{repo}/actions/runs/{found}) for commit {sha}.\n')
           PY
   runtime_access:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +63,7 @@ jobs:
       - name: Verify dual access, financial receipts, privacy, navigation and camera messages
         env:
           PLAYWRIGHT_MODULE: ${{ github.workspace }}/ui-tools/node_modules/playwright
+          PLAYWRIGHT_USE_BUNDLED: '1'
         run: |
           node --test scripts/test-android-access.mjs
           node scripts/test-android-access-ux.mjs
