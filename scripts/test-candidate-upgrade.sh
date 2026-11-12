@@ -2,9 +2,41 @@ set -euo pipefail
 app=mr.alkarna.mobile.approved
 runner=$app.test/androidx.test.runner.AndroidJUnitRunner
 
-test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 proof_dir=candidate-proof
 mkdir -p "$proof_dir"
+# Host-only bounded diagnostics: never print environment, process arguments or
+# signing material. Preserve the test's original exit status if collection fails.
+host_diagnostics() {
+ local label=$1
+ {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+  timeout 5s free -m
+  timeout 5s df -h . /tmp
+  timeout 5s ps -eo pid,comm,rss --sort=-rss | sed -n '1,31p'
+  if [ -r /sys/fs/cgroup/memory.events ]; then timeout 5s cat /sys/fs/cgroup/memory.events; fi
+ } > "$proof_dir/host-$label.txt" 2>&1 || true
+ {
+  (timeout 5s dmesg --color=never --time-format iso 2>/dev/null || timeout 5s sudo -n dmesg --color=never --time-format iso 2>/dev/null) |
+   grep -Ei '(qemu|emulator).*(oom|out of memory|killed process|segfault)|(oom|out of memory|killed process|segfault).*(qemu|emulator)' | tail -n 80
+ } > "$proof_dir/host-$label-kernel.txt" 2>/dev/null || true
+}
+finish_candidate() {
+ local status=$?
+ trap - EXIT
+ host_diagnostics after
+ if [ "$status" -ne 0 ]; then
+  printf 'Original test exit status: %s\n' "$status" > "$proof_dir/host-failure.txt"
+  cat "$proof_dir/host-after.txt" >> "$proof_dir/host-failure.txt" 2>/dev/null || true
+ fi
+ exit "$status"
+}
+trap finish_candidate EXIT
+host_diagnostics before
+test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
+
+preservation_progress() {
+ printf 'PRESERVATION %s baseline=v%s activation=%s phase=%s candidate=v%s\n' "$1" "$baseline" "$type" "$2" "$CANDIDATE_VERSION_CODE" | tee -a "$proof_dir/preservation-progress.txt"
+}
 # Keep every synthetic fixture offline even if a guest service re-enables a link.
 # This root/firewall setup is allowed only after proving this is an emulator.
 # adbd restarts when root is requested; recent emulator images can close that
@@ -91,7 +123,7 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All sixteen originally distributed versions are mandatory for this candidate.
+# All seventeen originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
 test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29'
 for baseline in "${baselines[@]}"; do
@@ -181,23 +213,31 @@ for baseline in "${baselines[@]}"; do
   adb install -r "$test_apk"
   assert_offline "$label-network" "$network_teardown_pending"
   network_teardown_pending=false
+  preservation_progress BEGIN seed-before
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#seedPreviousVersion -e expectedVersionCode "$baseline" -e upgradeLicenseType "$type" "$runner" | tee "candidate-proof/$label-before.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-before.txt"
+  preservation_progress PASS seed-before
   adb shell am force-stop "$app"
   # An observable offline interval must be charged to temporary activation.
   sleep 2
   adb install -r "$candidate" | tee "candidate-proof/$label-install-r.txt"
   grep -q Success "candidate-proof/$label-install-r.txt"
+  preservation_progress BEGIN after
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterInPlaceUpdate -e expectedVersionCode "$CANDIDATE_VERSION_CODE" -e requireOfflineElapsed true "$runner" | tee "candidate-proof/$label-after.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-after.txt"
+  preservation_progress PASS after
   adb shell am force-stop "$app"
+  preservation_progress BEGIN cold-restart
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterOfflineColdRestart -e expectedVersionCode "$CANDIDATE_VERSION_CODE" "$runner" | tee "candidate-proof/$label-cold-restart.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-cold-restart.txt"
+  preservation_progress PASS cold-restart
   adb shell am force-stop "$app"
   adb install -r "$candidate" | tee "candidate-proof/$label-repeat-install-r.txt"
   grep -q Success "candidate-proof/$label-repeat-install-r.txt"
+  preservation_progress BEGIN repeat-after
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterRepeatedInPlaceUpdate -e expectedVersionCode "$CANDIDATE_VERSION_CODE" "$runner" | tee "candidate-proof/$label-repeat-after.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-repeat-after.txt"
+  preservation_progress PASS repeat-after
   assert_offline "$label-network-after"
  done
 done

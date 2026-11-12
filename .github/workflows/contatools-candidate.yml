@@ -402,6 +402,9 @@ jobs:
           api-level: 36
           arch: x86_64
           profile: pixel_2
+          # Isolated CI graphics fallback after two emulator-process exits.
+          # This is a diagnostic configuration trial, not a proven root cause.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash scripts/test-candidate-upgrade.sh
       - name: Preserve exact tested customer bytes
