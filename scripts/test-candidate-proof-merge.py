@@ -53,7 +53,7 @@ class CandidateProofGateTests(unittest.TestCase):
         write(self.inputs / GATE.CANDIDATE, candidate)
         write(self.inputs / GATE.TEST_APK, test_apk)
         baselines = {}
-        for version in range(13, 31):
+        for version in range(13, 32):
             data = f"SYNTHETIC CI GATE BASELINE {version}".encode()
             baselines[str(version)] = hashlib.sha256(data).hexdigest()
             write(self.inputs / f"baseline-v{version}/alkarna-approved.apk", data)
@@ -61,11 +61,11 @@ class CandidateProofGateTests(unittest.TestCase):
         self.pins.start()
         self.addCleanup(self.pins.stop)
         self.common = {"version": 1, "sourceHead": HEAD, "workflowRunId": RUN,
-                       "candidateVersionCode": 31, "candidateSha256": self.candidate_hash,
+                       "candidateVersionCode": 32, "candidateSha256": self.candidate_hash,
                        "testApkSha256": self.test_hash}
         save(self.inputs / "candidate-output/candidate-verified.json", {
-            "sha256": self.candidate_hash, "applicationId": GATE.APP, "versionCode": 31,
-            "versionName": "1.0.30", "certificateSha256": GATE.CERT, "apksignerVerified": True})
+            "sha256": self.candidate_hash, "applicationId": GATE.APP, "versionCode": 32,
+            "versionName": "1.0.31", "certificateSha256": GATE.CERT, "apksignerVerified": True})
         self.sha = self.candidate_hash + "  " + GATE.CANDIDATE + "\n"
         write(self.inputs / "candidate-output/SHA256SUMS.txt", self.sha)
         save(self.inputs / "candidate-output/baseline-verified.json", {"mode": "baseline", "versionCode": 29})
@@ -136,7 +136,7 @@ class CandidateProofGateTests(unittest.TestCase):
                     write(root / f"{label}-{phase}.txt", junit(["UpgradePersistenceTest"], 1))
                     for verb in ("BEGIN", "PASS"):
                         progress.append(f"PRESERVATION {verb} baseline=v{version} activation={activation} "
-                                        f"phase={'seed-before' if phase == 'before' else phase} candidate=v31")
+                                        f"phase={'seed-before' if phase == 'before' else phase} candidate=v32")
                     if phase != "before":
                         checks.append({"baseline": version, "activation": activation, "phase": phase, "passed": True})
                 for suffix in ("install-r", "repeat-install-r"):
@@ -144,7 +144,7 @@ class CandidateProofGateTests(unittest.TestCase):
                 for suffix in ("network", "network-after"):
                     write(root / f"{label}-{suffix}.txt", junit(["CandidateNetworkIsolationTest"], 1))
         write(root / "preservation-progress.txt", "\n".join(progress) + "\n")
-        save(root / "preservation-summary.json", {"candidateVersionCode": 31,
+        save(root / "preservation-summary.json", {"candidateVersionCode": 32,
              "selectedBaselines": versions, "upgradeScenarios": len(versions) * 2,
              "preservationChecks": len(checks), "checks": checks})
 
@@ -172,19 +172,19 @@ class CandidateProofGateTests(unittest.TestCase):
             self.merge()
         self.assertFalse(self.output.exists(), "Rejected evidence must not publish partial output")
 
-    def test_complete_fixture_merges_all_36_seed_and_108_post_checks_and_legacy_names_are_unique(self):
+    def test_complete_fixture_merges_all_38_seed_and_114_post_checks_and_legacy_names_are_unique(self):
         result = self.merge()
         self.assertEqual((result["upgradeScenarios"], result["seedChecks"], result["preservationChecks"],
-                          result["totalPreservationInvocations"]), (36, 36, 108, 144))
+                          result["totalPreservationInvocations"]), (38, 38, 114, 152))
         self.assertEqual(result["nativeSuiteCases"], 72)
-        self.assertEqual(result["nativeJvmCases"], 47)
+        self.assertEqual(result["nativeJvmCases"], 49)
         for name in GATE.RESERVED | {"offline-suites.txt"}:
             self.assertEqual(len(list(self.output.rglob(name))), 1, name)
         self.assertEqual(GATE.digest(self.output / GATE.CANDIDATE), self.candidate_hash)
-        self.assertEqual(len(list(self.output.rglob("v*-*-before.txt"))), 36)
+        self.assertEqual(len(list(self.output.rglob("v*-*-before.txt"))), 38)
         for phase in GATE.PHASES:
             self.assertEqual(sum(bool(re.fullmatch(r"v\d+-(?:temporary|perpetual)-" + phase + r"\.txt", path.name))
-                                 for path in self.output.rglob("*.txt")), 36)
+                                 for path in self.output.rglob("*.txt")), 38)
 
     def test_missing_child_rejects(self):
         (self.children / "native").rename(self.root / "missing-native")
@@ -196,7 +196,7 @@ class CandidateProofGateTests(unittest.TestCase):
 
     def test_changed_candidate_or_test_apk_hash_rejects(self):
         for field in ("candidateSha256", "testApkSha256"):
-            path = self.children / "upgrade-28-30/child-proof.json"
+            path = self.children / "upgrade-28-31/child-proof.json"
             self.change_json(path, **{field: "f" * 64})
             self.rejects("Different candidate/test APK")
             self.change_json(path, **{field: self.common[field]})
@@ -333,11 +333,11 @@ class CandidateProofGateTests(unittest.TestCase):
         self.rejects("summary differs")
 
     def test_group_egress_runtime_or_offline_suite_failure_rejects(self):
-        path = self.children / "upgrade-28-30/runtime-errors.txt"
+        path = self.children / "upgrade-28-31/runtime-errors.txt"
         write(path, "FATAL EXCEPTION: main\n")
         self.rejects("Fatal Android runtime")
         write(path, "")
-        path = self.children / "upgrade-28-30/network-egress-block.txt"
+        path = self.children / "upgrade-28-31/network-egress-block.txt"
         write(path, "No IPv6 firewall\n")
         self.rejects("IPv4/IPv6")
 
@@ -346,7 +346,7 @@ class CandidateProofGateTests(unittest.TestCase):
         before = path.read_text(encoding="utf-8")
         lines = before.splitlines()
         for value in (before + lines[0] + "\n", "\n".join([lines[1], lines[0]] + lines[2:]) + "\n",
-                      before.replace("candidate=v31", "candidate=v29", 1)):
+                      before.replace("candidate=v32", "candidate=v29", 1)):
             write(path, value)
             self.rejects("preservation progress")
 

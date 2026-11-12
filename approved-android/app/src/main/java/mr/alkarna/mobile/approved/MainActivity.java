@@ -162,6 +162,16 @@ public final class MainActivity extends Activity {
         });
     }
     private void openApp(){if(!appAllowed())return;activationTransitionPending=false;activationPage=false;accessPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
+    /** Rebuild the immutable local/online runtime only after the current write has settled. */
+    private void continueAccountAdmission(long page){
+        if(web==null||isFinishing()||isDestroyed()||!backupScope.current(page)||!trusted()||!AccountEntryPages.mayContinue(ORIGIN,web.getUrl())||!appAllowed())return;
+        if(!AccountEntryPages.index(ORIGIN,web.getUrl())){openApp();return;}
+        web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return false;if(typeof window.karnaSavePosDraft==='function')window.karnaSavePosDraft();return true})()",ready->{
+            if(!backupScope.current(page)||isFinishing()||isDestroyed())return;
+            if("false".equals(ready)){licenseTimer.postDelayed(()->continueAccountAdmission(page),250);return;}
+            if(trusted()&&AccountEntryPages.mayContinue(ORIGIN,web.getUrl())&&appAllowed())openApp();
+        });
+    }
     private JSONObject licenseStatus(){return licensing==null?value("reason","تعذّر فتح بيانات التفعيل. أعد فتح التطبيق"):licensing.status();}
     private void result(String id,JSONObject value){runOnUiThread(()->{if(web!=null&&!isDestroyed())web.evaluateJavascript("window.__nativeResult&&window.__nativeResult("+JSONObject.quote(id)+","+value+")",null);});}
     private JSONObject value(String key,Object value){JSONObject object=new JSONObject();try{object.put(key,value);}catch(Exception ignored){}return object;}
@@ -219,10 +229,8 @@ public final class MainActivity extends Activity {
     }
     private void accountRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||accounts==null||content==null||content.length()>1048576||command==null){accountFailure(id,"ACCOUNT_UNAVAILABLE",0);return;}
-        String url=web.getUrl();boolean index=url!=null&&url.split("\\?",2)[0].equals(ORIGIN+"/assets/approved/index.html");
-        boolean entry=url!=null&&url.split("\\?",2)[0].equals(ORIGIN+"/assets/approved/access.html");
-        if(!(index||entry)||(!entry&&java.util.Arrays.asList("login","legacy","offline-status","offline-activate").contains(command))
-            ||(!index&&java.util.Arrays.asList("bootstrap","bootstrap-complete","online-call","online-status","online-pending","online-ack").contains(command))){accountFailure(id,"ACCOUNT_PAGE_INVALID",0);return;}
+        String url=web.getUrl();boolean index=AccountEntryPages.index(ORIGIN,url);
+        if(!AccountEntryPages.allows(ORIGIN,url,command)){accountFailure(id,"ACCOUNT_PAGE_INVALID",0);return;}
         try{JSONObject payload=new JSONObject(content);
             if(!index&&"offline-request".equals(command)&&(payload.has("localOwnerId")||payload.has("localShopId"))){accountFailure(id,"OFFLINE_LOCAL_SCOPE_REQUIRED",0);return;}
             accountQueue.execute(()->{
@@ -391,7 +399,7 @@ public final class MainActivity extends Activity {
     public final class NativeHost {
         @JavascriptInterface public void accountAccess(String id,String command,String content){accountRequest(id,command,content);}
         @JavascriptInterface public void openAccountAccess(){runOnUiThread(()->{if(trusted())showAccountAccess();});}
-        @JavascriptInterface public void accountContinue(){runOnUiThread(()->{if(trusted()&&accessPage&&appAllowed())openApp();});}
+        @JavascriptInterface public void accountContinue(){long page=backupScope.page();runOnUiThread(()->continueAccountAdmission(page));}
         @JavascriptInterface public void openPrivacy(){runOnUiThread(()->{if(trusted())startActivity(new Intent(MainActivity.this,PrivacyActivity.class));});}
         @JavascriptInterface public void ownerRecovery(String id,String command,String content){administration(id,command,content);}
         @JavascriptInterface public void deviceLifecycle(String id,String command,String content){lifecycleRequest(id,command,content);}

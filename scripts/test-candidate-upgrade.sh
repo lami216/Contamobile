@@ -115,7 +115,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 31
+test "$CANDIDATE_VERSION_CODE" = 32
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -123,9 +123,9 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All eighteen originally distributed versions are mandatory for this candidate.
+# All nineteen originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -149,7 +149,7 @@ case "$candidate_mode" in
    '19 20 21') candidate_group=upgrade-19-21 ;;
    '22 23 24') candidate_group=upgrade-22-24 ;;
    '25 26 27') candidate_group=upgrade-25-27 ;;
-   '28 29 30') candidate_group=upgrade-28-30 ;;
+   '28 29 30 31') candidate_group=upgrade-28-31 ;;
    *) echo 'Unknown or incomplete preservation group' >&2; exit 1 ;;
   esac
   read -r -a selected_baselines <<< "$UPGRADE_BASELINE_GROUP" ;;
@@ -321,9 +321,9 @@ import json,os,re
 from pathlib import Path
 root=Path('candidate-proof')
 selected=[int(v) for v in os.environ['SELECTED_BASELINE_VERSION_CODES'].split()]
-groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29,30]]
+groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29,30,31]]
 mode=os.environ['CANDIDATE_TEST_MODE']
-assert (mode=='full' and selected==list(range(13,31))) or (mode=='upgrades' and selected in groups)
+assert (mode=='full' and selected==list(range(13,32))) or (mode=='upgrades' and selected in groups)
 checks=[]
 for baseline in selected:
  for activation in ('temporary','perpetual'):
@@ -334,8 +334,8 @@ for baseline in selected:
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
 assert len(checks)==len(selected)*6
-if mode=='full':assert len(checks)==108
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':31,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
+if mode=='full':assert len(checks)==114
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':32,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 fi
 sha256sum --check candidate-output/SHA256SUMS.txt

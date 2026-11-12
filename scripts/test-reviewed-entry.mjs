@@ -40,7 +40,7 @@ async function open({language='ar',width=393,height=852,holdState=false,kind='co
     const payload=JSON.parse(serialized);f.calls.push({id,command,identifier:payload.identifier,consent:payload.consent});
     if(command==='state'){f.stateId??=id;if(holdState&&f.calls.filter(c=>c.command==='state').length===1)return;return reply(id,{mode:'none',legacyAvailable,...(companyPendingState?{companyEnrollment:{stage:'pending',mode:'online',deviceStatus:'pending',installationId:'11111111-2222-4333-8444-555555555555',requestId:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',identifier:'company@example.invalid'}}:{})})}
     if(command==='login'){
-     if(f.approved)return reply(id,{stage:'active',mode:kind==='phone'?'offline':'online'});
+     if(f.approved)return reply(id,{stage:'active',mode:kind==='phone'?'offline':'online',...(kind==='phone'?{activationRequired:true}:{})});
      if(kind==='phone')return reply(id,{stage:'pending',mode:'offline',phone:payload.identifier,activationRequired:true});
      return reply(id,{stage:'pending',mode:'online',deviceStatus:'pending',installationId:'11111111-2222-4333-8444-555555555555',requestId:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
     }
@@ -82,22 +82,23 @@ try{
  });
  await check('company pending is display-only with no data access, automatic polling or saved password',async()=>{
   const x=await open({holdState:true});try{
-   await form(x.page,'company@example.invalid');await x.page.locator('#login-form .primary').click();await x.page.locator('#company-retry').waitFor();
-   assert.equal(await x.page.locator('.entry-identity').innerText(),'company@example.invalid');assert.equal(await x.page.locator('#check,#activate,#legacy,#code').count(),0);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);assert.equal(await x.page.evaluate(()=>__entryDatabaseOpens),0);
+   await form(x.page,'company@example.invalid');await x.page.evaluate(()=>window.__originalEntry=document.querySelector('#identifier'));await x.page.locator('#login-form .primary').click();await x.page.waitForFunction(()=>document.querySelector('#entry-notice').textContent.includes('المسؤول'));
+   assert.equal(await x.page.locator('#identifier').inputValue(),'company@example.invalid');assert.equal(await x.page.locator('#code').inputValue(),'');assert.equal(await x.page.locator('#check,#activate,#company-retry').count(),0);assert.equal(await x.page.evaluate(()=>document.querySelector('#identifier')===__originalEntry),true);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);assert.equal(await x.page.evaluate(()=>__entryDatabaseOpens),0);
    await x.page.evaluate(()=>__replyInitialState({mode:'none',legacyAvailable:true,companyEnrollment:{stage:'pending',mode:'online',deviceStatus:'pending',identifier:'other@example.invalid'}}));
-   await x.page.clock.fastForward(180001);assert.equal(await x.page.locator('.entry-identity').innerText(),'company@example.invalid');assert.equal(await x.page.locator('#legacy').count(),1,'late valid-local metadata may expose only an explicit local route');assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);
+   await x.page.clock.fastForward(180001);assert.equal(await x.page.locator('#identifier').inputValue(),'company@example.invalid');assert.equal(await x.page.locator('#legacy').count(),1,'late valid-local metadata may expose only an explicit local route');assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);
    assert.deepEqual(await x.page.evaluate(()=>__entryFixture.calls.map(c=>c.command)),['state','login']);await noStoredSecret(x.page);
-   await x.page.locator('#company-retry').click();assert.equal(await x.page.locator('#identifier').inputValue(),'company@example.invalid');assert.equal(await x.page.locator('#code').inputValue(),'');assert.equal(await x.page.locator('#consent').isChecked(),false);
+   assert.equal(await x.page.locator('#identifier').inputValue(),'company@example.invalid');assert.equal(await x.page.locator('#code').inputValue(),'');assert.equal(await x.page.locator('#consent').isChecked(),true);
    await x.page.evaluate(()=>__entryFixture.approved=true);await form(x.page,'company@example.invalid');await x.page.locator('#login-form .primary').click();
    assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),['continue']);assert.equal(await x.page.evaluate(()=>__entryFixture.calls.filter(c=>c.command==='login').length),2);await noStoredSecret(x.page);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
  await check('phone registration stays a single-device request and receives approval only by explicit action',async()=>{
   const x=await open({kind:'phone'});try{
-   await form(x.page,'23456789','synthetic-phone-code');await x.page.locator('#login-form .primary').click();await x.page.locator('#check').waitFor();
-   assert.equal(await x.page.locator('#company-retry,#legacy,#activate').count(),0);assert.match(await x.page.locator('h1').innerText(),/الهاتف/);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);assert.equal(await x.page.evaluate(()=>__entryDatabaseOpens),0);
-   await x.page.evaluate(()=>__entryFixture.approved=true);await x.page.locator('#check').click();await x.page.locator('#activate').waitFor();assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);
-   await x.page.locator('#activate').click();assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),['continue']);await noStoredSecret(x.page);assert.deepEqual(x.errors,[]);
+   await form(x.page,'23456789','synthetic-phone-code');await x.page.locator('#login-form .primary').click();await x.page.waitForFunction(()=>document.querySelector('#entry-notice').textContent.includes('تواصل'));
+   assert.equal(await x.page.locator('#company-retry,#check,#legacy,#activate').count(),0);assert.match(await x.page.locator('h1').innerText(),/تسجيل الدخول/);assert.doesNotMatch(await x.page.locator('#content').innerText(),/رقم الهاتف|8 أرقام|طلب تفعيل/);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);assert.equal(await x.page.evaluate(()=>__entryDatabaseOpens),0);
+   await x.page.clock.fastForward(180001);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.calls.map(c=>c.command)),['state','login']);
+   await x.page.evaluate(()=>__entryFixture.approved=true);await form(x.page,'23456789','synthetic-phone-code');await x.page.locator('#login-form .primary').click();
+   assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),['continue']);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.calls.map(c=>c.command)),['state','login','login','offline-activate']);await noStoredSecret(x.page);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
  await check('the actual native bridge uses unique secure RFC4122 v4 IDs without randomUUID',async()=>{
@@ -117,10 +118,16 @@ try{
   for(const companyPendingState of [false,true]){
    const x=await open({legacyAvailable:true,companyPendingState});try{
     if(!companyPendingState){await form(x.page,'company@example.invalid');await x.page.locator('#login-form .primary').click()}
-    await x.page.locator('#company-retry').waitFor();await x.page.locator('#legacy').waitFor();assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);
+    await x.page.waitForFunction(()=>document.querySelector('#entry-notice').textContent.includes('المسؤول'));await x.page.locator('#legacy').waitFor();assert.equal(await x.page.locator('#login-form').count(),1);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),[]);
     await x.page.locator('#legacy').click();assert.deepEqual(await x.page.evaluate(()=>__entryFixture.events),['continue']);assert.equal(await x.page.evaluate(()=>__entryFixture.calls.filter(c=>c.command==='legacy').length),1);assert.equal(await x.page.evaluate(()=>__entryDatabaseOpens),0);await noStoredSecret(x.page);assert.deepEqual(x.errors,[]);
    }finally{await x.context.close()}
   }
+ });
+ await check('arbitrary names never create a native request and reveal no numeric trigger',async()=>{
+  const x=await open();try{await form(x.page,'random-unknown-name','synthetic-company-password-2026');await x.page.locator('#login-form .primary').click();assert.match(await x.page.locator('#error').innerText(),/تواصل مع مسؤول منشأتك/);assert.deepEqual(await x.page.evaluate(()=>__entryFixture.calls.map(c=>c.command)),['state']);assert.equal(await x.page.locator('#login-form').count(),1);assert.doesNotMatch(await x.page.locator('#content').innerText(),/8 أرقام|رقم الهاتف|2 أو 3|طلب تفعيل/);await noStoredSecret(x.page);assert.deepEqual(x.errors,[])}finally{await x.context.close()}
+ });
+ await check('one username and password form has no organization type choice',async()=>{
+  for(const language of ['ar','fr']){const x=await open({language});try{assert.equal(await x.page.locator('#identifier,#code').count(),2);assert.equal(await x.page.locator('form').count(),1);assert.equal(await x.page.locator('[role=tab],select,#company-retry,#activate,#check').count(),0);assert.equal(await x.page.locator('label[for=identifier]').innerText(),language==='ar'?'اسم المستخدم':'Nom d’utilisateur');assert.doesNotMatch(await x.page.locator('#content').innerText(),/رقم الهاتف|Téléphone|بريد المنشأة|e-mail de l’établissement/);assert.deepEqual(x.errors,[])}finally{await x.context.close()}}
  });
  for(const language of ['ar','fr'])for(const variant of [320,360,393,'short','large'])await check('responsive '+language+' '+variant,async()=>{
   const width=typeof variant==='number'?variant:variant==='short'?360:393,height=variant==='short'?420:852;
