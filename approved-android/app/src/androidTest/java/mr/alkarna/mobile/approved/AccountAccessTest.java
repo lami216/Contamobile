@@ -24,7 +24,7 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public final class AccountAccessTest {
  private static final String VAULT_FILE="account-access-v1.json",VAULT_KEY="alkarna.account.access.v1";
- private static final String CODE="synthetic-account-code-2026";
+ static final String CODE="synthetic-account-code-2026";
  private Context context;
  private Service service;
  private AccountAccessClient client;
@@ -144,14 +144,47 @@ public final class AccountAccessTest {
   service.unboundCapabilities=true;rejected("ONLINE_ACCESS_SCOPE",()->login());assertFalse(client.admitted());
   service.unboundCapabilities=false;login();assertTrue(client.admitted());
  }
- private static final class Service implements ContatoolsClient.Transport {
+ @Test public void newCompanyDeviceStaysPendingAcrossReopenUntilExplicitApprovedLogin() throws Exception {
+  service.pendingLogin=true;
+  JSONObject input=new JSONObject().put("identifier","fixture-account@example.invalid").put("code",CODE).put("consent",true);
+  JSONObject first=client.command("login",input);assertEquals("pending",first.getString("stage"));assertEquals("online",first.getString("mode"));assertEquals("pending",first.getString("deviceStatus"));assertFalse(client.admitted());assertFalse(client.onlineMode());
+  assertFalse(new DeviceLicense(context).status().getBoolean("valid"));assertFalse(journal().optBoolean("preferOnlineEntry"));
+  assertFalse("Pending metadata never retains the password",journal().toString().contains(CODE));assertNull("No session is issued for a pending device",service.token);
+  assertEquals(ProtocolJson.canonical(first),ProtocolJson.canonical(client.command("state",new JSONObject()).getJSONObject("companyEnrollment")));
+  rejected("ACCOUNT_LOGIN_REQUIRED",()->client.command("bootstrap",new JSONObject()));rejected("ACCOUNT_LOGIN_REQUIRED",()->push(payload("branch-A")));assertEquals(0,service.applied);
+  recreate();assertFalse(client.admitted());assertEquals(first.getString("requestId"),client.command("state",new JSONObject()).getJSONObject("companyEnrollment").getString("requestId"));assertEquals(1,service.loginCalls);
+  assertEquals(first.getString("requestId"),client.command("login",input).getString("requestId"));assertEquals("Pending status is checked only by explicit credential login",2,service.loginCalls);
+  service.pendingLogin=false;login();assertFalse(journal().has("companyEnrollment"));assertFalse(new DeviceLicense(context).status().getBoolean("valid"));
+ }
+ @Test public void pendingReplyRejectsForeignDeviceAuthorityFieldsAndAnUnapprovedSignedGrant() throws Exception {
+  service.pendingLogin=true;
+  for(JSONObject change:new JSONObject[]{new JSONObject().put("sessionToken","forbidden"),new JSONObject().put("installationId",UUID.randomUUID().toString()),new JSONObject().put("requestId","not-a-uuid"),new JSONObject().put("deviceStatus","approved")}){
+   service.pendingOverrides=change;rejected("ONLINE_DEVICE_PENDING_INVALID",()->client.command("login",new JSONObject().put("identifier","fixture-account@example.invalid").put("code",CODE).put("consent",true)));assertFalse(client.admitted());assertFalse(client.onlineMode());
+  }
+  assertFalse(journal().has("companyEnrollment"));service.pendingLogin=false;service.omitDeviceApproval=true;rejected("ONLINE_ACCESS_INVALID",()->login());assertFalse(client.admitted());
+  service.omitDeviceApproval=false;login();assertTrue(client.admitted());
+ }
+ @Test public void pendingCompanyEnrollmentCannotReplaceUnresolvedAccountingAuthority() throws Exception {
+  for(boolean interrupted:new boolean[]{false,true}){
+   login();JSONObject original=payload("branch-B");service.dropPushResponse=interrupted;
+   if(interrupted)rejected("Synthetic response interrupted",()->push(original));else push(original);
+   byte[] before=encryptedBytes();boolean admittedBefore=client.admitted();String storedName=interrupted?"onlinePending":"onlineCompleted";String receipt=ProtocolJson.canonical(journal().getJSONObject(storedName));
+   service.pendingLogin=true;rejected("ONLINE_PENDING_OTHER_ACCOUNT",()->client.command("login",new JSONObject().put("identifier","fixture-account@example.invalid").put("code",CODE).put("consent",true)));
+   assertTrue("The original session mode remains available for resolving its receipt",client.onlineMode());assertEquals(admittedBefore,client.admitted());assertArrayEquals("No pending-account switch may write or consume the financial vault",before,encryptedBytes());assertEquals(receipt,ProtocolJson.canonical(journal().getJSONObject(storedName)));assertFalse(journal().has("companyEnrollment"));
+   service.pendingLogin=false;login();assertEquals(!interrupted,pending().optBoolean("completed"));push(original);assertTrue(ack(original).getBoolean("acknowledged"));assertFalse(pending().getBoolean("pending"));
+  }
+  assertEquals("Original operation UUIDs must not be applied twice during recovery",2,service.applied);
+ }
+ static final class Service implements ContatoolsClient.Transport {
   final KeyPair authority;
   final JSONObject issuers;
   final Map<String,String> proofs=new HashMap<>();
   final Map<String,JSONObject> installations=new HashMap<>(),receipts=new HashMap<>();
   final List<String> dispatchedIds=new ArrayList<>();
-  boolean revoked,dropPushResponse,unboundCapabilities;
-  int applied,pushCalls,statusCalls;
+  boolean revoked,dropPushResponse,unboundCapabilities,pendingLogin,omitDeviceApproval;
+  final String deviceRequestId=UUID.randomUUID().toString();
+  JSONObject pendingOverrides=new JSONObject();
+  int applied,pushCalls,statusCalls,loginCalls;
   String token;
   Service()throws Exception{
    KeyPairGenerator generator=KeyPairGenerator.getInstance("EC");generator.initialize(new ECGenParameterSpec("secp256r1"));authority=generator.generateKeyPair();ECPublicKey key=(ECPublicKey)authority.getPublic();
@@ -161,6 +194,7 @@ public final class AccountAccessTest {
   private JSONObject grant(String installation)throws Exception{
    long now=System.currentTimeMillis();JSONArray branches=new JSONArray().put(new JSONObject().put("id","branch-A").put("name","Synthetic A").put("originId","origin-A")).put(new JSONObject().put("id","branch-B").put("name","Synthetic B").put("originId","origin-B")),caps=new JSONArray().put("branch.read").put("transaction.post");
    JSONObject claims=new JSONObject().put("purpose","android-online-access").put("applicationId",BuildConfig.APPLICATION_ID).put("mode","online").put("organizationId","fixture-org").put("memberId","fixture-member").put("installationId",installation).put("keyFingerprint",ProtocolJson.fingerprint(installations.get(installation))).put("status","active").put("role","owner").put("membershipVersion",1).put("capabilities",caps).put("branches",branches).put("issuedAt",Instant.ofEpochMilli(now).toString()).put("expiresAt",Instant.ofEpochMilli(now+60000).toString());
+   if(!omitDeviceApproval)claims.put("deviceApproval","approved");
    JSONObject signed=new JSONObject().put("schema","contatools-android-online-access").put("version",1).put("kid","account-fixture").put("payload",claims);Signature signer=Signature.getInstance("SHA256withECDSA");signer.initSign(authority.getPrivate());signer.update(ProtocolJson.canonical(signed).getBytes(StandardCharsets.UTF_8));signed.put("signature",ProtocolJson.base64(ProtocolJson.rawSignature(signer.sign())));
    return new JSONObject().put("stage","active").put("mode","online").put("organization",new JSONObject().put("id","fixture-org")).put("member",new JSONObject().put("id","fixture-member").put("role","owner").put("membershipVersion",1).put("capabilities",caps).put("branchIds",new JSONArray().put("branch-A").put("branch-B"))).put("branches",branches).put("entitlement",signed);
   }
@@ -174,8 +208,9 @@ public final class AccountAccessTest {
    assertEquals(AccountProtocol.DISPATCH,path);String message=proofs.remove(body.getString("challengeId"));assertNotNull("Every dispatch requires a fresh one-shot challenge",message);JSONObject proof=new JSONObject(message);assertEquals(operation,proof.getString("operation"));assertEquals(ProtocolJson.hash(payload),proof.getString("payloadHash"));assertEquals(installation,proof.getString("installationId"));
    JSONObject jwk=installations.get(installation);assertNotNull(jwk);Signature verifier=Signature.getInstance("SHA256withECDSA");verifier.initVerify(LicenseVerifier.key(jwk.getString("x"),jwk.getString("y")));verifier.update(message.getBytes(StandardCharsets.UTF_8));assertTrue("The real Android Keystore signed the exact payload proof",verifier.verify(LicenseVerifier.der(ProtocolJson.decode(body.getString("signature")))));
    if(revoked)throw new AccountAccessClient.Failure(403,"ACCOUNT_ACCESS_REVOKED");
-   if(operation.equals("session.login")){assertEquals(CODE,payload.getString("code"));byte[] random=new byte[32];new SecureRandom().nextBytes(random);token=ProtocolJson.base64(random);JSONObject answer=grant(installation).put("sessionToken",token);if(unboundCapabilities)answer.put("protocolCapabilities",new JSONObject().put("sharedDeltaVersion",1));return answer;}
+   if(operation.equals("session.login")){loginCalls++;assertEquals(CODE,payload.getString("code"));assertEquals(1,payload.getJSONObject("clientProtocol").getInt("deviceApprovalVersion"));if(pendingLogin){JSONObject pending=new JSONObject().put("stage","pending").put("mode","online").put("deviceStatus","pending").put("installationId",installation).put("requestId",deviceRequestId);for(String key:pendingOverrides.keySet())pending.put(key,pendingOverrides.get(key));return pending;}byte[] random=new byte[32];new SecureRandom().nextBytes(random);token=ProtocolJson.base64(random);JSONObject answer=grant(installation).put("sessionToken",token);if(unboundCapabilities)answer.put("protocolCapabilities",new JSONObject().put("sharedDeltaVersion",1));return answer;}
    assertEquals(token,body.getString("sessionToken"));assertEquals(ProtocolJson.hash(token),proof.getString("sessionTokenHash"));
+   if(operation.equals("session.logout"))return new JSONObject().put("signedOut",true);
    if(operation.equals("access.status")){statusCalls++;return grant(installation);}
    if(operation.equals("sync.push")){
     pushCalls++;JSONArray response=new JSONArray(),commands=payload.getJSONArray("commands");

@@ -67,6 +67,18 @@ public final class OfflineAccountControlTest {
   assertFalse(file(VAULT).exists());assertTrue(client.enterLocalAutomatically());assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));
   assertFalse(file(VAULT).exists());assertEquals(hash,license.documentHash());assertFalse(service.accepted);assertEquals(0,service.currentCalls);
  }
+ @Test public void localLicenseAndDataRemainSeparateAndReachableAfterPendingAndApprovedCompanyLogin()throws Exception{
+  license.install(TestLicenseIssuer.issue(license.deviceCode(),"temporary",3600));String hash=license.documentHash();double remaining=license.status().getJSONObject("license").getDouble("remainingSeconds");
+  AccountAccessTest.Service company=new AccountAccessTest.Service();client=new AccountAccessClient(context,license,company.issuers,company);
+  assertTrue(client.enterLocalAutomatically());assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));
+  JSONObject input=new JSONObject().put("identifier","fixture-account@example.invalid").put("code",AccountAccessTest.CODE).put("consent",true);
+  company.pendingLogin=true;assertEquals("pending",client.command("login",input).getString("stage"));assertFalse(client.admitted());assertTrue(client.command("state",new JSONObject()).getBoolean("legacyAvailable"));assertFalse(journal().optBoolean("preferOnlineEntry"));
+  assertEquals("legacy",client.command("legacy",new JSONObject()).getString("mode"));assertEquals(hash,license.documentHash());assertTrue(client.admitted());
+  company.pendingLogin=false;assertEquals("online",client.command("login",input).getString("mode"));assertTrue(client.admitted());assertEquals("online",client.command("bootstrap",new JSONObject()).getString("mode"));assertTrue(journal().getBoolean("preferOnlineEntry"));assertFalse(journal().has("companyEnrollment"));
+  client.command("logout",new JSONObject());assertFalse(client.admitted());assertFalse("Choosing online entry must not silently switch back after company logout",client.enterLocalAutomatically());assertTrue(client.command("state",new JSONObject()).getBoolean("legacyAvailable"));
+  assertEquals("legacy",client.command("legacy",new JSONObject()).getString("mode"));assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));assertFalse(journal().optBoolean("preferOnlineEntry"));
+  recreate();assertTrue(client.enterLocalAutomatically());assertEquals(hash,license.documentHash());assertTrue(license.status().getJSONObject("license").getDouble("remainingSeconds")<=remaining);assertFalse(journal().has("offline"));assertFalse(journal().has("request"));assertEquals("synthetic-ledger-bytes-unchanged",Files.readString(file("offline-account-sentinel.bin").toPath(),StandardCharsets.UTF_8));
+ }
  @Test public void directActivationLostAckConvergesWithoutRepeatingTheTerm()throws Exception{
   activated(false);String hash=license.documentHash();service.dropAccept=true;
   assertTrue(client.command("bootstrap-complete",new JSONObject()).getBoolean("ackPending"));long end=service.lifecycle.endsAt;

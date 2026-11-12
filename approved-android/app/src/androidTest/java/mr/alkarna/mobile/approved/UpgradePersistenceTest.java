@@ -116,6 +116,33 @@ public class UpgradePersistenceTest {
         write("upgrade-after.json",checkpoint(before,license).toString());
         System.out.println("UPGRADE PASS: "+phase+" preserved every store, credentials, business rows, preferences, identities and activation countdown.");
     }
+    private void verifyReviewedEntryAndReturn(JSONObject before) throws Exception {
+        if(ExistingLicenseAccess.installedVersion()<31)return;
+        String databaseBefore=databaseSnapshot(),preferencesBefore=preferences();
+        js("NativeHost.openAccountAccess();true");
+        until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#login-form #identifier')&&!!document.querySelector('#legacy:not(:disabled)')");
+        assertEquals("The upgraded entry cannot expose manual activation or activation contacts","false",js("!!document.querySelector('#manual,#license-file,#license-text,#install-text,.activation-contact,a[href^=\"tel:\"],a[href*=\"wa.me\"]')"));
+        assertEquals("The upgraded entry uses the new form and localized brand","true",js("!!document.querySelector('#brand-caption')&&!!document.querySelector('#login-form #code')&&document.querySelector('.entry-brand strong').textContent===(document.documentElement.lang==='fr'?'AlKarna':'الكرنه')&&document.querySelector('h1').textContent===(document.documentElement.lang==='fr'?'Connexion':'تسجيل الدخول')"));
+        assertEquals("No manual installation bridge remains after the upgrade","true",js("typeof NativeHost.installActivation==='undefined'&&typeof NativeHost.copyDeviceCode==='undefined'&&typeof NativeHost.activationContinue==='undefined'"));
+        js("document.querySelector('#legacy').click();true");
+        until("location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
+        assertEquals("Visiting the upgraded account entry preserves every local database row",databaseBefore,databaseSnapshot());
+        assertEquals("Visiting the upgraded account entry preserves local preferences",preferencesBefore,preferences());
+        nativePreserved(before,false);
+        System.out.println("UPGRADE ENTRY PASS: reviewed current form/brand, no manual activation/contact bridge, explicit old local return and unchanged database/preferences/licence.");
+    }
+    private void warmOldEntryBeforeSnapshot() throws Exception {
+        long version=ExistingLicenseAccess.installedVersion();if(version!=29&&version!=30)return;
+        String databaseBefore=databaseSnapshot(),preferencesBefore=preferences();
+        js("NativeHost.openAccountAccess();true");
+        until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#manual')&&!!document.querySelector('#legacy:not(:disabled)')");
+        assertEquals("The actual old v29/v30 entry still exposes its original manual-import control","true",js("!!document.querySelector('#manual')&&!!document.querySelector('#identifier')&&!!document.querySelector('#code')"));
+        js("document.querySelector('#legacy').click();true");
+        until("location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
+        assertEquals("Warming the old entry cannot change a local database row",databaseBefore,databaseSnapshot());
+        assertEquals("Warming the old entry cannot change a local preference",preferencesBefore,preferences());
+        System.out.println("UPGRADE OLD ENTRY WARMED: actual v"+version+" original manual entry loaded and returned to local login without clearing cache or changing data.");
+    }
     @Test public void seedPreviousVersion() throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());
         String type=InstrumentationRegistry.getArguments().getString("upgradeLicenseType","temporary");
@@ -143,6 +170,7 @@ public class UpgradePersistenceTest {
         // version before taking a byte-for-byte baseline of every stored row.
         activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
         until("!!document.querySelector('[data-action=\"site:login\"]')");
+        warmOldEntryBeforeSnapshot();
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
             .put("type",type).put("remainingSeconds",license.status().getJSONObject("license").get("remainingSeconds"))
@@ -164,6 +192,7 @@ public class UpgradePersistenceTest {
         action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='upgrade-worker';document.querySelector('[name=password]').value='worker-5678';true");action("site:login");until("!!document.querySelector('.nav')");
         assertEquals("12",js("S.products[0].qty"));action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");
+        verifyReviewedEntryAndReturn(before);
         write("upgrade-after.json",checkpoint(before,license).toString());
         System.out.println("UPGRADE PASS: real install -r preserved every business store, password, device code, certificate, native activation key, consumed license and remaining duration.");
     }

@@ -1,5 +1,13 @@
 (()=>{
  const waiting=new Map(),transfers=new Set();let pageActive=true;
+ // Request IDs remain cryptographically random on WebViews without randomUUID.
+ function requestId(){
+  if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
+  const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=Array.from(bytes,value=>value.toString(16).padStart(2,'0')).join('');
+  return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+ }
+
  const uncertainExport='لم يتأكد حفظ الملف. تحقّق من المكان الذي اخترته قبل إعادة المحاولة.';
  const bridgeFailure=(code,exporting=false)=>Object.assign(new Error(exporting?uncertainExport:'لم يصل تأكيد من التطبيق. تحقّق من النتيجة ثم أعد المحاولة.'),{code,permanent:false,status:0});
  function settle(id,error,result){const request=waiting.get(id);if(!request)return;waiting.delete(id);window.clearTimeout(request.timer);error?request.reject(error):request.resolve(result)}
@@ -10,14 +18,14 @@
   const timer=window.setTimeout(()=>settle(id,bridgeFailure('NATIVE_TIMEOUT',exporting)),timeout);waiting.set(id,{resolve,reject,timer});
   try{start()}catch(error){settle(id,error)}
  })}
- function call(method,...args){const id=crypto.randomUUID();return request(id,60000,()=>NativeHost[method](id,...args))}
+ function call(method,...args){const id=requestId();return request(id,60000,()=>NativeHost[method](id,...args))}
  window.addEventListener('pagehide',()=>{pageActive=false;for(const [id]of waiting)settle(id,bridgeFailure('NATIVE_PAGE_HIDDEN'));for(const job of [...transfers])job.cancel()});
  window.addEventListener('pageshow',()=>{pageActive=true});
  window.NativeFiles={
   async saveBlob(name,blob){
    if(blob.size>64*1024*1024)throw new Error('حجم الملف أكبر من الحد المتاح');
    return new Promise((resolve,reject)=>{
-    const id=crypto.randomUUID(),job={cancelled:false,cancel(){this.cancelled=true;transfers.delete(this);reject(bridgeFailure('NATIVE_PAGE_HIDDEN',true))}};transfers.add(job);
+    const id=requestId(),job={cancelled:false,cancel(){this.cancelled=true;transfers.delete(this);reject(bridgeFailure('NATIVE_PAGE_HIDDEN',true))}};transfers.add(job);
     const check=()=>{if(job.cancelled||!pageActive)throw bridgeFailure('NATIVE_PAGE_HIDDEN',true)};
     (async()=>{
      check();await request(id,30000,()=>NativeHost.beginExport(id,name,blob.type||'application/octet-stream'),true);
@@ -31,19 +39,19 @@
   activation:()=>NativeHost.openActivation()
  };
  window.NativeFiles.ownerRecovery=(command,value='')=>call('ownerRecovery',command,value);
- window.NativeFiles.accountAccess=(command,payload={})=>{const id=crypto.randomUUID();return request(id,60000,()=>NativeHost.accountAccess(id,command,JSON.stringify(payload)))};
- window.NativeFiles.deviceLifecycle=(command,payload={})=>{const id=crypto.randomUUID();return request(id,command==='bootstrap-preview'?600000:60000,()=>NativeHost.deviceLifecycle(id,command,JSON.stringify(payload)))};
+ window.NativeFiles.accountAccess=(command,payload={})=>{const id=requestId();return request(id,60000,()=>NativeHost.accountAccess(id,command,JSON.stringify(payload)))};
+ window.NativeFiles.deviceLifecycle=(command,payload={})=>{const id=requestId();return request(id,command==='bootstrap-preview'?600000:60000,()=>NativeHost.deviceLifecycle(id,command,JSON.stringify(payload)))};
  window.NativeFiles.accountingReset=(command,payload={})=>call('accountingReset',command,JSON.stringify(payload));
  window.NativeFiles.closeAfterAccountingReset=receipt=>call('accountingReset','exit-after-reset',JSON.stringify({...receipt,purpose:'accounting-reset-exit'}));
- window.NativeFiles.cloudBackup=(command,payload={})=>{const id=crypto.randomUUID();return request(id,command==='download'?600000:60000,()=>NativeHost.cloudBackup(id,command,JSON.stringify(payload)))};
+ window.NativeFiles.cloudBackup=(command,payload={})=>{const id=requestId();return request(id,command==='download'?600000:60000,()=>NativeHost.cloudBackup(id,command,JSON.stringify(payload)))};
  window.NativeFiles.stageCloudBackup=(context,blob,revision)=>{
   if(!(blob instanceof Blob)||blob.size<2||blob.size>8*1024*1024)return Promise.reject(Object.assign(new Error('SNAPSHOT_TOO_LARGE'),{code:'SNAPSHOT_TOO_LARGE'}));
   return new Promise((resolve,reject)=>{
-   const id=crypto.randomUUID(),cancelNative=()=>{try{NativeHost.cloudBackupCancel(id)}catch{}},job={cancelled:false,cancel(){this.cancelled=true;cancelNative();transfers.delete(this);reject(bridgeFailure('NATIVE_PAGE_HIDDEN'))}};transfers.add(job);
+   const id=requestId(),cancelNative=()=>{try{NativeHost.cloudBackupCancel(id)}catch{}},job={cancelled:false,cancel(){this.cancelled=true;cancelNative();transfers.delete(this);reject(bridgeFailure('NATIVE_PAGE_HIDDEN'))}};transfers.add(job);
    const check=()=>{if(job.cancelled||!pageActive)throw bridgeFailure('NATIVE_PAGE_HIDDEN')};
    (async()=>{
     check();await request(id,30000,()=>NativeHost.cloudBackupBegin(id,JSON.stringify({...context,sizeBytes:blob.size,localRevision:String(revision),snapshotAt:Date.now()})));
-    for(let offset=0;offset<blob.size;offset+=49152){check();const bytes=new Uint8Array(await blob.slice(offset,offset+49152).arrayBuffer());check();let binary='';for(const b of bytes)binary+=String.fromCharCode(b);const chunkId=crypto.randomUUID();await request(chunkId,30000,()=>NativeHost.cloudBackupAppend(chunkId,id,btoa(binary)))}
+    for(let offset=0;offset<blob.size;offset+=49152){check();const bytes=new Uint8Array(await blob.slice(offset,offset+49152).arrayBuffer());check();let binary='';for(const b of bytes)binary+=String.fromCharCode(b);const chunkId=requestId();await request(chunkId,30000,()=>NativeHost.cloudBackupAppend(chunkId,id,btoa(binary)))}
     check();return request(id,60000,()=>NativeHost.cloudBackupFinish(id));
    })().then(resolve,error=>{cancelNative();reject(error)}).finally(()=>transfers.delete(job));
   });

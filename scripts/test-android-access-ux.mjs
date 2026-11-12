@@ -50,8 +50,16 @@ const server=createServer(async(req,res)=>{
  }catch(error){res.writeHead(500).end(error.message)}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;let browser,failed=0;
+async function localOnly(context){await context.route('**/*',async route=>{
+ const url=new URL(route.request().url());assert.equal(url.origin,origin,'Disposable browser fixtures must never contact a remote service');
+ if(url.pathname==='/native'){const {command,payload}=route.request().postDataJSON(),f=fixtures.get(url.searchParams.get('id'));let result;try{result=dispatch(f,command,payload)}catch(error){result={error:error.message,code:error.message}}return route.fulfill({json:result});}
+ const relative=url.pathname.slice(1)||'index.html',filename=path.resolve(runtime,relative);assert(filename.startsWith(runtime));
+ let bytes;try{bytes=await readFile(filename).catch(error=>/^assets\/StitchArabic(?:Bold)?\.ttf$/.test(relative)?readFile(path.resolve(runtime,'../assets/fonts',path.basename(relative))):Promise.reject(error))}catch{return route.fulfill({status:404,body:''})}
+ return route.fulfill({body:bytes,contentType:['.js','.mjs'].includes(path.extname(filename))?'text/javascript':path.extname(filename)==='.css'?'text/css':path.extname(filename)==='.html'?'text/html':'application/octet-stream'});
+});}
 async function open(f,entry='index.html',language='ar',blockLocal=false,viewport={width:360,height:700},clock=false){
- const id=String(++sequence);fixtures.set(id,f);const context=await browser.newContext({viewport,serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const id=String(++sequence);fixtures.set(id,f);const context=await browser.newContext({viewport,serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('FIXTURE PAGE ERROR '+e.message)});
+ await localOnly(context);
  if(clock)await page.clock.install();
  await context.addInitScript(({id,language,blockLocal})=>{
   localStorage.setItem('alkarna-site-language',language);window.__accessEvents=[];
@@ -61,15 +69,6 @@ async function open(f,entry='index.html',language='ar',blockLocal=false,viewport
   const originalOpen=indexedDB.open.bind(indexedDB);window.__localOpens=0;indexedDB.open=(...args)=>{window.__localOpens++;if(blockLocal)throw Error('ONLINE_LOCAL_DB_OPENED');return originalOpen(...args)};
  },{id,language,blockLocal});
  await page.goto(origin+'/'+entry);return {context,page,errors,id};
-}
-async function licensePage(language,valid){
- const context=await browser.newContext({viewport:{width:320,height:620},serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await context.addInitScript(({language,valid})=>{
-  localStorage.setItem('alkarna-site-language',language);window.__licenseCalls=[];
-  const status={valid,deviceId:'SYNTHETIC-DEVICE',code:valid?'VALID':'LICENSE_REQUIRED',license:valid?{customerName:'مالك سابق',storeName:'محل محفوظ',remainingSeconds:86400}:null};
-  window.NativeHost={language(){},copyDeviceCode(){},activationContinue(){__licenseCalls.push({command:'continue'})},activationStatus(id){queueMicrotask(()=>__nativeResult(id,status))},installActivation(id,content){__licenseCalls.push({command:'install',content});queueMicrotask(()=>__nativeResult(id,{...status,valid:true,code:'VALID',license:{customerName:'مالك سابق',storeName:'محل محفوظ',remainingSeconds:86400}}))},deviceLifecycle(id,command){__licenseCalls.push({command});queueMicrotask(()=>__nativeResult(id,{status:'active',activationAvailable:false}))}};
- },{language,valid});
- await page.goto(origin+'/activation.html');await page.waitForFunction(()=>document.querySelector('#device-code').textContent==='SYNTHETIC-DEVICE');return {context,page,errors};
 }
 async function action(page,value){await page.evaluate(value=>act(value),value);await page.waitForFunction(()=>!karnaPersistenceBusy());}
 async function check(name,fn){try{await fn();console.log('PASS '+name)}catch(error){failed++;console.error('FAIL '+name+'\n'+error.stack)}}
@@ -152,6 +151,18 @@ try{
    await x.page.reload();await x.page.locator('.nav').waitFor();const after=await x.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js');return(await new ShopDatabase().all('users')).map(u=>({id:u.id,username:u.username,password:u.password}));});assert.deepEqual(after,before);
   }finally{await x.context.close()}
  });
+ await check('local users and ledger remain separate through organization login and return to the old local account',async()=>{
+  const f=fixture('offline'),x=await open(f);try{
+   await x.page.locator('.nav').waitFor();await action(x.page,'open:expense');await x.page.locator('[name=name]').fill('قيد محلي مستقل');await x.page.locator('[name=amount]').fill('17.25');await action(x.page,'post-cash');
+   const snapshot=()=>x.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),db=new ShopDatabase(),state=await db.load();return {users:await db.all('users'),originId:state.originId,records:state.records,accounts:state.accounts,products:state.products,parties:state.parties,currency:state.currency}});
+   const before=await snapshot();assert.equal(before.originId,binding.localShopId);assert.equal(before.users.length,1);assert.equal(before.users[0].id,binding.localOwnerId);assert.equal(before.users[0].password.algorithm,'PBKDF2-SHA256');assert.equal(before.records.length,1);assert.equal(f.state.records.length,0);
+   f.mode='online';await x.page.reload();await x.page.locator('.nav').waitFor();assert.equal(await x.page.evaluate(()=>__localOpens),0,'organization entry must not open or import the local database');assert((await x.page.locator('.app-head .sub').innerText()).includes(c.member.name));assert.equal(await x.page.evaluate(()=>S.records.length),0);assert.notEqual(await x.page.evaluate(()=>S.originId),before.originId);
+   await action(x.page,'open:expense');await x.page.locator('[name=name]').fill('قيد المؤسسة فقط');await x.page.locator('[name=amount]').fill('8.5');await action(x.page,'post-cash');assert.equal(f.state.records.length,1);assert.equal(f.pushes.length,1);assert.equal(await x.page.evaluate(()=>__localOpens),0);
+   const central=structuredClone(f.state.records);f.mode='offline';await x.page.reload();await x.page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
+   if(!await x.page.locator('.nav').isVisible()){await x.page.locator('#site-auth-form [name=username]').fill(binding.phone);await x.page.locator('#site-auth-form [name=password]').fill('synthetic-code');await action(x.page,'site:login')}
+   await x.page.locator('.nav').waitFor();assert((await x.page.locator('.app-head .sub').innerText()).includes(binding.ownerName));assert.deepEqual(await snapshot(),before,'old local users/password hashes/ledger/balances must be byte-equivalent business values after the organization round trip');assert.deepEqual(f.state.records,central);assert.equal(f.pushes.length,1,'local re-entry must not migrate a record into the organization');assert.equal(await x.page.evaluate(()=>S.records.some(r=>r.title==='قيد المؤسسة فقط')),false);assert.deepEqual(x.errors,[]);
+  }finally{await x.context.close()}
+ });
  for(const language of ['ar','fr'])await check('pending '+language+' entry re-authenticates then requires an explicit activation tap',async()=>{
   const f=fixture('pending');f.approval=true;const x=await open(f,'access.html',language);try{
    await x.page.waitForFunction(()=>!document.querySelector('#content').getAttribute('aria-busy')||document.querySelector('#content').getAttribute('aria-busy')==='false');await x.page.locator('#identifier').fill(binding.phone);await x.page.locator('#code').fill('synthetic-code');await x.page.locator('#consent').check();await x.page.locator('#login-form .primary').click();await x.page.locator('#activate').waitFor();
@@ -161,13 +172,13 @@ try{
  for(const language of ['ar','fr'])await check('one '+language+' establishment login preserves the identifier and secret when changing language',async()=>{
   const f=fixture('pending'),x=await open(f,'access.html',language,false,{width:320,height:620});try{
    await x.page.locator('#identifier').fill(binding.phone);await x.page.locator('#code').fill('synthetic-code');await x.page.locator('#consent').check();
-   assert.match(await x.page.locator('h1').innerText(),language==='ar'?/حساب منشأة/:/compte d’établissement/);
-   assert.match(await x.page.locator('.disclosure').innerText(),language==='ar'?/بيانات مشتركة.*بيانات محلية/:/données partagées.*données locales/);
+   assert.match(await x.page.locator('h1').innerText(),language==='ar'?/تسجيل الدخول/:/Connexion/);
+   assert.match(await x.page.locator('.entry-note').innerText(),language==='ar'?/رقم الهاتف.*جهاز واحد.*المسؤول/:/Un numéro.*un appareil.*responsable/);
    assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    await proof(x.page,'establishment-entry-'+language);
    await x.page.locator('#language').click();assert.equal(await x.page.locator('#identifier').inputValue(),binding.phone);assert.equal(await x.page.locator('#code').inputValue(),'synthetic-code');assert.equal(await x.page.locator('#consent').isChecked(),true);
    assert.equal(await x.page.evaluate(()=>Object.values(localStorage).some(value=>value.includes('synthetic-code'))),false);assert.equal(await x.page.locator('a[href*="wa.me"]').count(),0);
-   await x.page.locator('#manual').click();assert.deepEqual(await x.page.evaluate(()=>__accessEvents),['activation']);assert.deepEqual(x.errors,[]);
+   assert.equal(await x.page.locator('#manual,#license-file,#license-text,#install-text,a[href^="tel:"]').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
  await check('visible pending approval refreshes automatically and never installs without the explicit receive action',async()=>{
@@ -181,29 +192,29 @@ try{
  });
  await check('bound expiry shows a direct approval without auto-login or touching the local database',async()=>{
   const f=fixture('local-bound');f.localValid=false;f.boundRecord={bound:true,phone:binding.phone,status:'expired',renewalAvailable:false};f.currentRecord={...f.boundRecord,status:'expired',stage:'expired',renewalAvailable:true};const x=await open(f,'access.html','ar',true);try{
-   await x.page.locator('#check').waitFor();assert.match(await x.page.locator('#content').innerText(),/انتهت صلاحية.*بيانات المحل محفوظة/);assert.equal(await x.page.locator('#legacy').count(),0);
+   await x.page.locator('#check').waitFor();assert.match(await x.page.locator('#content').innerText(),/انتهت مدة التفعيل.*بياناتك المحلية محفوظة/);assert.equal(await x.page.locator('#legacy').count(),0);
    await x.page.locator('#check').click();await x.page.locator('#renew').waitFor();assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(await x.page.evaluate(()=>__localOpens),0);await proof(x.page,'establishment-local-approval-ar');
    await x.page.locator('#renew').click();await x.page.waitForFunction(()=>__accessEvents.includes('continue'));assert.equal(f.calls.filter(row=>row.command==='offline-renew').length,1);assert.equal(f.calls.some(row=>['bootstrap','bootstrap-complete','offline-activate'].includes(row.command)),false,'license receipt must not create an owner or bypass the local login');assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
- await check('a signed suspended account remains blocked during a network failure and keeps technical license import available',async()=>{
+ await check('a signed suspended account remains blocked during a network failure without manual activation bypass',async()=>{
   const f=fixture('local-bound');f.localValid=false;f.boundRecord={bound:true,phone:binding.phone,status:'suspended',renewalAvailable:false};f.statusError='NETWORK';const x=await open(f,'access.html','fr',true);try{
-   await x.page.locator('#check').waitFor();assert.match(await x.page.locator('#content').innerText(),/suspendu.*données restent/);await x.page.locator('#check').click();await x.page.waitForFunction(()=>document.querySelector('#error').textContent.length>0);
+   await x.page.locator('#check').waitFor();assert.match(await x.page.locator('#content').innerText(),/suspendu.*données locales sont conservées/);await x.page.locator('#check').click();await x.page.waitForFunction(()=>document.querySelector('#error').textContent.length>0);
    assert.equal(await x.page.locator('#legacy').count(),0);assert.equal(await x.page.locator('#activate').count(),0);assert.equal(await x.page.locator('#renew').count(),0);assert.equal(await x.page.evaluate(()=>__localOpens),0);
-   await x.page.locator('#manual').click();assert.deepEqual(await x.page.evaluate(()=>__accessEvents),['activation']);assert.equal(f.calls.some(row=>row.command==='legacy'),false);assert.deepEqual(x.errors,[]);
+   assert.equal(await x.page.locator('#manual,#license-file,#license-text,#install-text,a[href^="tel:"],a[href*="wa.me"]').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(f.calls.some(row=>row.command==='legacy'),false);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
  await check('native local status updates only the matching phone and cannot authorize a login by themselves',async()=>{
   const f=fixture('local-bound');f.boundRecord={bound:true,phone:binding.phone,status:'active',renewalAvailable:false};const x=await open(f,'access.html','ar',true);try{
    await x.page.locator('#legacy').waitFor();
    await x.page.evaluate(()=>dispatchEvent(new CustomEvent('alkarna-local-account-status',{detail:{phone:'34567890',bound:true,status:'suspended'}})));assert.equal(await x.page.locator('#legacy').count(),1,'another phone must not alter the current card');
-   await x.page.evaluate(phone=>dispatchEvent(new CustomEvent('alkarna-local-account-status',{detail:{phone,bound:true,status:'suspended'}})),binding.phone);assert.equal(await x.page.locator('#legacy').count(),0);assert.match(await x.page.locator('#content').innerText(),/أوقفت الإدارة.*بيانات المحل محفوظة/);
+   await x.page.evaluate(phone=>dispatchEvent(new CustomEvent('alkarna-local-account-status',{detail:{phone,bound:true,status:'suspended'}})),binding.phone);assert.equal(await x.page.locator('#legacy').count(),0);assert.match(await x.page.locator('#content').innerText(),/أوقف المسؤول.*بياناتك المحلية محفوظة/);
    await x.page.evaluate(phone=>dispatchEvent(new CustomEvent('alkarna-local-account-status',{detail:{phone,bound:true,status:'expired',renewalAvailable:true}})),binding.phone);assert.equal(await x.page.locator('#renew').count(),1);assert.equal(await x.page.locator('#legacy').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(await x.page.evaluate(()=>__localOpens),0);assert.equal(f.calls.some(row=>row.command==='offline-renew'),false);
   }finally{await x.context.close()}
  });
  await check('an unverified known phone never pretends that a new approval request was sent',async()=>{
   const f=fixture('local-bound');f.localValid=false;f.boundRecord={bound:true,phone:binding.phone,status:'unavailable',renewalAvailable:false};const x=await open(f,'access.html','ar',true);try{
-   await x.page.locator('#check').waitFor();const text=await x.page.locator('#content').innerText();assert.match(text,/تعذّر التحقق.*بيانات المحل محفوظة/);assert.doesNotMatch(text,/وصل طلب|بانتظار موافقة/);
+   await x.page.locator('#check').waitFor();const text=await x.page.locator('#content').innerText();assert.match(text,/تعذّر تأكيد حالة الهاتف.*بياناتك المحلية محفوظة/);assert.doesNotMatch(text,/أُرسل طلب|بانتظار موافقة/);
    assert.equal(await x.page.locator('#legacy').count(),0);assert.equal(await x.page.locator('#activate').count(),0);assert.equal(await x.page.locator('#renew').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(await x.page.evaluate(()=>__localOpens),0);
    await x.page.locator('#different').click();await x.page.locator('#login-form').waitFor();assert.equal(await x.page.locator('#consent').isChecked(),false);assert.equal(f.calls.some(row=>row.command==='offline-request'),false);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
@@ -214,7 +225,7 @@ try{
    const before=await x.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),db=new ShopDatabase();return {users:await db.all('users'),originId:(await db.load()).originId};});assert.equal(before.users.length,1);assert.equal(before.users[0].id,binding.localOwnerId);assert.equal(before.originId,binding.localShopId);
    await x.page.addInitScript(()=>{const original=indexedDB.open.bind(indexedDB);window.__setupDbOpens=0;indexedDB.open=(...args)=>{window.__setupDbOpens++;return original(...args)}});
    const bootstrapCount=f.calls.filter(row=>row.command==='bootstrap').length;await x.page.goto(origin+'/access.html');await x.page.locator('#login-form').waitFor();await x.page.waitForFunction(()=>document.querySelector('#content').getAttribute('aria-busy')==='false');
-   assert.match(await x.page.locator('h1').innerText(),/أكمل إعداد حساب المنشأة/);assert.equal(await x.page.locator('#identifier').inputValue(),binding.phone);assert.equal(await x.page.locator('#code').inputValue(),'');assert.equal(await x.page.locator('#consent').isChecked(),false);assert.equal(await x.page.locator('#legacy').count(),0,'raw valid license must not bypass incomplete owner setup');assert.equal(await x.page.locator('#activate').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(await x.page.evaluate(()=>__setupDbOpens),0);assert.equal(f.calls.filter(row=>row.command==='bootstrap').length,bootstrapCount);
+   assert.match(await x.page.locator('h1').innerText(),/أكمل إعداد هاتفك/);assert.equal(await x.page.locator('#identifier').inputValue(),binding.phone);assert.equal(await x.page.locator('#code').inputValue(),'');assert.equal(await x.page.locator('#consent').isChecked(),false);assert.equal(await x.page.locator('#legacy').count(),0,'raw valid license must not bypass incomplete owner setup');assert.equal(await x.page.locator('#activate').count(),0);assert.deepEqual(await x.page.evaluate(()=>__accessEvents),[]);assert.equal(await x.page.evaluate(()=>__setupDbOpens),0);assert.equal(f.calls.filter(row=>row.command==='bootstrap').length,bootstrapCount);
    await x.page.locator('#code').fill('synthetic-code');await x.page.locator('#consent').check();await x.page.locator('#login-form .primary').click();await x.page.waitForFunction(()=>__accessEvents.includes('continue'));
    assert.equal(f.calls.at(-1).command,'login');await x.page.goto(origin+'/index.html');await x.page.locator('.nav').waitFor();const after=await x.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),db=new ShopDatabase();return {users:await db.all('users'),originId:(await db.load()).originId};});assert.deepEqual(after,before,'a retry must recognize the exact committed owner/shop and retain its verifier rather than resetting setup');assert.equal(f.boundRecord.setupRequired,false);assert.equal(f.credential,false);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
@@ -227,12 +238,12 @@ try{
    const users=await x.page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js');return new ShopDatabase().all('users');});assert.equal(users.length,1);assert.equal(users[0].id,binding.localOwnerId);assert.equal(await x.page.evaluate(()=>S.originId),binding.localShopId);assert.equal(f.boundRecord.setupRequired,false);assert.equal(f.credential,false);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
- for(const [language,valid] of [['ar',false],['fr',true]])await check('technical '+language+' license import keeps existing files and has no activation or renewal WhatsApp destination',async()=>{
-  const x=await licensePage(language,valid);try{
-   assert.equal(await x.page.locator('#contact-whatsapp').count(),0);assert.equal(await x.page.locator('a[href*="wa.me"]').count(),0);assert.equal(await x.page.locator('a[href^="http"]').count(),0);
-   assert.equal(await x.page.locator('#contact-call').getAttribute('href'),'tel:49823328');assert.equal(await x.page.locator('#license-file').isEnabled(),true);assert.match(await x.page.locator('#file-text').innerText(),language==='ar'?/استيراد ملف ترخيص موجود/:/Importer une licence existante/);await proof(x.page,'technical-license-'+language);
-   const content='SYNTHETIC-EXISTING-LICENSE';await x.page.locator('#license-file').setInputFiles({name:'existing.alkarna-license',mimeType:'application/json',buffer:Buffer.from(content)});await x.page.locator('#continue').waitFor({state:'visible'});
-   assert.deepEqual(await x.page.evaluate(()=>__licenseCalls.filter(row=>row.command==='install')),[{command:'install',content}]);assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(x.errors,[]);
+ for(const [language,valid] of [['ar',false],['fr',true]])await check('reviewed '+language+' customer entry removes manual import and preactivation contact destinations',async()=>{
+  const f=fixture('local-bound');f.localValid=valid;const x=await open(f,'access.html',language,false,{width:320,height:620});try{
+   await x.page.locator('#identifier').waitFor();assert.equal(await x.page.locator('#manual,#license-file,#license-text,#install-text,a[href^="tel:"],a[href*="wa.me"],a[href^="http"]').count(),0);
+   await x.page.locator('#privacy').click();assert.deepEqual(await x.page.evaluate(()=>__accessEvents),['privacy']);
+   assert.equal(await x.page.locator('#legacy').count(),valid?1:0);if(valid){await x.page.locator('#legacy').click();await x.page.waitForFunction(()=>__accessEvents.includes('continue'));assert.equal(f.calls.filter(row=>row.command==='legacy').length,1);}
+   assert.equal(f.calls.some(row=>['offline-activate','offline-renew'].includes(row.command)),false);assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(x.errors,[]);
   }finally{await x.context.close()}
  });
 }finally{await browser?.close();server.close();}

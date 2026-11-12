@@ -9,9 +9,13 @@ import static org.junit.Assert.*;
 /** Selects the real access-page controls; never manufactures admission or modifies stored data. */
 final class ExistingLicenseAccess {
  private ExistingLicenseAccess() {}
- private static boolean hasAccessPage() throws Exception {
+ static long installedVersion() throws Exception {
   var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-  return context.getPackageManager().getPackageInfo(context.getPackageName(),0).getLongVersionCode()>=28;
+  var info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
+  return android.os.Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;
+ }
+ private static boolean hasAccessPage() throws Exception {
+  return installedVersion()>=28;
  }
  private static String js(ActivityScenario<MainActivity> activity,String source) throws Exception {
   var result=new ArrayBlockingQueue<String>(1);
@@ -27,7 +31,7 @@ final class ExistingLicenseAccess {
   if(!hasAccessPage())return; // Original signed v13-v27 binaries have no access selector.
   var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   assertTrue("The legacy entry must have a valid existing fixture license",new DeviceLicense(context).status().getBoolean("valid"));
-  if(context.getPackageManager().getPackageInfo(context.getPackageName(),0).getLongVersionCode()>=29){
+  if(installedVersion()>=29){
    until(activity,"location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'");
    assertEquals("Existing customers enter their usual local login directly", "false",js(activity,"!!document.querySelector('#legacy')"));
    return;
@@ -37,6 +41,7 @@ final class ExistingLicenseAccess {
   until(activity,"location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'");
  }
  static void openManualActivation(ActivityScenario<MainActivity> activity) throws Exception {
+  assertTrue("The new customer APK has no manual activation entry",installedVersion()<=30);
   if(!hasAccessPage())return;
   until(activity,"!!document.querySelector('#manual:not(:disabled)')");
   js(activity,"document.querySelector('#manual').click();true");

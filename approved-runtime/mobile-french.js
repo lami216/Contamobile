@@ -1,5 +1,6 @@
 // Mobile-specific wording complements the original desktop catalogue.
 export const mobileFrench={
+ 'حساب الجهاز':'Compte de cet appareil','الدخول واعتماد هذا الهاتف':'Connexion et approbation de ce téléphone',
  'الفرنسية':'Français','إنشاء بيانات الدخول':'Créer vos identifiants','معلومات من ملف التفعيل':'Informations de la licence',
  'اسم صاحب الترخيص':'Titulaire de la licence','اختر اسم مستخدم وكلمة مرور لحسابك المحلي.':'Choisissez un identifiant et un mot de passe pour votre compte local.',
  'الأسماء أدناه مأخوذة من ملف التفعيل الموثّق.':'Les noms ci-dessous proviennent de la licence vérifiée.',

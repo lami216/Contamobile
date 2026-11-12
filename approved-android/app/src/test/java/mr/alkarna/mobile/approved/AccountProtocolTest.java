@@ -54,11 +54,33 @@ public final class AccountProtocolTest {
     @Test public void onlineStatusMustMatchSignedRoleScopeAndLiveTime()throws Exception{
         JSONArray capabilities=new JSONArray().put("branch.read"),branches=new JSONArray().put(new JSONObject().put("id","branch").put("name","Shop").put("originId","origin"));
         JSONObject claims=new JSONObject().put("purpose","android-online-access").put("applicationId","app").put("mode","online").put("organizationId","org").put("memberId","member").put("installationId","installation").put("keyFingerprint","fingerprint").put("status","active").put("role","owner").put("membershipVersion",1).put("capabilities",capabilities).put("branches",branches).put("issuedAt",iso(NOW)).put("expiresAt",iso(NOW+60000));
+        claims.put("deviceApproval","approved");
         JSONObject response=new JSONObject().put("stage","active").put("mode","online").put("organization",new JSONObject().put("id","org")).put("member",new JSONObject().put("id","member").put("role","owner").put("membershipVersion",1).put("capabilities",capabilities)).put("branches",branches).put("entitlement",signed("contatools-android-online-access",claims));
         AccountProtocol.online(response,issuers,"installation","fingerprint","app",NOW);
         JSONObject changed=copy(response);changed.getJSONObject("member").put("role","cashier");rejects(()->AccountProtocol.online(changed,issuers,"installation","fingerprint","app",NOW));
         rejects(()->AccountProtocol.online(response,issuers,"another","fingerprint","app",NOW));
         rejects(()->AccountProtocol.online(response,issuers,"installation","fingerprint","app",NOW+60001));
+        JSONObject oldClaims=copy(claims);oldClaims.remove("deviceApproval");
+        JSONObject oldAutomatic=copy(response).put("deviceApproval","approved").put("entitlement",signed("contatools-android-online-access",oldClaims));
+        rejects(()->AccountProtocol.online(oldAutomatic,issuers,"installation","fingerprint","app",NOW));
+        JSONObject pendingClaim=copy(response).put("entitlement",signed("contatools-android-online-access",copy(claims).put("deviceApproval","pending")));
+        rejects(()->AccountProtocol.online(pendingClaim,issuers,"installation","fingerprint","app",NOW));
+    }
+    private JSONObject companyPending()throws Exception{
+        return new JSONObject().put("stage","pending").put("mode","online").put("deviceStatus","pending").put("installationId","installation").put("requestId","11111111-2222-4333-8444-555555555555");
+    }
+    @Test public void pendingCompanyRegistrationIsDisplayOnlyAndBoundToItsInstallation()throws Exception{
+        JSONObject pending=companyPending();assertEquals(ProtocolJson.canonical(pending),ProtocolJson.canonical(AccountProtocol.pendingOnlineDevice(pending,"installation")));
+        rejects(()->AccountProtocol.pendingOnlineDevice(pending,"another-installation"));
+        for(String field:new String[]{"stage","mode","deviceStatus","installationId","requestId"}){JSONObject missing=copy(pending);missing.remove(field);rejects(()->AccountProtocol.pendingOnlineDevice(missing,"installation"));}
+    }
+    @Test public void pendingCompanyRegistrationRejectsEveryAuthorityAndUnknownField()throws Exception{
+        for(String field:new String[]{"sessionToken","entitlement","context","organization","member","branches","capabilities","data","unknown"})
+            rejects(()->AccountProtocol.pendingOnlineDevice(companyPending().put(field,"forbidden"),"installation"));
+    }
+    @Test public void pendingCompanyRegistrationRequiresExactStatusesAndCanonicalRequestUuid()throws Exception{
+        for(String field:new String[]{"stage","mode","deviceStatus"})rejects(()->AccountProtocol.pendingOnlineDevice(companyPending().put(field,"active"),"installation"));
+        for(String id:new String[]{"", "request", "1-2-3-4-5", "11111111-2222-4333-8444-55555555555Z"})rejects(()->AccountProtocol.pendingOnlineDevice(companyPending().put("requestId",id),"installation"));
     }
     @Test public void actualNodeServiceVectorsAgreeWithJavaCanonicalProofsAndSignatures()throws Exception{
         JSONObject vectors;
@@ -70,6 +92,9 @@ public final class AccountProtocolTest {
         JSONObject issuer=vectors.getJSONObject("issuer"),keys=new JSONObject().put(issuer.getString("keyId"),issuer.getJSONObject("publicJwk"));
         JSONObject online=vectors.getJSONObject("online"),login=online.getJSONObject("payload");
         String installation=login.getString("installationId"),fingerprint=ProtocolJson.fingerprint(login.getJSONObject("publicJwk"));
+        JSONObject waiting=online.getJSONObject("pending"),waitingInput=waiting.getJSONObject("payload");
+        AccountProtocol.proof(waiting.getJSONObject("challenge"),"session.login",waitingInput,null,waitingInput.getString("installationId"),application,now);
+        AccountProtocol.pendingOnlineDevice(waiting.getJSONObject("response"),waitingInput.getString("installationId"));
         AccountProtocol.proof(online.getJSONObject("challenge"),"session.login",login,null,installation,application,now);
         AccountProtocol.online(online.getJSONObject("response"),keys,installation,fingerprint,application,now);
         JSONObject status=online.getJSONObject("status");
