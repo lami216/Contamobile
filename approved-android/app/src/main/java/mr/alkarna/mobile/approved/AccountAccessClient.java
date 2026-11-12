@@ -128,6 +128,14 @@ final class AccountAccessClient {
         JSONObject record = stored.optJSONObject("offline"), request = stored.optJSONObject("request");
         if (record != null) response.put("offline", localState(record));
         else if (request != null) response.put("offline", new JSONObject().put("phone", request.getString("identifier")).put("status", "pending"));
+        JSONObject company = stored.optJSONObject("companyEnrollment");
+        if (company != null) {
+            JSONObject pending = ProtocolJson.copy(company);
+            String identifier = pending.getString("identifier"); pending.remove("identifier");
+            AccountProtocol.require(identifier.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") && identifier.length() <= 160, "ONLINE_DEVICE_PENDING_INVALID");
+            AccountProtocol.pendingOnlineDevice(pending, identity.id());
+            response.put("companyEnrollment", ProtocolJson.copy(company));
+        }
         if ("online".equals(mode)) response.put("online", new JSONObject().put("connected", admitted()).put("context", onlineContext == null ? JSONObject.NULL : ProtocolJson.copy(onlineContext)));
         return response;
     }
@@ -161,12 +169,23 @@ final class AccountAccessClient {
         AccountProtocol.require(identifier.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") && input.optBoolean("consent"), "ACCOUNT_IDENTIFIER_INVALID");
         String secret = code(input, 12);
         JSONObject answer = exchange("session.login", base().put("identifier", identifier).put("code", secret)
-                .put("clientProtocol", new JSONObject().put("sharedDeltaVersion", 1).put("salesViewVersion", 1)), null);
+                .put("clientProtocol", new JSONObject().put("sharedDeltaVersion", 1).put("salesViewVersion", 1).put("deviceApprovalVersion", 1)), null);
+        if ("pending".equals(answer.optString("stage"))) {
+            // A pending registration is display-only. It never grants a session,
+            // changes a local licence/preference, or touches an accounting receipt.
+            JSONObject pending = AccountProtocol.pendingOnlineDevice(answer, identity.id()).put("identifier", identifier);
+            AccountProtocol.require(unresolved() == null, "ONLINE_PENDING_OTHER_ACCOUNT");
+            clearSession(); mode = "none"; pendingCode = null; bootstrapCredential = null;
+            stored.put("companyEnrollment", ProtocolJson.copy(pending)); persist();
+            return pending;
+        }
         String token = answer.getString("sessionToken"); AccountProtocol.require(token.matches("[A-Za-z0-9_-]{43}"), "ONLINE_SESSION_INVALID");
         JSONObject claims = AccountProtocol.online(answer, issuers, identity.id(), identity.fingerprint(), BuildConfig.APPLICATION_ID, System.currentTimeMillis());
         JSONObject pending = unresolved();
         if (pending != null) AccountProtocol.require(pending.getString("organizationId").equals(claims.getString("organizationId")) && pending.getString("memberId").equals(claims.getString("memberId")), "ONLINE_PENDING_OTHER_ACCOUNT");
-        preferOnline(true); clearSession(); pendingCode = null; bootstrapCredential = null; sessionToken = token; mode = "online"; acceptOnline(answer);
+        if (stored.has("companyEnrollment")) { stored.remove("companyEnrollment"); stored.put("preferOnlineEntry", true); persist(); }
+        else preferOnline(true);
+        clearSession(); pendingCode = null; bootstrapCredential = null; sessionToken = token; mode = "online"; acceptOnline(answer);
         return active("online").put("context", ProtocolJson.copy(onlineContext));
     }
     private JSONObject request(JSONObject input) throws Exception {

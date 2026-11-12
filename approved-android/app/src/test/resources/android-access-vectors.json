@@ -10,44 +10,87 @@
     "keyId": "fixture-service",
     "publicJwk": {
       "kty": "EC",
-      "x": "yZAnph6y1EMvQWscGC_x7LGF7q4rKYVIILVdA1Kr7Lg",
-      "y": "r-HFzffVF9Glc7_53AZNjgxAJTnsurLL61wjJ9i8wxs",
+      "x": "6AcbEHAOGUUoN_7xIz3bLvxngA45zcJq8UdVjo7RZ3c",
+      "y": "xpivDMNVy4JsBlRlGPsQWuO4KKUBUEy6j3eFKQYVz7A",
       "crv": "P-256"
     }
   },
   "online": {
-    "installationId": "2536d2d6-46b0-4235-b84d-75caf8ee5c14",
-    "keyFingerprint": "p2ry5_hDWzv0Pdlr4L2D89lHlAMklTk0NLj5TJ_vhpM",
+    "pending": {
+      "payload": {
+        "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
+        "applicationId": "mr.alkarna.mobile.approved",
+        "appVersion": "1.0.29",
+        "deviceName": "Synthetic Android online fixture",
+        "publicJwk": {
+          "kty": "EC",
+          "x": "s1l7zMWumDOSkIGJA3C4CftaE_8bIDihE6E4vQn6iHs",
+          "y": "Ixfb8Kg7WLZGyyfwr4aRIsVae-f5sbDjLILiKrIc6g8",
+          "crv": "P-256"
+        },
+        "identifier": "fixture@example.invalid",
+        "code": "Synthetic-fixture-code-47",
+        "clientProtocol": {
+          "sharedDeltaVersion": 1,
+          "salesViewVersion": 1,
+          "deviceApprovalVersion": 1
+        }
+      },
+      "challenge": {
+        "challengeId": "584ac6dd-f857-43b9-98dd-f6b386d7bdf1",
+        "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"480526db-c4be-4106-b69f-f4f9a7d79d2a\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"V7msOmC-TjvDzTY7vcMaCfSjBpLVkm69VYlT-CKJ92o\",\"operation\":\"session.login\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"d252e18404668ad7b754aa13b8e79a80ac4e382342f3892e6918b0495e5271fb\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
+        "expiresAt": "2030-03-17T17:48:10.000Z"
+      },
+      "signature": "57Cm0b98I8NdYmN6pYlrOfhQcbPGSlD_LrxApSbz0JxCtevV7XAC0xDgWWhxj3jhjDXF443zMbKcJAp7r8q2Ng",
+      "response": {
+        "stage": "pending",
+        "mode": "online",
+        "deviceStatus": "pending",
+        "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
+        "requestId": "071a2fa0-9c46-4b3b-a13c-792680c39ca2"
+      }
+    },
+    "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
+    "keyFingerprint": "WRg7M6H-6T6SrjrGvQVhjvqnifCyGcwCd7LDx7DNkRI",
     "payload": {
-      "installationId": "2536d2d6-46b0-4235-b84d-75caf8ee5c14",
+      "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
       "applicationId": "mr.alkarna.mobile.approved",
       "appVersion": "1.0.29",
       "deviceName": "Synthetic Android online fixture",
       "publicJwk": {
         "kty": "EC",
-        "x": "t5RkVa6XIefOPqor7k91cW3jvf21AcWpsw0QjTIcUoA",
-        "y": "qjAhhyhkZzMhOxRjp3r6X8rqgZBcqDwBB2DVhoS57qs",
+        "x": "s1l7zMWumDOSkIGJA3C4CftaE_8bIDihE6E4vQn6iHs",
+        "y": "Ixfb8Kg7WLZGyyfwr4aRIsVae-f5sbDjLILiKrIc6g8",
         "crv": "P-256"
       },
       "identifier": "fixture@example.invalid",
-      "code": "Synthetic-fixture-code-47"
+      "code": "Synthetic-fixture-code-47",
+      "clientProtocol": {
+        "sharedDeltaVersion": 1,
+        "salesViewVersion": 1,
+        "deviceApprovalVersion": 1
+      }
     },
     "challenge": {
-      "challengeId": "2bb2f3c1-2448-4268-9a35-f36be35cf554",
-      "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"2536d2d6-46b0-4235-b84d-75caf8ee5c14\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"gTnuGMBg8cokgiG9aoeN8zgqH2cEXY-xUirWS-7TTRY\",\"operation\":\"session.login\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"c3965a4f7457b0ab8db27d3f21aa3b87c3ac77144e9ce6ef60f903c33bd7b8e3\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
+      "challengeId": "19988d7b-ee63-4759-823d-7523e17d70d4",
+      "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"480526db-c4be-4106-b69f-f4f9a7d79d2a\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"GYYJ9pmu8YhxpTVy0u4HRj_p_gt7jeB1vpz5ZfhAiQs\",\"operation\":\"session.login\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"d252e18404668ad7b754aa13b8e79a80ac4e382342f3892e6918b0495e5271fb\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
       "expiresAt": "2030-03-17T17:48:10.000Z"
     },
-    "signature": "lCJ6IJhtiOZhdv8s_S_7mvvip0g-CazUkWx8nIlwWfK9udEQYawQI_YzbAtCfXZtNyDKUOecfmR3CoXzBrJaVA",
+    "signature": "2WGwlajvoBSd6NsBhQJWd2_R9p9SlRztLyQtCiUSDv-7kxfmZvENkV9yCPC0LmUg_cNWPFE28Cl405xPHCKeiw",
     "response": {
       "stage": "active",
       "mode": "online",
+      "protocolCapabilities": {
+        "sharedDeltaVersion": 1,
+        "salesViewVersion": 1
+      },
       "organization": {
-        "id": "299d082c-1bc3-4aa4-bc37-bc903c450913",
+        "id": "25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f",
         "name": "Synthetic institution",
-        "slug": "android-299d082c-1bc3-4aa4-bc37-bc903c450913"
+        "slug": "android-25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f"
       },
       "member": {
-        "id": "f0b1b330-9aab-490b-93c8-8d4a234e5eee",
+        "id": "92be85b6-014a-4eb1-988c-a9f9c67c1314",
         "name": "Synthetic owner",
         "username": "fixture@example.invalid",
         "role": "org-admin",
@@ -55,15 +98,15 @@
           "*"
         ],
         "branchIds": [
-          "aa32d608-815e-4cc8-b49b-699e816140ea"
+          "dcd34c3a-19fa-4250-a893-46fcf5795d08"
         ],
         "membershipVersion": 1
       },
       "branches": [
         {
-          "id": "aa32d608-815e-4cc8-b49b-699e816140ea",
+          "id": "dcd34c3a-19fa-4250-a893-46fcf5795d08",
           "name": "Synthetic institution",
-          "originId": "f48716a4-f856-4078-9c42-d9f725587c27"
+          "originId": "70cd3563-e8e3-49a6-bf13-63f3fae8b204"
         }
       ],
       "entitlement": {
@@ -72,58 +115,67 @@
         "kid": "fixture-service",
         "payload": {
           "purpose": "android-online-access",
+          "protocolCapabilities": {
+            "sharedDeltaVersion": 1,
+            "salesViewVersion": 1
+          },
           "applicationId": "mr.alkarna.mobile.approved",
           "mode": "online",
-          "organizationId": "299d082c-1bc3-4aa4-bc37-bc903c450913",
+          "organizationId": "25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f",
           "organizationName": "Synthetic institution",
-          "memberId": "f0b1b330-9aab-490b-93c8-8d4a234e5eee",
+          "memberId": "92be85b6-014a-4eb1-988c-a9f9c67c1314",
           "memberName": "Synthetic owner",
           "identifier": "fixture@example.invalid",
-          "installationId": "2536d2d6-46b0-4235-b84d-75caf8ee5c14",
-          "keyFingerprint": "p2ry5_hDWzv0Pdlr4L2D89lHlAMklTk0NLj5TJ_vhpM",
-          "assignmentVersion": 1,
+          "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
+          "keyFingerprint": "WRg7M6H-6T6SrjrGvQVhjvqnifCyGcwCd7LDx7DNkRI",
+          "assignmentVersion": 2,
           "membershipVersion": 1,
           "status": "active",
+          "deviceApproval": "approved",
           "role": "org-admin",
           "capabilities": [
             "*"
           ],
           "branches": [
             {
-              "id": "aa32d608-815e-4cc8-b49b-699e816140ea",
+              "id": "dcd34c3a-19fa-4250-a893-46fcf5795d08",
               "name": "Synthetic institution",
-              "originId": "f48716a4-f856-4078-9c42-d9f725587c27"
+              "originId": "70cd3563-e8e3-49a6-bf13-63f3fae8b204"
             }
           ],
           "issuedAt": "2030-03-17T17:46:40.000Z",
           "expiresAt": "2030-03-17T17:47:40.000Z"
         },
-        "signature": "MBjR2_3RXRSbxBW-Mgbz_QxzaIsSM3tEd7i_XYqehj1dgNaVjrVr1MgAJd0e48oTbHYwK2-u1NB-GHOAtwGOPA"
+        "signature": "ITE5J9wyeYgqVjud55P8ohOtrrAmo4gpzLIv5lpmL5heTt4tEJIOmYOj_Oif7mmwZRi8Hmhwgxk67nJZ6Ho8_A"
       },
-      "sessionToken": "itr9v_Qi1MXB3hpaCsR1YsvlTNy1ddwM7VhbvLZdvF0",
+      "sessionToken": "DEZ5j7naXR9UHM8A8A8_YyK3strgNsQCadM_oeoKvF0",
       "sessionExpiresAt": "2030-03-18T01:46:40.000Z"
     },
     "status": {
       "payload": {
-        "installationId": "2536d2d6-46b0-4235-b84d-75caf8ee5c14"
+        "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a"
       },
-      "sessionToken": "itr9v_Qi1MXB3hpaCsR1YsvlTNy1ddwM7VhbvLZdvF0",
+      "sessionToken": "DEZ5j7naXR9UHM8A8A8_YyK3strgNsQCadM_oeoKvF0",
       "challenge": {
-        "challengeId": "a8b3ad80-f899-4d53-8c13-573ae5df842c",
-        "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"2536d2d6-46b0-4235-b84d-75caf8ee5c14\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"vbSLVSTZvz-yWqmcJ13A6hLLDiHMAx_OUyp7lz6sbSs\",\"operation\":\"access.status\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"04b9628985884ed1735a64a6d961b3ffe553fc2284bb1c2740d1cb77db3ef259\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":\"7bad81befee62a32e5b666c27ce7b3bf63b7a21048fb130a06da651387ce02ed\",\"version\":1}",
+        "challengeId": "a146fecb-89cb-49e7-8fba-a1725263ebbd",
+        "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"480526db-c4be-4106-b69f-f4f9a7d79d2a\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"3F_0kNKtPCmcyadC5NmSb0UyS0wD34L85-8NECZc1h0\",\"operation\":\"access.status\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"7e49dfa6b4187c68f6533876470ca328d03836d9dc6eb4b050f62a7004867933\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":\"004753b9402f87dd32fb4a32d4ce631fadee5994c47c153b0acad9e9459b201e\",\"version\":1}",
         "expiresAt": "2030-03-17T17:48:10.000Z"
       },
-      "signature": "kj5Nykop2A4LKb8ogbnplOmXGkAQu56QOShJ7WiQbUhjOdCU-huDI7gVqiu9USfJF4hmuUqexXT4dcfStaRiPQ",
+      "signature": "4bUflOzyyXfhrE9GdKCRlhuuM2HWpOdrwUwDKOT24RKj_LGrR0x6pIWmQm7k-uq9tEaJrsaGQrRKv353wJD-fA",
       "response": {
         "stage": "active",
         "mode": "online",
+        "protocolCapabilities": {
+          "sharedDeltaVersion": 1,
+          "salesViewVersion": 1
+        },
         "organization": {
-          "id": "299d082c-1bc3-4aa4-bc37-bc903c450913",
+          "id": "25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f",
           "name": "Synthetic institution",
-          "slug": "android-299d082c-1bc3-4aa4-bc37-bc903c450913"
+          "slug": "android-25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f"
         },
         "member": {
-          "id": "f0b1b330-9aab-490b-93c8-8d4a234e5eee",
+          "id": "92be85b6-014a-4eb1-988c-a9f9c67c1314",
           "name": "Synthetic owner",
           "username": "fixture@example.invalid",
           "role": "org-admin",
@@ -131,15 +183,15 @@
             "*"
           ],
           "branchIds": [
-            "aa32d608-815e-4cc8-b49b-699e816140ea"
+            "dcd34c3a-19fa-4250-a893-46fcf5795d08"
           ],
           "membershipVersion": 1
         },
         "branches": [
           {
-            "id": "aa32d608-815e-4cc8-b49b-699e816140ea",
+            "id": "dcd34c3a-19fa-4250-a893-46fcf5795d08",
             "name": "Synthetic institution",
-            "originId": "f48716a4-f856-4078-9c42-d9f725587c27"
+            "originId": "70cd3563-e8e3-49a6-bf13-63f3fae8b204"
           }
         ],
         "entitlement": {
@@ -148,73 +200,78 @@
           "kid": "fixture-service",
           "payload": {
             "purpose": "android-online-access",
+            "protocolCapabilities": {
+              "sharedDeltaVersion": 1,
+              "salesViewVersion": 1
+            },
             "applicationId": "mr.alkarna.mobile.approved",
             "mode": "online",
-            "organizationId": "299d082c-1bc3-4aa4-bc37-bc903c450913",
+            "organizationId": "25fbffcd-5fcd-49fb-b9e1-45ff36ceca4f",
             "organizationName": "Synthetic institution",
-            "memberId": "f0b1b330-9aab-490b-93c8-8d4a234e5eee",
+            "memberId": "92be85b6-014a-4eb1-988c-a9f9c67c1314",
             "memberName": "Synthetic owner",
             "identifier": "fixture@example.invalid",
-            "installationId": "2536d2d6-46b0-4235-b84d-75caf8ee5c14",
-            "keyFingerprint": "p2ry5_hDWzv0Pdlr4L2D89lHlAMklTk0NLj5TJ_vhpM",
-            "assignmentVersion": 1,
+            "installationId": "480526db-c4be-4106-b69f-f4f9a7d79d2a",
+            "keyFingerprint": "WRg7M6H-6T6SrjrGvQVhjvqnifCyGcwCd7LDx7DNkRI",
+            "assignmentVersion": 2,
             "membershipVersion": 1,
             "status": "active",
+            "deviceApproval": "approved",
             "role": "org-admin",
             "capabilities": [
               "*"
             ],
             "branches": [
               {
-                "id": "aa32d608-815e-4cc8-b49b-699e816140ea",
+                "id": "dcd34c3a-19fa-4250-a893-46fcf5795d08",
                 "name": "Synthetic institution",
-                "originId": "f48716a4-f856-4078-9c42-d9f725587c27"
+                "originId": "70cd3563-e8e3-49a6-bf13-63f3fae8b204"
               }
             ],
             "issuedAt": "2030-03-17T17:46:40.000Z",
             "expiresAt": "2030-03-17T17:47:40.000Z"
           },
-          "signature": "BWuBOb8xqU1WKuzEEY8YLqBq6hxfVEcrZsmYZHTksONTdfmYBWeHFQ4Py-oaSaR8N62WQyz5Dy9okoVgaUc2cg"
+          "signature": "r6zSFuBWQoN8Ud8hpb9T-dqmQuP9auGL30etPQRoOLnn8MVBQBE9NgF0Uz-xQYcGhtKtJn9OIQxpjvScdbqoMA"
         }
       }
     }
   },
   "offline": {
-    "installationId": "9bc79f4e-3296-4fe1-9a09-0291b3ee31fc",
-    "keyFingerprint": "wVJjv-hwB18HhudMeQQCmXejhn-1H5IIB3UdwFjWowE",
+    "installationId": "f06e90d1-78e8-44de-b821-55440f554370",
+    "keyFingerprint": "ZpA78fIcLgG9kgBog-Y5UVMh7u6hR0ksVS4KZ8ojYbU",
     "deviceCode": "AKD-1111-2222-3333-4444-5555",
     "payload": {
-      "installationId": "9bc79f4e-3296-4fe1-9a09-0291b3ee31fc",
+      "installationId": "f06e90d1-78e8-44de-b821-55440f554370",
       "applicationId": "mr.alkarna.mobile.approved",
       "appVersion": "1.0.29",
       "versionCode": 29,
       "deviceName": "Synthetic Android offline fixture",
       "publicJwk": {
         "kty": "EC",
-        "x": "wpa80hoIfkM9FD_AyxtxOKwtBGS5bl4gwwd34A1inOA",
-        "y": "yGhYxeqK35A5Yg1IrcKKaeyH3iEf4Svo3IEuqtvYlyI",
+        "x": "woon5VYYjjr6kZaejEMGM2H0C_hcZyH-LoJl77M35UA",
+        "y": "abUS889J0odQ2KAOwh8j1rctf56FxDJLREgu7Km6kZo",
         "crv": "P-256"
       },
       "deviceCode": "AKD-1111-2222-3333-4444-5555",
       "identifier": "23456789",
       "code": "Synthetic-private-47",
-      "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb"
+      "requestId": "41257100-dd30-466a-8be8-1593c6044be5"
     },
     "challenge": {
-      "challengeId": "adeeda4e-cd89-4bf2-8441-c4faa2f34e42",
-      "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"9bc79f4e-3296-4fe1-9a09-0291b3ee31fc\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"26LMIHxZqJNFIZikLePIXdUPuP3SjAZ8hfgiNSPgu4g\",\"operation\":\"offline.request\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"c7383dc8099581379f94eb35773ad4386131d9798ace38f4a79225c287e47699\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
+      "challengeId": "a64cc581-7d64-44ed-aa55-648bf2fe0f1e",
+      "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"f06e90d1-78e8-44de-b821-55440f554370\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"Uwzsf7cC9y_lw3itc-36QtSb-B5mC-pQ2KP0_oTPhBU\",\"operation\":\"offline.request\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"4b582b5d28f6939380f74b9f7fb4d66d58810c6d456df866c50f4d615b7eea9c\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
       "expiresAt": "2030-03-17T17:48:10.000Z"
     },
-    "signature": "MHc0xmm0Azxlb2-pYWyX62ZjPyfcqy2xPI6aqOAmsG-3obDmneW3IbRwqsad1_3UKhh_085ydzAqxnioAr2PLQ",
+    "signature": "f62f5X1MnAjqe1cFaGJCJyA1IIdlH64pcTw3ReBjuCOZCidAdlqa_TvOdZfbyQH2hw-hei_JuPCEaHbam39zmQ",
     "response": {
       "stage": "pending",
       "mode": "offline",
-      "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
+      "requestId": "41257100-dd30-466a-8be8-1593c6044be5",
       "identifier": "23456789"
     },
     "review": {
-      "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
-      "decisionId": "977e68b8-1867-4253-8388-f29e342a4851",
+      "requestId": "41257100-dd30-466a-8be8-1593c6044be5",
+      "decisionId": "fd365033-2f90-41ac-b7e4-d5fe1003c8a2",
       "identityVerified": true,
       "reason": "Synthetic reviewed fixture exact installation",
       "decision": "approve",
@@ -225,21 +282,21 @@
     },
     "activate": {
       "payload": {
-        "installationId": "9bc79f4e-3296-4fe1-9a09-0291b3ee31fc",
-        "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
+        "installationId": "f06e90d1-78e8-44de-b821-55440f554370",
+        "requestId": "41257100-dd30-466a-8be8-1593c6044be5",
         "identifier": "23456789",
         "code": "Synthetic-private-47"
       },
       "challenge": {
-        "challengeId": "a8ee7f11-088f-405d-9922-fe3b9287d4ee",
-        "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"9bc79f4e-3296-4fe1-9a09-0291b3ee31fc\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"ZD3j59TK3ChckYVGLjtJLu51iFreb-dVlHFr3DONGKQ\",\"operation\":\"offline.activate\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"40a050a7079693ad2440c4538a49819741444c0cf6d5257319d17889659d68f5\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
+        "challengeId": "9771fbb9-d5d2-410e-9568-e172b7ad17ba",
+        "message": "{\"applicationId\":\"mr.alkarna.mobile.approved\",\"expiresAt\":\"2030-03-17T17:48:10.000Z\",\"installationId\":\"f06e90d1-78e8-44de-b821-55440f554370\",\"issuedAt\":\"2030-03-17T17:46:40.000Z\",\"method\":\"POST\",\"nonce\":\"SoUstSk9v9TQEysq4gxAdCXC80GOWEcMkrQBfbC6wO4\",\"operation\":\"offline.activate\",\"path\":\"/api/android/access/v1/dispatch\",\"payloadHash\":\"b539ea91c3a10c657b36aa21b20e7ce37510083a28c7df254aade0fa86c21b41\",\"schema\":\"contatools-android-access-proof\",\"sessionTokenHash\":null,\"version\":1}",
         "expiresAt": "2030-03-17T17:48:10.000Z"
       },
-      "signature": "PSQ1qk3j4uVxGD1_9F7PVxpMx3KKVc_V_Y4AOG7N12fCWQJ8_xoii0MJVBn4m94YB1ltOnc4HB64qWMDWYA-Aw",
+      "signature": "5tTQBXHJ0Dty9KNz9L2PoPO1RCqL38Ys7WR0m-YjKx9iZBDC7fvP00bKsa_19QvlCTokaDcSCtfm1ibdB3iCjw",
       "response": {
         "stage": "active",
         "mode": "offline",
-        "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
+        "requestId": "41257100-dd30-466a-8be8-1593c6044be5",
         "identifier": "23456789",
         "binding": {
           "schema": "alkarna-android-offline-account",
@@ -249,20 +306,20 @@
             "purpose": "android-offline-account",
             "applicationId": "mr.alkarna.mobile.approved",
             "version": 1,
-            "requestId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
-            "credentialId": "7dae84ee-2332-4544-bab1-795d1ca42abb",
+            "requestId": "41257100-dd30-466a-8be8-1593c6044be5",
+            "credentialId": "41257100-dd30-466a-8be8-1593c6044be5",
             "credentialVersion": 1,
             "phone": "23456789",
-            "installationId": "9bc79f4e-3296-4fe1-9a09-0291b3ee31fc",
-            "keyFingerprint": "wVJjv-hwB18HhudMeQQCmXejhn-1H5IIB3UdwFjWowE",
+            "installationId": "f06e90d1-78e8-44de-b821-55440f554370",
+            "keyFingerprint": "ZpA78fIcLgG9kgBog-Y5UVMh7u6hR0ksVS4KZ8ojYbU",
             "deviceCode": "AKD-1111-2222-3333-4444-5555",
-            "localOwnerId": "c830c4e2-c1f0-4fdd-9f62-5d9901ff5aa5",
-            "localShopId": "63df4f6d-8f46-483a-bb22-4d12fd525455",
-            "customerId": "60b89b32-ba52-4dac-b918-1ee83ddbd2e3",
+            "localOwnerId": "feb93997-df19-4809-a8ad-5245840da6bb",
+            "localShopId": "55e0e3e4-1de8-4db3-a46a-e256c4b663d5",
+            "customerId": "0e075693-94c9-4923-886d-4c9be9f0e6fa",
             "ownerName": "Synthetic local owner",
             "shopName": "Synthetic local shop",
-            "licenseDocumentHash": "789dde8332fe193a8d4ce325ed2f5cefa9aaeeeb47694bcffc2acb1da6ca7d78",
-            "licenseId": "f1cbe149-8e90-4b5e-bf8c-8f2c52a8acda",
+            "licenseDocumentHash": "7f9f1cbc188b0704d1632305be4bce45ce60cdbe095e07459b5f37dee0c0e860",
+            "licenseId": "b3ea092a-4182-4276-b8d9-655d74b1cdfa",
             "term": {
               "type": "temporary",
               "durationSeconds": 86400,
@@ -270,7 +327,7 @@
             },
             "issuedAt": "2030-03-17T17:46:40.000Z"
           },
-          "signature": "vwGd255eE1dF4GLEyzVJbLDFZ4STVb11u_Pf5Kwomf7fvgz6SYOT3X79z3BwJCvcT4yWxX2M1mJtOkIfx06CzA"
+          "signature": "jTC_xLgA3MyXT1kL8mRgOwVaoE89LYH8cmauRGKpPd0dJ097g8TzMzIX3JOc6uEBO-L2dJ1xCHc6PTbxMXcFcQ"
         },
         "licenseDocument": {
           "algorithm": "ECDSA_P256_SHA256",
@@ -281,36 +338,37 @@
             "deviceId": "AKD-1111-2222-3333-4444-5555",
             "durationSeconds": 86400,
             "edition": "desktop",
-            "licenseId": "f1cbe149-8e90-4b5e-bf8c-8f2c52a8acda",
+            "licenseId": "b3ea092a-4182-4276-b8d9-655d74b1cdfa",
             "notes": "Online administration issuance 1",
-            "storeId": "60b89b32-ba52-4dac-b918-1ee83ddbd2e3",
+            "storeId": "0e075693-94c9-4923-886d-4c9be9f0e6fa",
             "storeName": "Synthetic local shop",
             "type": "temporary"
           },
           "schema": "alkarna-license",
-          "signature": "oLmM5ov3AMhLsVQpX1U_PFf_6e00OiapGh_0yG2QjxATHLF9nnIGX5H2cHvlrW8Yz7cCneDVQxeXjMJwTg0IEg",
+          "signature": "F5ZezUh3x-11NATa_Dnpug2Ii1_R1vke5cJK4TbHy5aq2R6TPCIQ23oCHvah5xFOgdcay73k7A03-p6dw6NEgg",
           "version": 2
         },
         "activation": {
           "kid": "fixture-service",
           "payload": {
-            "clientId": "60b89b32-ba52-4dac-b918-1ee83ddbd2e3",
+            "clientId": "0e075693-94c9-4923-886d-4c9be9f0e6fa",
             "deviceCode": "AKD-1111-2222-3333-4444-5555",
             "expiresAt": 1900086400000,
-            "installationId": "9bc79f4e-3296-4fe1-9a09-0291b3ee31fc",
-            "issuanceId": "900a94e2-caea-4a43-bbc2-005e25231d69",
+            "installationId": "f06e90d1-78e8-44de-b821-55440f554370",
+            "issuanceId": "34ada928-b2b7-476e-a60e-8b4a8b25fa8e",
             "issuedAt": 1900000000000,
-            "keyFingerprint": "wVJjv-hwB18HhudMeQQCmXejhn-1H5IIB3UdwFjWowE",
-            "licenseDocumentHash": "789dde8332fe193a8d4ce325ed2f5cefa9aaeeeb47694bcffc2acb1da6ca7d78",
-            "licenseId": "f1cbe149-8e90-4b5e-bf8c-8f2c52a8acda",
+            "keyFingerprint": "ZpA78fIcLgG9kgBog-Y5UVMh7u6hR0ksVS4KZ8ojYbU",
+            "licenseDocumentHash": "7f9f1cbc188b0704d1632305be4bce45ce60cdbe095e07459b5f37dee0c0e860",
+            "licenseId": "b3ea092a-4182-4276-b8d9-655d74b1cdfa",
             "sequence": 1
           },
           "schema": "contatools-android-activation",
-          "signature": "1wM5u34c7fddLEKK2c1MtGpyCXX0mtfRo0a3HeuEX0IsITteWjhhK_2aaPZTn58D4V2e3jLs_Aaf6Eq-F1iUHQ",
+          "signature": "mzZzF2zECm2SQdXaCr-ZiTIYjOX5qeCAlr_zahkOCKnVOH53UmbFzGkznMSn7u8VgXy2b_WjfbQkSGkMStN0wg",
           "version": 1
-        }
+        },
+        "entitlementOffer": null
       }
     },
-    "licenseDocumentHash": "789dde8332fe193a8d4ce325ed2f5cefa9aaeeeb47694bcffc2acb1da6ca7d78"
+    "licenseDocumentHash": "7f9f1cbc188b0704d1632305be4bce45ce60cdbe095e07459b5f37dee0c0e860"
   }
 }

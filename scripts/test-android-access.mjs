@@ -126,8 +126,8 @@ test('semantic encoder posts record global references and fails closed on an une
  const result=await f.db.prepareSave(state);assert.equal(result.command.kind,'record.post');assert.equal(result.command.payload.record.account,state.accounts[0].globalId);assert.match(result.command.payload.record.number,/^AND-/);encoder.finish();
  encoder.begin('unknown-write');const changed=clone(state);changed.branding='unexplained';await assert.rejects(f.db.prepareSave(changed),/SEMANTIC_COMMAND_REQUIRED/);encoder.finish();
 });
-test('access and local adapters keep the native activation and local storage contracts',async()=>{
+test('reviewed entry removes manual activation and preserves explicit local storage access',async()=>{
  const [app,access,stock]=await Promise.all(['app.js','access.js','feature-stock.js'].map(file=>readFile(new URL('../approved-runtime/'+file,import.meta.url),'utf8')));
  assert.match(app,/new OnlineDatabase[\s\S]*:new ShopDatabase\(\)/);assert.match(app,/history:\[\.\.\.history\]/);assert.match(app,/history=beforeView.history/);
- assert.match(access,/!result.activationRequired/);assert.match(access,/openActivation/);assert.match(stock,/karnaWorkflowDraftStorage\|\|localStorage/);
+ assert.match(access,/!result.activationRequired/);assert.doesNotMatch(access,/openActivation|installActivation|license-file|license-text/);assert.match(access,/native\('legacy'\)/);assert.match(stock,/karnaWorkflowDraftStorage\|\|localStorage/);
 });

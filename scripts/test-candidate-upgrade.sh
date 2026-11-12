@@ -115,7 +115,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 30
+test "$CANDIDATE_VERSION_CODE" = 31
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -123,9 +123,9 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All seventeen originally distributed versions are mandatory for this candidate.
+# All eighteen originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -149,7 +149,7 @@ case "$candidate_mode" in
    '19 20 21') candidate_group=upgrade-19-21 ;;
    '22 23 24') candidate_group=upgrade-22-24 ;;
    '25 26 27') candidate_group=upgrade-25-27 ;;
-   '28 29') candidate_group=upgrade-28-29 ;;
+   '28 29 30') candidate_group=upgrade-28-30 ;;
    *) echo 'Unknown or incomplete preservation group' >&2; exit 1 ;;
   esac
   read -r -a selected_baselines <<< "$UPGRADE_BASELINE_GROUP" ;;
@@ -171,7 +171,7 @@ assert_offline group-network-before true
 if [ "$candidate_mode" = full ] || [ "$candidate_mode" = native ]; then
 assert_offline account-access-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountAccessTest -e accountAccessIsolation true "$runner" | tee "$proof_dir/AccountAccessTest.txt"
-grep -Eq '^OK \(10 tests\)' "$proof_dir/AccountAccessTest.txt"
+grep -Eq '^OK \(13 tests\)' "$proof_dir/AccountAccessTest.txt"
 assert_offline account-access-network-after
 adb shell pm clear "$app"
 assert_offline offline-account-control-network-before true
@@ -215,8 +215,8 @@ for suite,prefix in [('AccountAccessTest','ACCOUNT ACCESS CASE PASS'),('OfflineA
  expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
  assert len(expected)>=(1 if suite=='AccountingParityTest' else 6) and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
  if suite=='PhoneReplacementTest':assert len(expected)==8,'All eight customer phone replacement cases are required'
- if suite=='AccountAccessTest':assert len(expected)==10,'All eight original durable account access cases and both new admission/capability cases are required'
- if suite=='OfflineAccountControlTest':assert len(expected)==15,'All fifteen direct activation, renewal and persistent-control cases are required'
+ if suite=='AccountAccessTest':assert len(expected)==13,'All eight original durable account access cases and all owner-review admission/capability cases are required'
+ if suite=='OfflineAccountControlTest':assert len(expected)==16,'All sixteen direct activation, renewal and persistent-control cases are required'
  if suite=='AccountingResetTest':
   required={'resetExitRequiresConsumedScopedReceiptAndIsOneShot','ownerConsentExitsTaskBeforeAckAndLauncherReopensFreshSetupWithoutClosingAgain'}
   assert required<=set(expected),'Native owner-consent exit and one-shot receipt scenarios are mandatory'
@@ -321,9 +321,9 @@ import json,os,re
 from pathlib import Path
 root=Path('candidate-proof')
 selected=[int(v) for v in os.environ['SELECTED_BASELINE_VERSION_CODES'].split()]
-groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29]]
+groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29,30]]
 mode=os.environ['CANDIDATE_TEST_MODE']
-assert (mode=='full' and selected==list(range(13,30))) or (mode=='upgrades' and selected in groups)
+assert (mode=='full' and selected==list(range(13,31))) or (mode=='upgrades' and selected in groups)
 checks=[]
 for baseline in selected:
  for activation in ('temporary','perpetual'):
@@ -334,8 +334,8 @@ for baseline in selected:
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
 assert len(checks)==len(selected)*6
-if mode=='full':assert len(checks)==102
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':30,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
+if mode=='full':assert len(checks)==108
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':31,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 fi
 sha256sum --check candidate-output/SHA256SUMS.txt

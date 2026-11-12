@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
     private static final java.util.concurrent.ThreadPoolExecutor backupQueue=createAdministrationQueue();
     private android.net.ConnectivityManager.NetworkCallback networkCallback;
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
-    private boolean activationPage,activationTransitionPending,transitionToAccess;
+    private boolean activationPage,activationTransitionPending;
     private volatile boolean activityResumed;
     private volatile boolean localPollRunning;
     private long localPollAt;
@@ -97,7 +97,8 @@ public final class MainActivity extends Activity {
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){cancelBackupTransfers();}
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 String path=request.getUrl().getPath();
-                boolean activationAsset=path!=null&&(path.matches("/assets/approved/(activation|access|privacy)\\.(html|css|js)")||path.equals("/assets/approved/platform/shared/android-access.mjs")||path.equals("/assets/approved/native-adapter.js")||path.equals("/assets/approved/native.css")||path.startsWith("/assets/approved/assets/"));
+                if(path!=null&&path.matches("/assets/approved/activation\\.(html|css|js)"))return new WebResourceResponse("text/plain","UTF-8",403,"Manual activation unavailable",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
+                boolean activationAsset=path!=null&&(path.matches("/assets/approved/(access|privacy)\\.(html|css|js)")||path.equals("/assets/approved/platform/shared/android-access.mjs")||path.equals("/assets/approved/native-adapter.js")||path.equals("/assets/approved/native.css")||path.startsWith("/assets/approved/assets/"));
                 if(!activationAsset&&!appAllowed())return new WebResourceResponse("text/plain","UTF-8",403,"Activation required",java.util.Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
                 WebResourceResponse response=assets.shouldInterceptRequest(request.getUrl());
                 if(response!=null&&path!=null&&path.endsWith(".mjs"))response.setMimeType("text/javascript");
@@ -114,8 +115,9 @@ public final class MainActivity extends Activity {
         });
         web.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(activationPage||!appAllowed()){callback.onReceiveValue(null);return true;}
                 if(chooser!=null)chooser.onReceiveValue(null);chooser=callback;
-                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(activationPage?"*/*":"application/json").addCategory(Intent.CATEGORY_OPENABLE);
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
                 try{startActivityForResult(intent,PICK_FILE);}catch(Exception e){chooser.onReceiveValue(null);chooser=null;}
                 return true;
             }
@@ -137,7 +139,7 @@ public final class MainActivity extends Activity {
         String current=web.getUrl();
         if(!activationPage&&current!=null&&current.startsWith(ORIGIN+"/assets/approved/index.html")){
             if(activationTransitionPending)return;
-            transitionToAccess=true;activationTransitionPending=true;continueActivationTransition();return;
+            activationTransitionPending=true;continueActivationTransition();return;
         }
         loadAccountAccess();
     }
@@ -146,8 +148,8 @@ public final class MainActivity extends Activity {
         web.loadUrl(ORIGIN+"/assets/approved/access.html");
     }
     private void showActivation(){
-        if((activationPage&&!accessPage)||activationTransitionPending||web==null||isFinishing()||isDestroyed())return;
-        transitionToAccess=false;activationTransitionPending=true;continueActivationTransition();
+        // Compatibility alias for runtime expiry guards; no manual-import page exists.
+        showAccountAccess();
     }
     private void continueActivationTransition(){
         if(!activationTransitionPending||web==null||isFinishing()||isDestroyed()){activationTransitionPending=false;return;}
@@ -156,8 +158,7 @@ public final class MainActivity extends Activity {
         web.evaluateJavascript("(()=>{if(typeof window.karnaPersistenceBusy==='function'&&window.karnaPersistenceBusy())return false;if(typeof window.karnaSavePosDraft==='function')window.karnaSavePosDraft();return true})()",ready->{
             if(!activationTransitionPending||isFinishing()||isDestroyed())return;
             if("false".equals(ready)){licenseTimer.postDelayed(this::continueActivationTransition,250);return;}
-            if(transitionToAccess){loadAccountAccess();return;}
-            activationTransitionPending=false;activationPage=true;accessPage=false;web.loadUrl(ORIGIN+"/assets/approved/activation.html");
+            loadAccountAccess();
         });
     }
     private void openApp(){if(!appAllowed())return;activationTransitionPending=false;activationPage=false;accessPage=false;web.loadUrl(ORIGIN+"/assets/approved/index.html");}
@@ -418,12 +419,6 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
         @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
         @JavascriptInterface public void closeApp(){runOnUiThread(()->{if(trusted()&&appAllowed())finish();});}
-        @JavascriptInterface public void activationContinue(){runOnUiThread(()->{if(!trusted()||!activationPage||accessPage||!MainActivity.this.licenseAllowed()||accounts==null)return;try{accounts.command("legacy",new JSONObject());openApp();}catch(Exception failure){showAccountAccess();}});}
-        @JavascriptInterface public void copyDeviceCode(){runOnUiThread(()->{if(trusted()&&licensing!=null)((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("AlKarna device",licensing.deviceCode()));});}
-        @JavascriptInterface public void installActivation(String id,String content){
-            try{if(licensing==null)throw new IOException();JSONObject status=licensing.install(content);result(id,status);}
-            catch(Exception e){error(id,e instanceof LicenseVerifier.Rejected?e.getMessage():"تعذّر حفظ ملف التفعيل");}
-        }
         @JavascriptInterface public void theme(String appearance){runOnUiThread(()->{
             if(!trusted())return;boolean light="light".equals(appearance);getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("theme",light?"light":"dark").apply();root.setBackgroundColor(Color.parseColor(light?"#f1f4f8":"#080e19"));
             getWindow().getDecorView().setSystemUiVisibility(light?View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);

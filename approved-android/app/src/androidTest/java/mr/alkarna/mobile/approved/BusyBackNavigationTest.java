@@ -31,6 +31,6 @@ public final class BusyBackNavigationTest {
   launchReady();assertEquals("true",js("window.__auditBusyHook=window.karnaPersistenceBusy;window.karnaPersistenceBusy=()=>true;true"));
   activity.onActivity(a->{try{var method=MainActivity.class.getDeclaredMethod("showActivation");method.setAccessible(true);method.invoke(a);}catch(Exception e){throw new AssertionError(e);}});
   Thread.sleep(600);assertTrue("Activation navigated away while a save was pending",url().endsWith("/assets/approved/index.html"));
-  assertEquals("true",js("window.karnaPersistenceBusy=window.__auditBusyHook;delete window.__auditBusyHook;true"));long end=System.currentTimeMillis()+10000;while(!url().endsWith("/assets/approved/activation.html")){assertTrue("Activation did not open after the save completed",System.currentTimeMillis()<end);Thread.sleep(100);}
+  assertEquals("true",js("window.karnaPersistenceBusy=window.__auditBusyHook;delete window.__auditBusyHook;true"));long end=System.currentTimeMillis()+10000;String destination=ExistingLicenseAccess.installedVersion()>=31?"/assets/approved/access.html":"/assets/approved/activation.html";while(!url().endsWith(destination)){assertTrue("Account entry did not open after the save completed",System.currentTimeMillis()<end);Thread.sleep(100);}
  }
 }

@@ -34,7 +34,7 @@ final class AccountProtocol {
         require("active".equals(response.optString("stage")) && "online".equals(response.optString("mode")), "ONLINE_ACCESS_INVALID");
         JSONObject p = ProtocolJson.verifyEnvelope(response.getJSONObject("entitlement"), issuers, "contatools-android-online-access");
         require("android-online-access".equals(p.getString("purpose")) && "online".equals(p.getString("mode"))
-                && "active".equals(p.getString("status")) && application.equals(p.getString("applicationId"))
+                && "active".equals(p.getString("status")) && "approved".equals(p.optString("deviceApproval")) && application.equals(p.getString("applicationId"))
                 && installation.equals(p.getString("installationId")) && fingerprint.equals(p.getString("keyFingerprint")), "ONLINE_ACCESS_INVALID");
         long issued = time(p.getString("issuedAt")), expires = time(p.getString("expiresAt"));
         require(issued <= now + 120000 && expires > now && expires > issued && expires - issued <= 900000, "ONLINE_ACCESS_EXPIRED");
@@ -47,6 +47,15 @@ final class AccountProtocol {
                 && ProtocolJson.canonical(p.getJSONArray("capabilities")).equals(ProtocolJson.canonical(member.getJSONArray("capabilities")))
                 && ProtocolJson.canonical(p.getJSONArray("branches")).equals(ProtocolJson.canonical(response.getJSONArray("branches"))), "ONLINE_ACCESS_SCOPE");
         return p;
+    }
+    static JSONObject pendingOnlineDevice(JSONObject response, String installation) throws Exception {
+        HashSet<String> names = new HashSet<>(Arrays.asList("stage", "mode", "deviceStatus", "installationId", "requestId"));
+        require(response.length() == names.size(), "ONLINE_DEVICE_PENDING_INVALID");
+        for (String name : names) require(response.has(name), "ONLINE_DEVICE_PENDING_INVALID");
+        require("pending".equals(response.getString("stage")) && "online".equals(response.getString("mode"))
+                && "pending".equals(response.getString("deviceStatus")) && installation.equals(response.getString("installationId"))
+                && response.getString("requestId").matches("[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}"), "ONLINE_DEVICE_PENDING_INVALID");
+        return ProtocolJson.copy(response);
     }
     static JSONObject offline(JSONObject envelope, JSONObject issuers, JSONObject request, String installation,
                               String fingerprint, String device, String application, String documentHash) throws Exception {

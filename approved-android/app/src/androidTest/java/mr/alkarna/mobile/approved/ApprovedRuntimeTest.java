@@ -82,7 +82,27 @@ public class ApprovedRuntimeTest {
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
         boolean completed=false;
         try {
-        activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.openManualActivation(activity);
+        activity=ActivityScenario.launch(MainActivity.class);
+        if(ExistingLicenseAccess.installedVersion()>=31){
+            until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#identifier')");
+            assertEquals("false",js("!!document.querySelector('#manual,#license-file,#license-text,#install-text,a[href^=\"tel:\"],a[href*=\"wa.me\"]')"));
+            assertEquals("true",js("typeof NativeHost.installActivation==='undefined'&&typeof NativeHost.copyDeviceCode==='undefined'&&typeof NativeHost.activationContinue==='undefined'"));
+            assertEquals("false",js("NativeHost.licenseAllowed()"));capture("activation-required");
+            var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+            for(String name:new String[]{"activation.html","activation.js","activation.css"}){
+                try(var unused=context.getAssets().open("approved/"+name)){fail("Removed manual activation asset is still packaged: "+name);}catch(FileNotFoundException expected){}
+            }
+            // Only the independent test APK installs this synthetic pre-existing licence.
+            // Customer APK code has no callable import/installation bridge.
+            DeviceLicense fixture=new DeviceLicense(context);
+            assertTrue(fixture.install(TestLicenseIssuer.issue(fixture.deviceCode(),"perpetual",0)).getBoolean("valid"));
+            activity.close();activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
+            until("!!document.querySelector('[data-action=\"site:setup\"]')");
+            js("window.__removedActivationAssets=null;Promise.all(['activation.html','activation.js','activation.css'].map(name=>fetch(name).then(response=>response.status))).then(statuses=>window.__removedActivationAssets=statuses);true");
+            until("window.__removedActivationAssets!==null");
+            assertEquals("true",js("window.__removedActivationAssets.length===3&&window.__removedActivationAssets.every(status=>status===403)"));capture("activation-valid");
+        }else{
+        ExistingLicenseAccess.openManualActivation(activity);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
         until("document.querySelector('.activation-contact img').naturalWidth>0");
@@ -94,6 +114,7 @@ public class ApprovedRuntimeTest {
         js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
         until("!document.querySelector('#continue').hidden");assertEquals("true",js("!document.querySelector('#contact-whatsapp,#contact-send')&&document.querySelector('#contact-call').getAttribute('href')==='tel:49823328'"));capture("activation-valid");
         js("document.querySelector('#continue').click();true");
+        }
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));
         assertEquals("true",js("document.querySelector('.licensed-identity').innerText.includes('متجر الفحص')"));capture("licensed-first-setup");

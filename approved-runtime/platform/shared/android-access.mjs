@@ -26,6 +26,8 @@ export function assertOfflineScope(binding,state,users,credential){
 export function accessReason(error,language='ar'){
  const fr=language==='fr',key=String(error?.code||'')+' '+String(error?.message||'');
  const messages=[
+  [/ONLINE_PENDING_OTHER_ACCOUNT|PENDING_COMMAND/,['هناك عملية غير محسومة لحساب سابق. ادخل بالحساب السابق وتحقق من نتيجتها أولًا.','Une opération reste à vérifier sur le compte précédent. Reconnectez-vous à ce compte pour confirmer son résultat.']],
+  [/DEVICE_APPROVAL/,['تعذّر التحقق من اعتماد هذا الجهاز. راجع المسؤول وتأكد من تحديث خدمة المنشأة.','Impossible de vérifier l’approbation de cet appareil. Contactez le responsable et vérifiez la version du service.']],
   [/CLIENT_UPDATE_REQUIRED/,['حدّث التطبيق لاستخدام صلاحيات هذا الحساب بأمان. ترخيصك وبياناتك المحلية محفوظان.','Mettez l’application à jour pour utiliser les droits de ce compte. Votre licence et vos données locales sont conservées.']],
   [/INVALID_IDENTIFIER|ACCOUNT_IDENTIFIER_INVALID/,['أدخل بريد المنشأة أو رقمًا من 8 أرقام يبدأ بـ 2 أو 3 أو 4.','Saisissez l’adresse de l’établissement ou 8 chiffres commençant par 2, 3 ou 4.']],
   [/OFFLINE_LOCAL_SCOPE_REQUIRED/,['ادخل بترخيصك المحلي الحالي ثم اربط الرقم من حساب المالك.','Connectez-vous avec votre licence locale actuelle, puis liez le numéro depuis le compte du propriétaire.']],
