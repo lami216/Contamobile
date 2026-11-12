@@ -46,7 +46,7 @@ public class ContatoolsRecoveryTest {
   long registrationDeadline=System.currentTimeMillis()+210000;
   while(wire.registrations.get()==0&&System.currentTimeMillis()<registrationDeadline)Thread.sleep(200);
   assertEquals("Foreground registration happens without opening recovery",1,wire.registrations.get());
-  assertEquals(15,wire.lastRegistration.getInt("versionCode"));assertEquals("1.0.14",wire.lastRegistration.getString("appVersion"));assertEquals(license.deviceCode(),wire.lastRegistration.getString("deviceCode"));
+  assertEquals(BuildConfig.VERSION_CODE,wire.lastRegistration.getInt("versionCode"));assertEquals(BuildConfig.VERSION_NAME,wire.lastRegistration.getString("appVersion"));assertEquals(license.deviceCode(),wire.lastRegistration.getString("deviceCode"));
   assertEquals(ProtocolJson.hash(new JSONObject(license.registrationSnapshot().getString("licenseDocument"))),ProtocolJson.hash(new JSONObject(wire.lastRegistration.getString("licenseDocument"))));
   client=client(keys);inject(client);js("for(let i=0;i<100;i++)window.dispatchEvent(new Event('online'));true");Thread.sleep(2500);
   assertEquals("Saved native success survives client recreation and event bursts",1,wire.registrations.get());

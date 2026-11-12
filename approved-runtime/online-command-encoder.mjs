@@ -4,6 +4,11 @@ import {canonical,domainApply,encodeRecordCommand,encodeVoidCommand,encodeEntity
 import {registerLocalIdentity} from './platform/shared/local-identities.mjs';
 const clone=value=>structuredClone(value);
 const part=c=>({kind:c.kind,payload:c.payload,...(c.expectedVersion===undefined?{}:{expectedVersion:c.expectedVersion})});
+export function salesCommand(command){
+ const result=clone(command);
+ function clean(value){if(value.kind==='batch'){for(const child of value.payload.commands||[])clean(child);return;}if(value.kind==='record.post'){const row=value.payload.record;if(row?.kind==='sale'){delete row.profit;for(const line of row.lines||[])delete line.costAtSale;}}}
+ clean(result);return result;
+}
 export function installOnlineEncoder(api){
  const database=api.database;let tx=null,confirmIntent=null;const baselines=new Map();let warehouseBaseline=null;
  const context=()=>({organizationId:database.context.organization.id,branchId:database.branchId,memberId:database.context.member.id,role:database.context.member.role,capabilities:database.context.member.capabilities,branchIds:database.context.member.branchIds,epoch:database.epoch});
@@ -77,7 +82,7 @@ export function installOnlineEncoder(api){
   // Preserve numeric UI references across the authoritative refresh. This is an
   // identity reservation only; submitted balances never become confirmed data.
   for(const collection of ['products','parties','accounts','records','categories'])for(const row of submitted[collection]||[])registerLocalIdentity(submitted,collection,row);
-  return {command,localView:submitted};
+  return {command:database.salesOnly?.()?salesCommand(command):command,localView:submitted};
  };
  database.onSaveFailure=()=>{if(tx)tx.saveFailed=true;};
  function finish(){const done=tx;tx=null;if(!done)return;remember(done.action,done.before);if(!done.saveFailed)return;api.restoreForm(done);}

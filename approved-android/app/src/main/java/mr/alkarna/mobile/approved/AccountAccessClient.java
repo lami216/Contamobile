@@ -103,8 +103,8 @@ final class AccountAccessClient {
             case "offline-renew": return renewLocal();
             case "bootstrap": return bootstrap();
             case "bootstrap-complete": return completeBootstrap();
-            case "online-status": return refresh();
-            case "online-pending": refresh(); return pending();
+            case "online-status": return input.optBoolean("allowRecent") ? refreshIfDue() : refresh();
+            case "online-pending": refreshIfDue(); return pending();
             case "online-ack": return acknowledgeOnline(input);
             case "online-call": return onlineCall(input);
             case "logout":
@@ -160,7 +160,8 @@ final class AccountAccessClient {
         }
         AccountProtocol.require(identifier.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+") && input.optBoolean("consent"), "ACCOUNT_IDENTIFIER_INVALID");
         String secret = code(input, 12);
-        JSONObject answer = exchange("session.login", base().put("identifier", identifier).put("code", secret), null);
+        JSONObject answer = exchange("session.login", base().put("identifier", identifier).put("code", secret)
+                .put("clientProtocol", new JSONObject().put("sharedDeltaVersion", 1).put("salesViewVersion", 1)), null);
         String token = answer.getString("sessionToken"); AccountProtocol.require(token.matches("[A-Za-z0-9_-]{43}"), "ONLINE_SESSION_INVALID");
         JSONObject claims = AccountProtocol.online(answer, issuers, identity.id(), identity.fingerprint(), BuildConfig.APPLICATION_ID, System.currentTimeMillis());
         JSONObject pending = unresolved();
@@ -369,6 +370,13 @@ final class AccountAccessClient {
         JSONObject answer = exchange("access.status", installation(), sessionToken); acceptOnline(answer);
         return ProtocolJson.copy(onlineContext).put("connected", true);
     }
+    // Reuse only a very recent signed admission during one foreground action.
+    // Every accounting request still carries a fresh installation proof and is
+    // authorized by the server. This never extends the signed admission clock.
+    private JSONObject refreshIfDue() throws Exception {
+        if (!admitted() || SystemClock.elapsedRealtime() - onlineChecked >= 4000) return refresh();
+        return ProtocolJson.copy(onlineContext).put("connected", true);
+    }
     private JSONObject pending() throws Exception {
         JSONObject pending = unresolved();
         if (pending == null) return new JSONObject().put("pending", false);
@@ -378,6 +386,8 @@ final class AccountAccessClient {
     }
     private JSONObject unresolved() { JSONObject pending = stored.optJSONObject("onlinePending"); return pending == null ? stored.optJSONObject("onlineCompleted") : pending; }
     private JSONObject acknowledgeOnline(JSONObject input) throws Exception {
+        // Consuming a durable completed receipt requires fresh authority even
+        // inside the short UI admission window. Revocation must retain it.
         refresh();
         JSONObject completed = stored.optJSONObject("onlineCompleted");
         if (completed == null) {
@@ -398,8 +408,8 @@ final class AccountAccessClient {
     }
     private JSONObject onlineCall(JSONObject input) throws Exception {
         String operation = input.getString("operation");
-        AccountProtocol.require(Arrays.asList("online.bootstrap", "sync.status", "sync.push", "sync.pull").contains(operation), "ACCOUNT_OPERATION_INVALID");
-        refresh();
+        AccountProtocol.require(Arrays.asList("online.bootstrap", "online.delta", "sync.status", "sync.push", "sync.pull").contains(operation), "ACCOUNT_OPERATION_INVALID");
+        refreshIfDue();
         JSONObject payload = new JSONObject(input.getJSONObject("payload").toString()).put("installationId", identity.id());
         JSONObject pending = unresolved();
         if ("sync.push".equals(operation)) {
