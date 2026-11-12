@@ -131,12 +131,44 @@ for baseline in "${baselines[@]}"; do
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
  test -s "baseline-v$baseline/alkarna-approved.apk"
 done
-# Fail fast on the isolated backup fixture before the full preservation matrix.
-# This fixture is removed completely before the first original-version scenario.
+# A child runs one fixed required partition; no scenario is split across VMs.
+candidate_mode=${CANDIDATE_TEST_MODE:-full}
+case "$candidate_mode" in
+ full)
+  test -z "${UPGRADE_BASELINE_GROUP:-}"
+  candidate_group=full
+  selected_baselines=("${baselines[@]}") ;;
+ native)
+  test -z "${UPGRADE_BASELINE_GROUP:-}"
+  candidate_group=native
+  selected_baselines=() ;;
+ upgrades)
+  case "${UPGRADE_BASELINE_GROUP:-}" in
+   '13 14 15') candidate_group=upgrade-13-15 ;;
+   '16 17 18') candidate_group=upgrade-16-18 ;;
+   '19 20 21') candidate_group=upgrade-19-21 ;;
+   '22 23 24') candidate_group=upgrade-22-24 ;;
+   '25 26 27') candidate_group=upgrade-25-27 ;;
+   '28 29') candidate_group=upgrade-28-29 ;;
+   *) echo 'Unknown or incomplete preservation group' >&2; exit 1 ;;
+  esac
+  read -r -a selected_baselines <<< "$UPGRADE_BASELINE_GROUP" ;;
+ *) echo 'Unknown candidate test mode' >&2; exit 1 ;;
+esac
+if [ "$candidate_mode" != full ]; then
+ : "${CANDIDATE_INPUT_ROOT:?Set the immutable build input directory}"
+ : "${GITHUB_SHA:?Set the exact source head}"
+ : "${GITHUB_RUN_ID:?Set the exact workflow run}"
+ python3 -B scripts/candidate-inputs.py verify --inputs "$CANDIDATE_INPUT_ROOT" --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --check-workspace .
+fi
+export CANDIDATE_TEST_MODE="$candidate_mode"
+export SELECTED_BASELINE_VERSION_CODES="${selected_baselines[*]}"
 adb install -r "$candidate" | tee "$proof_dir/cloud-backup-install.txt"
 grep -q Success "$proof_dir/cloud-backup-install.txt"
 adb install -r "$test_apk"
 adb shell pm clear "$app"
+assert_offline group-network-before true
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = native ]; then
 assert_offline account-access-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountAccessTest -e accountAccessIsolation true "$runner" | tee "$proof_dir/AccountAccessTest.txt"
 grep -Eq '^OK \(10 tests\)' "$proof_dir/AccountAccessTest.txt"
@@ -196,6 +228,8 @@ for suite,prefix in [('AccountAccessTest','ACCOUNT ACCESS CASE PASS'),('OfflineA
  suites.append({'suite':suite,'executed':len(executed),'cases':sorted(executed),'passed':True})
 (proof/'native-scenario-summary.json').write_text(json.dumps({'suites':suites},indent=2)+'\n',encoding='utf-8')
 PY
+fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = upgrades ]; then
 adb shell am force-stop "$app"
 adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
@@ -203,7 +237,7 @@ adb uninstall "$app"
 # Reset only BETWEEN scenarios, never between these preservation checks.
 first=true
 network_teardown_pending=true
-for baseline in "${baselines[@]}"; do
+for baseline in "${selected_baselines[@]}"; do
  previous=baseline-v$baseline/alkarna-approved.apk
  for type in temporary perpetual; do
   if [ "$first" = false ]; then adb uninstall "$app"; fi
@@ -241,6 +275,8 @@ for baseline in "${baselines[@]}"; do
   assert_offline "$label-network-after"
  done
 done
+fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = native ]; then
 # Fresh synthetic data for the independent accounting/activation/support-entry suite.
 for group in ActivationConcurrencyTest BusyBackNavigationTest; do
  adb shell pm clear "$app"
@@ -263,17 +299,24 @@ assert_offline offline-suites-network-before
 adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.AccountAccessTest,mr.alkarna.mobile.approved.OfflineAccountControlTest,mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
+fi
+assert_offline group-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
 if grep -q 'FATAL EXCEPTION' candidate-proof/runtime-errors.txt; then
  cat candidate-proof/runtime-errors.txt
  exit 1
 fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = upgrades ]; then
 python3 - <<'PY'
-import json,re
+import json,os,re
 from pathlib import Path
 root=Path('candidate-proof')
+selected=[int(v) for v in os.environ['SELECTED_BASELINE_VERSION_CODES'].split()]
+groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29]]
+mode=os.environ['CANDIDATE_TEST_MODE']
+assert (mode=='full' and selected==list(range(13,30))) or (mode=='upgrades' and selected in groups)
 checks=[]
-for baseline in range(13,30):
+for baseline in selected:
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
@@ -281,8 +324,13 @@ for baseline in range(13,30):
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==102
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':30,'upgradeScenarios':34,'preservationChecks':102,'checks':checks},indent=2)+'\n',encoding='utf-8')
+assert len(checks)==len(selected)*6
+if mode=='full':assert len(checks)==102
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':30,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
+fi
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt
+if [ "$candidate_mode" != full ]; then
+ python3 -B scripts/candidate-inputs.py complete --inputs "$CANDIDATE_INPUT_ROOT" --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --check-workspace . --group "$candidate_group" --proof "$proof_dir"
+fi

@@ -223,6 +223,8 @@ jobs:
       needs.verified_bytes.outputs.run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    outputs:
+      build_artifact_id: ${{ steps.build_inputs.outputs.artifact-id }}
     env:
       CANDIDATE_VERSION_CODE: '30'
       CANDIDATE_APK: candidate-output/alkarna-1.0.29-v30.apk
@@ -341,6 +343,8 @@ jobs:
         run: |
           bash -n scripts/test-candidate-upgrade.sh
           bash scripts/test-candidate-readiness.sh
+          python3 -B scripts/test-candidate-inputs.py
+          python3 -B scripts/test-candidate-proof-merge.py
           python3 scripts/prepare-approved-dependencies.py
           node --test scripts/test-service-contact.mjs
           java scripts/RegistrationPolicyCheck.java
@@ -391,46 +395,220 @@ jobs:
           python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.29-v30.apk
           python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk baseline-v27/alkarna-approved.apk baseline-v28/alkarna-approved.apk baseline-v29/alkarna-approved.apk candidate-output/alkarna-1.0.29-v30.apk
           sha256sum candidate-output/alkarna-1.0.29-v30.apk > candidate-output/SHA256SUMS.txt
+      - name: Freeze the one signed build and all seventeen original baselines
+        run: python3 -B scripts/candidate-inputs.py create --inputs . --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID"
+      - name: Retain immutable build inputs, not a customer release
+        id: build_inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-candidate-v30-build-inputs
+          path: |
+            build-inputs.json
+            candidate-output/*
+            candidate-proof/jvm-release-summary.json
+            build-browser-proof/
+            baseline-v*/alkarna-approved.apk
+            approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            approved-android/app/build/reports/tests
+            approved-android/app/build/test-results/testReleaseUnitTest
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - name: Remove ephemeral signing file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/alkarna-signing/release.p12"
+  candidate_native:
+    needs: [candidate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CANDIDATE_VERSION_CODE: '30'
+      CANDIDATE_APK: candidate-output/alkarna-1.0.29-v30.apk
+      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29'
+      CANDIDATE_INPUT_ROOT: build-inputs
+      CANDIDATE_TEST_MODE: native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Download the exact immutable build artifact by ID
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.build_artifact_id }}
+          path: build-inputs
+          merge-multiple: true
+      - name: Verify and materialize the identical signed APKs and pinned originals
+        run: python3 -B scripts/candidate-inputs.py verify --inputs build-inputs --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --materialize .
       - name: Enable disposable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exact v13 through v29 updates on Android 16, both license types and approved lifecycle workflows
+      - name: Execute the complete required partition on a fresh isolated Android 16 VM
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
           arch: x86_64
           profile: pixel_2
-          # Isolated CI graphics fallback after two emulator-process exits.
-          # This is a diagnostic configuration trial, not a proven root cause.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash scripts/test-candidate-upgrade.sh
-      - name: Preserve exact tested customer bytes
+      - name: Retain only this partition's public execution proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-native
+          path: candidate-proof/
+          retention-days: 30
+          if-no-files-found: error
+  candidate_upgrades:
+    needs: [candidate]
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - group: upgrade-13-15
+            baselines: '13 14 15'
+          - group: upgrade-16-18
+            baselines: '16 17 18'
+          - group: upgrade-19-21
+            baselines: '19 20 21'
+          - group: upgrade-22-24
+            baselines: '22 23 24'
+          - group: upgrade-25-27
+            baselines: '25 26 27'
+          - group: upgrade-28-29
+            baselines: '28 29'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CANDIDATE_VERSION_CODE: '30'
+      CANDIDATE_APK: candidate-output/alkarna-1.0.29-v30.apk
+      BASELINE_VERSION_CODES: '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29'
+      CANDIDATE_INPUT_ROOT: build-inputs
+      CANDIDATE_TEST_MODE: upgrades
+      UPGRADE_BASELINE_GROUP: ${{ matrix.baselines }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Download the exact immutable build artifact by ID
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.build_artifact_id }}
+          path: build-inputs
+          merge-multiple: true
+      - name: Verify and materialize the identical signed APKs and pinned originals
+        run: python3 -B scripts/candidate-inputs.py verify --inputs build-inputs --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --materialize .
+      - name: Enable disposable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute the complete required partition on a fresh isolated Android 16 VM
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          disable-animations: true
+          script: bash scripts/test-candidate-upgrade.sh
+      - name: Retain only this partition's public execution proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-${{ matrix.group }}
+          path: candidate-proof/
+          retention-days: 30
+          if-no-files-found: error
+  candidate_aggregate:
+    needs: [candidate, candidate_native, candidate_upgrades]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download the one signed immutable build
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.build_artifact_id }}
+          path: build-inputs
+          merge-multiple: true
+      - name: Download required native evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-native
+          path: child-proofs/native
+      - name: Download required upgrade-13-15 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-13-15
+          path: child-proofs/upgrade-13-15
+      - name: Download required upgrade-16-18 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-16-18
+          path: child-proofs/upgrade-16-18
+      - name: Download required upgrade-19-21 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-19-21
+          path: child-proofs/upgrade-19-21
+      - name: Download required upgrade-22-24 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-22-24
+          path: child-proofs/upgrade-22-24
+      - name: Download required upgrade-25-27 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-25-27
+          path: child-proofs/upgrade-25-27
+      - name: Download required upgrade-28-29 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alkarna-candidate-v30-proof-upgrade-28-29
+          path: child-proofs/upgrade-28-29
+      - name: Strictly verify and merge all native and thirty-four complete upgrade scenarios
+        run: python3 -B scripts/merge-candidate-proofs.py --inputs build-inputs --children child-proofs --source . --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --output merged-proof
+      - name: Publish only the identical fully tested customer APK
         uses: actions/upload-artifact@v4
         with:
           name: alkarna-candidate-v30
-          path: candidate-output/alkarna-1.0.29-v30.apk
+          path: merged-proof/candidate-output/alkarna-1.0.29-v30.apk
           compression-level: 0
           retention-days: 90
-      - name: Separate integration-test APK and public inspection evidence
-        run: |
-          mkdir -p candidate-proof/inspection-tools
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" candidate-proof/inspection-tools/apksigner.jar
-          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" candidate-proof/inspection-tools/aapt
-          cp approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk candidate-proof/app-release-androidTest.apk
-      - uses: actions/upload-artifact@v4
-        if: always()
+          if-no-files-found: error
+      - name: Retain the complete uniquely merged public proof
+        uses: actions/upload-artifact@v4
         with:
           name: alkarna-candidate-v30-proof
           path: |
-            candidate-proof
-            candidate-output/*.json
-            candidate-output/*.txt
-            approved-android/app/build/reports/tests
-            approved-android/app/build/test-results/testReleaseUnitTest
+            merged-proof/candidate-proof
+            merged-proof/candidate-output/*.json
+            merged-proof/candidate-output/*.txt
+            merged-proof/approved-android/app/build/reports/tests
+            merged-proof/approved-android/app/build/test-results/testReleaseUnitTest
           retention-days: 30
-      - name: Remove ephemeral signing file
-        if: always()
-        run: rm -f "$RUNNER_TEMP/alkarna-signing/release.p12"
+          if-no-files-found: error

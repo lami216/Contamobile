@@ -33,3 +33,7 @@ candidate-proof/
 test-results/
 
 benchmark-proof/
+
+# Disposable caches from the Python CI proof helpers.
+__pycache__/
+*.py[cod]
