@@ -19,6 +19,7 @@ import java.io.*;
 public class ApprovedRuntimeTest {
     private ActivityScenario<MainActivity> activity;
     private java.util.Map<String,java.security.PublicKey> originalLicenseKeys;
+    private String diagnosticStage="workflow-start";
     @Before public void preserveVerificationKeys() throws Exception {originalLicenseKeys=new java.util.HashMap<>(LicenseCompatibilityTest.keys());}
     @After public void restoreVerificationKeys() throws Exception {if(activity!=null)activity.close();LicenseCompatibilityTest.keys().clear();LicenseCompatibilityTest.keys().putAll(originalLicenseKeys);}
     private String js(String script) throws Exception {
@@ -46,7 +47,41 @@ public class ApprovedRuntimeTest {
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
     }
+    private void observeNativeExports() throws Exception {
+        js("(()=>{window.__qaExportEvents=[];const record=(stage,detail={})=>{window.__qaExportEvents.push({stage,...detail});if(window.__qaExportEvents.length>32)window.__qaExportEvents.shift()};window.__qaExportRecord=record;const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;record('save-blob-start',{name:String(args[0]),size:args[1]?.size,type:args[1]?.type});try{const result=await save(...args);window.__qaFileSaved=result.saved===true;record('save-blob-result',{saved:result.saved===true});return result}catch(error){record('save-blob-error',{message:String(error?.message||error).slice(0,512),code:String(error?.code||'')});throw error}};const result=window.__nativeResult;window.__nativeResult=(id,value)=>{record('native-result',{ready:value?.ready,saved:value?.saved,error:String(value?.error||'').slice(0,512),code:value?.code});return result(id,value)};let last='';new MutationObserver(()=>{const text=[...document.querySelectorAll('.toast,.error,[role=alert]')].map(e=>e.innerText).join(' | ').slice(0,1024);if(text&&text!==last){last=text;record('visible-error-or-toast',{text})}}).observe(document.body,{childList:true,subtree:true,characterData:true});return true})()");
+    }
+    private void beginObservedExport(String format) throws Exception {
+        diagnosticStage="native-export-"+format;
+        js("window.__qaExportDone=false;window.__qaExportActionError=null;act('site:export-"+format+"').catch(error=>{window.__qaExportActionError={message:String(error?.message||error).slice(0,512),code:String(error?.code||'')};throw error}).finally(()=>window.__qaExportDone=true);true");
+    }
+    private void failureDiagnostics() {
+        // Keep the original failure and all real-save assertions; observations cannot authorize a save.
+        try {
+            var instrumentation=InstrumentationRegistry.getInstrumentation();
+            var device=UiDevice.getInstance(instrumentation);
+            File directory=instrumentation.getTargetContext().getExternalFilesDir(null);
+            JSONObject details=new JSONObject().put("schema","approved-runtime-failure").put("stage",diagnosticStage);
+            try{details.put("topPackage",device.getCurrentPackageName());}catch(Throwable failure){details.put("topPackageError",failure.toString());}
+            try{device.dumpWindowHierarchy(new File(directory,"qa-failure-ui.xml"));}catch(Throwable failure){details.put("hierarchyError",failure.toString());}
+            try{
+                Bitmap image=instrumentation.getUiAutomation().takeScreenshot();
+                if(image==null)throw new IOException("Screenshot unavailable");
+                try(var output=new FileOutputStream(new File(directory,"qa-failure-screen.png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
+                finally{image.recycle();}
+            }catch(Throwable failure){details.put("screenshotError",failure.toString());}
+            try{
+                String observed=js("JSON.stringify({url:location.href,exportDone:window.__qaExportDone,fileSaved:window.__qaFileSaved,actionError:window.__qaExportActionError,events:window.__qaExportEvents,busy:typeof isPersistenceBusy==='function'?isPersistenceBusy():null,view:typeof view==='string'?view:null,language:document.documentElement.lang,body:document.body.innerText.slice(0,8000)})");
+                Object value=new org.json.JSONTokener(observed).nextValue();
+                details.put("web",value instanceof String?new JSONObject((String)value):value);
+            }catch(Throwable failure){details.put("webObservationError",failure.toString());}
+            String serialized=details.toString();
+            System.out.println("APPROVED_RUNTIME_FAILURE_DIAGNOSTICS "+serialized);
+            try(var output=new FileOutputStream(new File(directory,"qa-failure-export.json"))){output.write(serialized.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        }catch(Throwable diagnosticFailure){System.out.println("APPROVED_RUNTIME_FAILURE_DIAGNOSTICS_UNAVAILABLE "+diagnosticFailure);}
+    }
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
+        boolean completed=false;
+        try {
         activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.openManualActivation(activity);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
@@ -152,9 +187,9 @@ public class ApprovedRuntimeTest {
         action("site:support");assertEquals("\"Pour obtenir de l’aide sur l’utilisation de l’application, contactez l’assistance.\"",js("document.querySelector('.support-hint').innerText"));capture("french-support");action("close");
         action("go:operations");
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
+        observeNativeExports();
         for(String format:new String[]{"excel","pdf"}){
-            until("!document.querySelector('[data-busy-disabled]')");js("window.__qaExportDone=false;act('site:export-"+format+"').finally(()=>window.__qaExportDone=true);true");
+            until("!document.querySelector('[data-busy-disabled]')");beginObservedExport(format);
             var save=device.findObject(new UiSelector().resourceId("android:id/button1"));
             assertTrue("Native save picker for "+format,save.waitForExists(20000));
             save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
@@ -173,8 +208,8 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("S.products[0].categoryId===S.categories[0].id"));
         action("site:feature:opening:"+js("S.products[0].id"));assertEquals("true",js("modal==='feature-opening'&&document.querySelector('.feature-opening-metrics').innerText.includes('10')"));capture("french-opening-history");action("close");
         action("ledger:"+supplierId);action("site:feature:party-statement:"+supplierId);assertEquals("true",js("reportType==='party-ledger'&&!!document.querySelector('.feature-report-table')&&document.querySelector('#content').innerText.includes('Solde final')"));capture("french-party-statement");
-        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
-        js("window.__qaExportDone=false;act('site:export-pdf').finally(()=>window.__qaExportDone=true);true");
+        observeNativeExports();
+        beginObservedExport("pdf");
         var statementSave=device.findObject(new UiSelector().resourceId("android:id/button1"));assertTrue("Statement PDF saved directly",statementSave.waitForExists(20000));statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
         action("go:users");action("site:new-user");js("(()=>{for(const [k,v]of Object.entries({name:'Vendeur',username:'seller',password:'1234'}))document.querySelector('#sheet-form [name='+k+']').value=v;return true})()");action("site:feature:permission-toggle:pos.edit:true");capture("french-granular-permissions");action("site:feature:user-save");
         js("window.__qaSql=false;initSqlJs().then(SQL=>{const db=new SQL.Database();db.run('CREATE TABLE offline_test(value INTEGER)');db.run('INSERT INTO offline_test VALUES (7)');window.__qaSql=db.exec('SELECT value FROM offline_test')[0].values[0][0]===7;db.close()});true");until("window.__qaSql===true");
@@ -182,6 +217,8 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("S.currency.code==='EUR'&&S.categories[0].name==='Épicerie'&&S.products[0].categoryId===S.categories[0].id&&S.users.some(u=>u.username==='seller'&&u.capabilities.includes('pos.edit'))"));
         System.out.println("FEATURES PASS: native direct PDF, statement, display-only currency, categories, granular permissions, offline SQLite and cold persistence.");
         activity.close();
+        completed=true;
+        } finally {if(!completed)failureDiagnostics();}
     }
 }
 

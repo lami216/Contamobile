@@ -297,6 +297,15 @@ grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
 adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.AccountAccessTest,mr.alkarna.mobile.approved.OfflineAccountControlTest,mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+# Preserve bounded diagnostics from this synthetic emulator before the strict
+# success gate exits. Collection never retries a test or changes its outcome.
+if ! grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt; then
+ mkdir -p "$proof_dir/native-failure-diagnostics"
+ for diagnostic in qa-failure-export.json qa-failure-ui.xml qa-failure-screen.png; do
+  timeout 10s adb pull "/sdcard/Android/data/$app/files/$diagnostic" "$proof_dir/native-failure-diagnostics/$diagnostic" >> "$proof_dir/native-failure-diagnostics/collection.txt" 2>&1 || true
+ done
+ timeout 10s adb logcat -d -t 250 -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > "$proof_dir/native-failure-diagnostics/logcat.txt" 2>&1 || true
+fi
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
 fi
