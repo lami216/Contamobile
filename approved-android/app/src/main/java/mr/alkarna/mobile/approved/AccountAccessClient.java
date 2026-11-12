@@ -175,7 +175,11 @@ final class AccountAccessClient {
             // changes a local licence/preference, or touches an accounting receipt.
             JSONObject pending = AccountProtocol.pendingOnlineDevice(answer, identity.id()).put("identifier", identifier);
             AccountProtocol.require(unresolved() == null, "ONLINE_PENDING_OTHER_ACCOUNT");
-            clearSession(); mode = "none"; pendingCode = null; bootstrapCredential = null;
+            // Waiting for a company never revokes an already selected, valid local
+            // licence. This keeps its ordinary signed-out login in the same frame;
+            // it grants no company context, token or accounting authority.
+            String localMode = ("legacy".equals(mode) || "offline".equals(mode)) && !localSetupRequired && license.status().optBoolean("valid") ? mode : "none";
+            clearSession(); mode = localMode; pendingCode = null; bootstrapCredential = null;
             stored.put("companyEnrollment", ProtocolJson.copy(pending)); persist();
             return pending;
         }

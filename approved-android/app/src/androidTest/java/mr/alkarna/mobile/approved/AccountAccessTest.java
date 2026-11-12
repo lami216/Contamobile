@@ -145,6 +145,8 @@ public final class AccountAccessTest {
   service.unboundCapabilities=false;login();assertTrue(client.admitted());
  }
  @Test public void newCompanyDeviceStaysPendingAcrossReopenUntilExplicitApprovedLogin() throws Exception {
+  rejected("ACCOUNT_IDENTIFIER_INVALID",()->client.command("login",new JSONObject().put("identifier","arbitrary-user-name").put("code",CODE).put("consent",true)));
+  assertEquals("An arbitrary username cannot create a login or activation request",0,service.loginCalls);assertTrue(service.installations.isEmpty());assertFalse(new File(context.getNoBackupFilesDir(),VAULT_FILE).exists());
   service.pendingLogin=true;
   JSONObject input=new JSONObject().put("identifier","fixture-account@example.invalid").put("code",CODE).put("consent",true);
   JSONObject first=client.command("login",input);assertEquals("pending",first.getString("stage"));assertEquals("online",first.getString("mode"));assertEquals("pending",first.getString("deviceStatus"));assertFalse(client.admitted());assertFalse(client.onlineMode());

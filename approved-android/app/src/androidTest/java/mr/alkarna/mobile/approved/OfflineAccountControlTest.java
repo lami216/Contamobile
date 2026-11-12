@@ -4,6 +4,8 @@ import static org.junit.Assert.*;
 import android.content.Context;
 import android.os.Build;
 import android.util.AtomicFile;
+import androidx.lifecycle.Lifecycle;
+import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.io.*;
@@ -12,6 +14,8 @@ import java.nio.file.Files;
 import java.security.*;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.json.*;
 import org.junit.*;
 import org.junit.rules.TestWatcher;
@@ -23,6 +27,7 @@ import org.junit.runner.RunWith;
 public final class OfflineAccountControlTest {
  private static final String PHONE="22345678",CODE="synthetic-local-secret",VAULT="account-access-v1.json";
  private Context context;private DeviceLicense license;private AccountAccessClient client;private Service service;
+ private ActivityScenario<MainActivity> activity;
  private Map<String,PublicKey> oldLegacy,oldOnline;private boolean owned;
  @Rule public final TestWatcher executed=new TestWatcher(){@Override protected void succeeded(Description d){android.os.Bundle b=new android.os.Bundle();b.putString("stream","\nOFFLINE ACCOUNT CONTROL CASE PASS "+d.getMethodName()+"\n");InstrumentationRegistry.getInstrumentation().sendStatus(0,b);}};
  private interface Work{void run()throws Exception;}
@@ -44,6 +49,7 @@ public final class OfflineAccountControlTest {
   Files.write(file("offline-account-sentinel.bin").toPath(),"synthetic-ledger-bytes-unchanged".getBytes(StandardCharsets.UTF_8));
  }
  @After public void cleanup()throws Exception{
+  if(activity!=null){activity.close();activity=null;}
   if(!owned)return;assertEquals("synthetic-ledger-bytes-unchanged",new String(Files.readAllBytes(file("offline-account-sentinel.bin").toPath()),StandardCharsets.UTF_8));
   File dir=file(DeviceLifecycleStore.DIRECTORY);if(dir.exists()){for(File f:Objects.requireNonNull(dir.listFiles())){assertTrue(f.isFile());assertTrue(f.delete());}assertTrue(dir.delete());}
   for(String name:new String[]{"activation-v2.json",VAULT,"offline-account-sentinel.bin"})for(String suffix:new String[]{"",".bak",".new"}){File f=file(name+suffix);if(f.exists()){assertTrue(f.isFile());assertTrue(f.delete());}}
@@ -56,12 +62,36 @@ public final class OfflineAccountControlTest {
   if(linked){license.install(TestLicenseIssuer.issue(license.deviceCode(),"temporary",3600));input.put("localOwnerId","existing-owner").put("localShopId","existing-shop");client.command("offline-request",input);}
   else assertEquals("pending",client.command("login",input).getString("stage"));
   service.approve();assertEquals("active",client.command("offline-status",new JSONObject()).getString("stage"));
+  assertEquals("The same explicit login can receive its approved local activation",true,client.command("login",new JSONObject().put("identifier",PHONE).put("code",CODE).put("consent",true)).getBoolean("activationRequired"));
   assertEquals("offline",client.command("offline-activate",new JSONObject()).getString("mode"));assertTrue(license.status().getBoolean("valid"));
   if(linked){double remaining=license.status().getJSONObject("license").getDouble("remainingSeconds");double expected=Math.max(0,(service.lifecycle.endsAt-System.currentTimeMillis())/1000d);assertTrue("Only request latency, never Android uptime, may reduce the received fixed term",remaining>=expected-2);}
  }
  private JSONObject current()throws Exception{return client.command("offline-current",new JSONObject());}
  private void completed()throws Exception{client.command("bootstrap-complete",new JSONObject());current();}
  private void renew()throws Exception{service.renew(System.currentTimeMillis()+1200000);current();}
+ private String js(String source)throws Exception{
+  ArrayBlockingQueue<String> result=new ArrayBlockingQueue<>(1);activity.onActivity(a->a.getWebView().evaluateJavascript(source,value->result.offer(value==null?"null":value)));
+  String answer=result.poll(20,TimeUnit.SECONDS);assertNotNull("Account-entry WebView callback",answer);return answer;
+ }
+ private void until(String condition)throws Exception{
+  long deadline=System.currentTimeMillis()+25000;while(!"true".equals(js(condition))){assertTrue("Timed out: "+condition,System.currentTimeMillis()<deadline);Thread.sleep(100);}
+ }
+ private void assertPendingStaysOnNormalLocalFrame(JSONObject input)throws Exception{
+  activity=ActivityScenario.launch(MainActivity.class);ExistingLicenseAccess.enter(activity);
+  activity.onActivity(a->{try{var field=MainActivity.class.getDeclaredField("accounts");field.setAccessible(true);field.set(a,client);}catch(Exception failure){throw new AssertionError(failure);}});
+  js("window.__unifiedNativeReply=null;window.__unifiedNativeFailure=null;NativeFiles.accountAccess('login',"+input+").then(value=>window.__unifiedNativeReply=value).catch(error=>window.__unifiedNativeFailure=String(error.code||error.message));true");
+  until("window.__unifiedNativeReply!==null||window.__unifiedNativeFailure!==null");
+  assertEquals("The exact normal index frame may submit organization credentials","null",js("window.__unifiedNativeFailure"));
+  assertEquals("true",js("window.__unifiedNativeReply.stage==='pending'&&window.__unifiedNativeReply.mode==='online'&&window.__unifiedNativeReply.deviceStatus==='pending'"));
+  Thread.sleep(1250); // Exercise the actual one-second licence pulse.
+  activity.moveToState(Lifecycle.State.STARTED);activity.moveToState(Lifecycle.State.RESUMED);
+  assertEquals("Pending approval keeps the normal login frame during pulse/resume","true",js("location.pathname.endsWith('/index.html')"));
+  assertTrue("Only its original local licence remains admitted",client.admitted());assertFalse(client.onlineMode());
+  assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));
+  js("window.__unifiedContinuationSentinel=true;NativeHost.accountContinue();true");
+  until("location.pathname.endsWith('/index.html')&&window.__unifiedContinuationSentinel===undefined&&document.documentElement.dataset.runtimeState==='ready'");
+  activity.close();activity=null;
+ }
  @Test public void legacyAutomaticEntryKeepsLicenseAndNeverCreatesAccountMigration()throws Exception{
   license.install(TestLicenseIssuer.issue(license.deviceCode(),"temporary",3600));String hash=license.documentHash();
   assertFalse(file(VAULT).exists());assertTrue(client.enterLocalAutomatically());assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));
@@ -72,7 +102,7 @@ public final class OfflineAccountControlTest {
   AccountAccessTest.Service company=new AccountAccessTest.Service();client=new AccountAccessClient(context,license,company.issuers,company);
   assertTrue(client.enterLocalAutomatically());assertEquals("legacy",client.command("bootstrap",new JSONObject()).getString("mode"));
   JSONObject input=new JSONObject().put("identifier","fixture-account@example.invalid").put("code",AccountAccessTest.CODE).put("consent",true);
-  company.pendingLogin=true;assertEquals("pending",client.command("login",input).getString("stage"));assertFalse(client.admitted());assertTrue(client.command("state",new JSONObject()).getBoolean("legacyAvailable"));assertFalse(journal().optBoolean("preferOnlineEntry"));
+  company.pendingLogin=true;assertPendingStaysOnNormalLocalFrame(input);assertTrue(client.admitted());assertFalse(client.onlineMode());assertTrue(client.command("state",new JSONObject()).getBoolean("legacyAvailable"));assertFalse(journal().optBoolean("preferOnlineEntry"));
   assertEquals("legacy",client.command("legacy",new JSONObject()).getString("mode"));assertEquals(hash,license.documentHash());assertTrue(client.admitted());
   company.pendingLogin=false;assertEquals("online",client.command("login",input).getString("mode"));assertTrue(client.admitted());assertEquals("online",client.command("bootstrap",new JSONObject()).getString("mode"));assertTrue(journal().getBoolean("preferOnlineEntry"));assertFalse(journal().has("companyEnrollment"));
   client.command("logout",new JSONObject());assertFalse(client.admitted());assertFalse("Choosing online entry must not silently switch back after company logout",client.enterLocalAutomatically());assertTrue(client.command("state",new JSONObject()).getBoolean("legacyAvailable"));

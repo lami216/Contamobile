@@ -11,6 +11,17 @@ export function loginInput(identifier,code,consent){
  if(typeof code!=='string'||code.length<(result.mode==='online'?12:6)||code.length>256)throw Object.assign(Error(result.mode==='online'?'ONLINE_CODE_LENGTH':'OFFLINE_CODE_LENGTH'),{code:result.mode==='online'?'ONLINE_CODE_LENGTH':'OFFLINE_CODE_LENGTH'});
  return {identifier:result.identifier,code,consent:true};
 }
+// All calls belong to one explicit form submission; the input is never persisted.
+export async function performAccountEntry(native,input){
+ let result=await native('login',input);
+ if(result?.mode==='offline'&&result.bound===true){
+  let current=await native('offline-current');
+  if(current.renewalAvailable===true&&!['suspended','disabled','revoked','replaced','rejected'].includes(current.status||current.stage))current=await native('offline-renew');
+  result=current?.stage==='active'||current?.status==='active'||current?.setupRequired===true?await native('login',input):current;
+ }
+ if(result?.stage==='active'&&result.activationRequired===true)result=await native('offline-activate');
+ return result;
+}
 export function assertOfflineScope(binding,state,users,credential){
  if(!binding||! /^[234][0-9]{7}$/.test(binding.phone||'')||typeof binding.localOwnerId!=='string'||!binding.localOwnerId||typeof binding.localShopId!=='string'||!binding.localShopId)throw Object.assign(Error('OFFLINE_BINDING_INVALID'),{code:'OFFLINE_BINDING_INVALID'});
  const existing=state!==null&&state!==undefined;
@@ -29,11 +40,10 @@ export function accessReason(error,language='ar'){
   [/ONLINE_PENDING_OTHER_ACCOUNT|PENDING_COMMAND/,['هناك عملية غير محسومة لحساب سابق. ادخل بالحساب السابق وتحقق من نتيجتها أولًا.','Une opération reste à vérifier sur le compte précédent. Reconnectez-vous à ce compte pour confirmer son résultat.']],
   [/DEVICE_APPROVAL/,['تعذّر التحقق من اعتماد هذا الجهاز. راجع المسؤول وتأكد من تحديث خدمة المنشأة.','Impossible de vérifier l’approbation de cet appareil. Contactez le responsable et vérifiez la version du service.']],
   [/CLIENT_UPDATE_REQUIRED/,['حدّث التطبيق لاستخدام صلاحيات هذا الحساب بأمان. ترخيصك وبياناتك المحلية محفوظان.','Mettez l’application à jour pour utiliser les droits de ce compte. Votre licence et vos données locales sont conservées.']],
-  [/INVALID_IDENTIFIER|ACCOUNT_IDENTIFIER_INVALID/,['أدخل بريد المنشأة أو رقمًا من 8 أرقام يبدأ بـ 2 أو 3 أو 4.','Saisissez l’adresse de l’établissement ou 8 chiffres commençant par 2, 3 ou 4.']],
-  [/OFFLINE_LOCAL_SCOPE_REQUIRED/,['ادخل بترخيصك المحلي الحالي ثم اربط الرقم من حساب المالك.','Connectez-vous avec votre licence locale actuelle, puis liez le numéro depuis le compte du propriétaire.']],
+  [/INVALID_IDENTIFIER|ACCOUNT_IDENTIFIER_INVALID/,['تواصل مع مسؤول منشأتك للحصول على بيانات الدخول.','Contactez le responsable de votre établissement pour obtenir vos identifiants.']],
+  [/OFFLINE_LOCAL_SCOPE_REQUIRED/,['تواصل مع مسؤول منشأتك للحصول على بيانات الدخول.','Contactez le responsable de votre établissement pour obtenir vos identifiants.']],
   [/CONSENT_REQUIRED/,['اقرأ توضيح استخدام البيانات ووافق عليه قبل المتابعة.','Lisez et acceptez l’utilisation des données avant de continuer.']],
-  [/ONLINE_CODE_LENGTH/,['كلمة مرور المنشأة لا تقل عن 12 حرفًا.','Le mot de passe de l’établissement comporte au moins 12 caractères.']],
-  [/OFFLINE_CODE_LENGTH/,['اختر رمزًا سريًا لا يقل عن 6 أحرف.','Choisissez un code secret d’au moins 6 caractères.']],
+  [/ONLINE_CODE_LENGTH|OFFLINE_CODE_LENGTH|ACCOUNT_CODE_INVALID/,['تواصل مع مسؤول منشأتك للحصول على بيانات الدخول.','Contactez le responsable de votre établissement pour obtenir vos identifiants.']],
   [/INVALID_CREDENTIAL|LOGIN_FAILED|UNAUTHORIZED|BAD_CREDENTIAL|AUTH_FAILED|ACCOUNT_AUTH_INVALID/,['بيانات الدخول غير صحيحة أو لم يعد الحساب متاحًا. راجع مسؤول منشأتك.','Identifiants incorrects ou accès indisponible. Contactez votre responsable.']],
   [/ACCOUNT_LOGIN_REQUIRED/,['أعد إدخال معرّفك ورمزك السري للمتابعة.','Saisissez à nouveau votre identifiant et votre code secret.']],
   [/REVIEW_REQUIRED/,['راجع سجل المنشأة ونتيجة العملية السابقة، ثم أكّد المراجعة قبل تسجيل عملية أخرى.','Vérifiez le registre et le résultat précédent, puis confirmez cette vérification avant une nouvelle opération.']],

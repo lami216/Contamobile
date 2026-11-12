@@ -123,25 +123,30 @@ public class UpgradePersistenceTest {
         until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#login-form #identifier')&&!!document.querySelector('#legacy:not(:disabled)')");
         assertEquals("The upgraded entry cannot expose manual activation or activation contacts","false",js("!!document.querySelector('#manual,#license-file,#license-text,#install-text,.activation-contact,a[href^=\"tel:\"],a[href*=\"wa.me\"]')"));
         assertEquals("The upgraded entry uses the new form and localized brand","true",js("!!document.querySelector('#brand-caption')&&!!document.querySelector('#login-form #code')&&document.querySelector('.entry-brand strong').textContent===(document.documentElement.lang==='fr'?'AlKarna':'الكرنه')&&document.querySelector('h1').textContent===(document.documentElement.lang==='fr'?'Connexion':'تسجيل الدخول')"));
+        if(ExistingLicenseAccess.installedVersion()>=32){
+            assertEquals("The current entry has no separate company route or advertised phone activation","false",js("!!document.querySelector('#company-retry,#activate,#manual')||/رقم من 8|طلب تفعيل|رقم الهاتف أو بريد المنشأة|8 chiffres ou|Téléphone ou e-mail de l’établissement/.test(document.body.innerText+' '+(document.querySelector('#identifier')?.placeholder||''))"));
+        }
         assertEquals("No manual installation bridge remains after the upgrade","true",js("typeof NativeHost.installActivation==='undefined'&&typeof NativeHost.copyDeviceCode==='undefined'&&typeof NativeHost.activationContinue==='undefined'"));
         js("document.querySelector('#legacy').click();true");
         until("location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
+        if(ExistingLicenseAccess.installedVersion()>=32)assertEquals("A licensed existing customer uses the normal login without an organization-only entry button","true",js("!!document.querySelector('#site-auth-form [name=username]')&&!!document.querySelector('#site-auth-form [name=password]')&&!document.querySelector('.auth-card [data-action=\"site:account-entry\"]')"));
         assertEquals("Visiting the upgraded account entry preserves every local database row",databaseBefore,databaseSnapshot());
         assertEquals("Visiting the upgraded account entry preserves local preferences",preferencesBefore,preferences());
         nativePreserved(before,false);
         System.out.println("UPGRADE ENTRY PASS: reviewed current form/brand, no manual activation/contact bridge, explicit old local return and unchanged database/preferences/licence.");
     }
     private void warmOldEntryBeforeSnapshot() throws Exception {
-        long version=ExistingLicenseAccess.installedVersion();if(version!=29&&version!=30)return;
+        long version=ExistingLicenseAccess.installedVersion();if(version!=29&&version!=30&&version!=31)return;
         String databaseBefore=databaseSnapshot(),preferencesBefore=preferences();
         js("NativeHost.openAccountAccess();true");
-        until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#manual')&&!!document.querySelector('#legacy:not(:disabled)')");
-        assertEquals("The actual old v29/v30 entry still exposes its original manual-import control","true",js("!!document.querySelector('#manual')&&!!document.querySelector('#identifier')&&!!document.querySelector('#code')"));
+        until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#identifier')&&!!document.querySelector('#legacy:not(:disabled)')");
+        if(version<=30)assertEquals("The actual old v29/v30 entry still exposes its original manual-import control","true",js("!!document.querySelector('#manual')&&!!document.querySelector('#identifier')&&!!document.querySelector('#code')"));
+        else assertEquals("The actual old v31 entry still exposes its delivered phone-or-company explanation","true",js("!!document.querySelector('#login-form #code')&&/رقم الهاتف أو بريد المنشأة|Téléphone ou e-mail de l’établissement/.test(document.body.innerText)"));
         js("document.querySelector('#legacy').click();true");
         until("location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
         assertEquals("Warming the old entry cannot change a local database row",databaseBefore,databaseSnapshot());
         assertEquals("Warming the old entry cannot change a local preference",preferencesBefore,preferences());
-        System.out.println("UPGRADE OLD ENTRY WARMED: actual v"+version+" original manual entry loaded and returned to local login without clearing cache or changing data.");
+        System.out.println("UPGRADE OLD ENTRY WARMED: actual v"+version+" original delivered entry loaded and returned to local login without clearing cache or changing data.");
     }
     @Test public void seedPreviousVersion() throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());

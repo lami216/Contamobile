@@ -49,9 +49,9 @@ test('offline binding never adopts a first/other owner or another shop',()=>{
  assert.throws(()=>assertOfflineScope(binding,null,[],null),/OFFLINE_SETUP_CREDENTIAL_REQUIRED/);
  assert.equal(assertOfflineScope(binding,null,[],{phone:binding.phone,code:'123456'}).fresh,true);
 });
-test('existing-phone linking error explains the authenticated owner path in both languages',()=>{
- assert.match(accessReason({code:'OFFLINE_LOCAL_SCOPE_REQUIRED'}),/حساب المالك/);
- assert.match(accessReason({code:'OFFLINE_LOCAL_SCOPE_REQUIRED'},'fr'),/propriétaire/);
+test('existing-phone scope denial gives generic institutional guidance in both languages',()=>{
+ assert.match(accessReason({code:'OFFLINE_LOCAL_SCOPE_REQUIRED'}),/مسؤول منشأتك/);
+ assert.match(accessReason({code:'OFFLINE_LOCAL_SCOPE_REQUIRED'},'fr'),/responsable de votre établissement/);
 });
 test('online bootstrap uses RAM and rejects local replacement/user writes',async()=>{
  const f=fixture();await f.db.open();assert.equal((await f.db.load()).originId,'origin-test');
