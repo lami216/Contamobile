@@ -107,7 +107,7 @@ adb install -r "$test_apk"
 adb shell pm clear "$app"
 assert_offline account-access-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountAccessTest -e accountAccessIsolation true "$runner" | tee "$proof_dir/AccountAccessTest.txt"
-grep -Eq '^OK \(9 tests\)' "$proof_dir/AccountAccessTest.txt"
+grep -Eq '^OK \(10 tests\)' "$proof_dir/AccountAccessTest.txt"
 assert_offline account-access-network-after
 adb shell pm clear "$app"
 assert_offline offline-account-control-network-before true

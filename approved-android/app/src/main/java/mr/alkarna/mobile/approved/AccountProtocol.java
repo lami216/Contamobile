@@ -39,6 +39,9 @@ final class AccountProtocol {
         long issued = time(p.getString("issuedAt")), expires = time(p.getString("expiresAt"));
         require(issued <= now + 120000 && expires > now && expires > issued && expires - issued <= 900000, "ONLINE_ACCESS_EXPIRED");
         JSONObject organization = response.getJSONObject("organization"), member = response.getJSONObject("member");
+        if (response.has("protocolCapabilities") || p.has("protocolCapabilities"))
+            require(response.has("protocolCapabilities") && p.has("protocolCapabilities")
+                    && ProtocolJson.canonical(response.getJSONObject("protocolCapabilities")).equals(ProtocolJson.canonical(p.getJSONObject("protocolCapabilities"))), "ONLINE_ACCESS_SCOPE");
         require(p.getString("organizationId").equals(organization.getString("id")) && p.getString("memberId").equals(member.getString("id"))
                 && p.getString("role").equals(member.getString("role")) && p.getLong("membershipVersion") == member.getLong("membershipVersion")
                 && ProtocolJson.canonical(p.getJSONArray("capabilities")).equals(ProtocolJson.canonical(member.getJSONArray("capabilities")))

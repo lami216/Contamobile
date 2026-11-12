@@ -136,13 +136,17 @@ public final class AccountAccessTest {
   assertEquals("Fresh installation proofs still reach the authority before applying a revoked write",2,service.applied);
   assertFalse(client.admitted());assertTrue(service.proofs.isEmpty());
  }
+ @Test public void negotiatedCapabilitiesMustBeBoundToTheSignedAdmission() throws Exception {
+  service.unboundCapabilities=true;rejected("ONLINE_ACCESS_SCOPE",()->login());assertFalse(client.admitted());
+  service.unboundCapabilities=false;login();assertTrue(client.admitted());
+ }
  private static final class Service implements ContatoolsClient.Transport {
   final KeyPair authority;
   final JSONObject issuers;
   final Map<String,String> proofs=new HashMap<>();
   final Map<String,JSONObject> installations=new HashMap<>(),receipts=new HashMap<>();
   final List<String> dispatchedIds=new ArrayList<>();
-  boolean revoked,dropPushResponse;
+  boolean revoked,dropPushResponse,unboundCapabilities;
   int applied,pushCalls,statusCalls;
   String token;
   Service()throws Exception{
@@ -166,7 +170,7 @@ public final class AccountAccessTest {
    assertEquals(AccountProtocol.DISPATCH,path);String message=proofs.remove(body.getString("challengeId"));assertNotNull("Every dispatch requires a fresh one-shot challenge",message);JSONObject proof=new JSONObject(message);assertEquals(operation,proof.getString("operation"));assertEquals(ProtocolJson.hash(payload),proof.getString("payloadHash"));assertEquals(installation,proof.getString("installationId"));
    JSONObject jwk=installations.get(installation);assertNotNull(jwk);Signature verifier=Signature.getInstance("SHA256withECDSA");verifier.initVerify(LicenseVerifier.key(jwk.getString("x"),jwk.getString("y")));verifier.update(message.getBytes(StandardCharsets.UTF_8));assertTrue("The real Android Keystore signed the exact payload proof",verifier.verify(LicenseVerifier.der(ProtocolJson.decode(body.getString("signature")))));
    if(revoked)throw new AccountAccessClient.Failure(403,"ACCOUNT_ACCESS_REVOKED");
-   if(operation.equals("session.login")){assertEquals(CODE,payload.getString("code"));byte[] random=new byte[32];new SecureRandom().nextBytes(random);token=ProtocolJson.base64(random);return grant(installation).put("sessionToken",token);}
+   if(operation.equals("session.login")){assertEquals(CODE,payload.getString("code"));byte[] random=new byte[32];new SecureRandom().nextBytes(random);token=ProtocolJson.base64(random);JSONObject answer=grant(installation).put("sessionToken",token);if(unboundCapabilities)answer.put("protocolCapabilities",new JSONObject().put("sharedDeltaVersion",1));return answer;}
    assertEquals(token,body.getString("sessionToken"));assertEquals(ProtocolJson.hash(token),proof.getString("sessionTokenHash"));
    if(operation.equals("access.status")){statusCalls++;return grant(installation);}
    if(operation.equals("sync.push")){
