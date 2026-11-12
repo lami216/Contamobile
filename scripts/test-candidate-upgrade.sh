@@ -151,7 +151,7 @@ for suite,prefix in [('AccountAccessTest','ACCOUNT ACCESS CASE PASS'),('OfflineA
  expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
  assert len(expected)>=(1 if suite=='AccountingParityTest' else 6) and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
  if suite=='PhoneReplacementTest':assert len(expected)==8,'All eight customer phone replacement cases are required'
- if suite=='AccountAccessTest':assert len(expected)==8,'All eight durable online account access cases are required'
+ if suite=='AccountAccessTest':assert len(expected)==10,'All eight original durable account access cases and both new admission/capability cases are required'
  if suite=='OfflineAccountControlTest':assert len(expected)==15,'All fifteen direct activation, renewal and persistent-control cases are required'
  if suite=='AccountingResetTest':
   required={'resetExitRequiresConsumedScopedReceiptAndIsOneShot','ownerConsentExitsTaskBeforeAckAndLauncherReopensFreshSetupWithoutClosingAgain'}
