@@ -49,7 +49,7 @@ export function installOnlineRuntime(api){
   if(db.reviewRequired&&(posting.test(action)||editing.test(action))){api.fail(accessReason({code:'REVIEW_REQUIRED'},api.language()));return;}
   locked=true;
   try{
-   await db.status();encoder.begin(action);if(posting.test(action))confirming(true);
+   await db.status(true);encoder.begin(action);if(posting.test(action))confirming(true);
    return await originalAct(action);
   }catch(error){lastError=error;api.fail(accessReason(error,api.language()));}
   finally{encoder.finish();confirming(false);locked=false;mask();}

@@ -103,7 +103,7 @@ final class AccountAccessClient {
             case "offline-renew": return renewLocal();
             case "bootstrap": return bootstrap();
             case "bootstrap-complete": return completeBootstrap();
-            case "online-status": return refresh();
+            case "online-status": return input.optBoolean("allowRecent") ? refreshIfDue() : refresh();
             case "online-pending": refreshIfDue(); return pending();
             case "online-ack": return acknowledgeOnline(input);
             case "online-call": return onlineCall(input);
@@ -386,7 +386,9 @@ final class AccountAccessClient {
     }
     private JSONObject unresolved() { JSONObject pending = stored.optJSONObject("onlinePending"); return pending == null ? stored.optJSONObject("onlineCompleted") : pending; }
     private JSONObject acknowledgeOnline(JSONObject input) throws Exception {
-        refreshIfDue();
+        // Consuming a durable completed receipt requires fresh authority even
+        // inside the short UI admission window. Revocation must retain it.
+        refresh();
         JSONObject completed = stored.optJSONObject("onlineCompleted");
         if (completed == null) {
             JSONObject last = stored.optJSONObject("onlineAcknowledged");

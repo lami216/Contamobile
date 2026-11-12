@@ -126,12 +126,16 @@ public final class AccountAccessTest {
 
  @Test public void recentAdmissionAvoidsDuplicatePreflightsButEveryWriteStillProvesAndChecksAuthority() throws Exception {
   login();client.command("online-status",new JSONObject());assertEquals(1,service.statusCalls);
-  JSONObject first=payload("branch-A");push(first);ack(first);
+  client.command("online-status",new JSONObject().put("allowRecent",true));client.command("online-status",new JSONObject().put("allowRecent",true));
+  assertEquals("Rapid draft interactions do not make duplicate status requests",1,service.statusCalls);
+  JSONObject first=payload("branch-A");push(first);
   assertEquals("One foreground action reuses only its very recent signed status",1,service.statusCalls);
+  ack(first);assertEquals("Consuming a completed receipt always obtains fresh authority",2,service.statusCalls);
   assertEquals(1,service.applied);assertTrue(service.proofs.isEmpty());
   android.os.SystemClock.sleep(4100);
-  JSONObject second=payload("branch-A");push(second);ack(second);
-  assertEquals("The short reuse window never extends itself",2,service.statusCalls);
+  JSONObject second=payload("branch-A");push(second);
+  assertEquals("The short reuse window never extends itself",3,service.statusCalls);
+  ack(second);assertEquals("Each receipt consumption retains its fresh revocation check",4,service.statusCalls);
   service.revoked=true;rejected("ACCOUNT_ACCESS_REVOKED",()->push(payload("branch-A")));
   assertEquals("Fresh installation proofs still reach the authority before applying a revoked write",2,service.applied);
   assertFalse(client.admitted());assertTrue(service.proofs.isEmpty());

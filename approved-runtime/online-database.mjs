@@ -20,9 +20,9 @@ export class OnlineDatabase{
   if(this.branchId&&this.branchId!==selected){this.cachedState=null;this.remoteState=null;this.meta.clear();}
   this.branchId=selected;await this.refresh();return this;
  }
- async status(){
+ async status(allowRecent=false){
   try{
-   const result=await this.transport('online-status',{}),context=result.context||result;
+   const result=await this.transport('online-status',allowRecent?{allowRecent:true}:{}),context=result.context||result;
    if(context.organization?.id!==this.context.organization.id||context.member?.id!==this.context.member.id||!context.member.branchIds?.includes(this.branchId))throw failure('AUTHOR_CHANGED');
    if(context.member.role!=='org-admin'&&!context.member.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read')&&!(context.protocolCapabilities?.salesViewVersion===1&&context.member.capabilities?.some(cap=>['pos.view','pos.create'].includes(cap))))throw failure('BRANCH_READ_REQUIRED');
    const authority=authorityVersion(context);
