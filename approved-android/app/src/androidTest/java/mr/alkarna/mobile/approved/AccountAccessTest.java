@@ -124,6 +124,18 @@ public final class AccountAccessTest {
   recreate();login();assertFalse(pending().getBoolean("pending"));push(original);assertEquals("The failed local save must never have reached the financial service",1,service.applied);
  }
 
+ @Test public void recentAdmissionAvoidsDuplicatePreflightsButEveryWriteStillProvesAndChecksAuthority() throws Exception {
+  login();client.command("online-status",new JSONObject());assertEquals(1,service.statusCalls);
+  JSONObject first=payload("branch-A");push(first);ack(first);
+  assertEquals("One foreground action reuses only its very recent signed status",1,service.statusCalls);
+  assertEquals(1,service.applied);assertTrue(service.proofs.isEmpty());
+  android.os.SystemClock.sleep(4100);
+  JSONObject second=payload("branch-A");push(second);ack(second);
+  assertEquals("The short reuse window never extends itself",2,service.statusCalls);
+  service.revoked=true;rejected("ACCOUNT_ACCESS_REVOKED",()->push(payload("branch-A")));
+  assertEquals("Fresh installation proofs still reach the authority before applying a revoked write",2,service.applied);
+  assertFalse(client.admitted());assertTrue(service.proofs.isEmpty());
+ }
  private static final class Service implements ContatoolsClient.Transport {
   final KeyPair authority;
   final JSONObject issuers;
@@ -131,7 +143,7 @@ public final class AccountAccessTest {
   final Map<String,JSONObject> installations=new HashMap<>(),receipts=new HashMap<>();
   final List<String> dispatchedIds=new ArrayList<>();
   boolean revoked,dropPushResponse;
-  int applied,pushCalls;
+  int applied,pushCalls,statusCalls;
   String token;
   Service()throws Exception{
    KeyPairGenerator generator=KeyPairGenerator.getInstance("EC");generator.initialize(new ECGenParameterSpec("secp256r1"));authority=generator.generateKeyPair();ECPublicKey key=(ECPublicKey)authority.getPublic();
@@ -156,7 +168,7 @@ public final class AccountAccessTest {
    if(revoked)throw new AccountAccessClient.Failure(403,"ACCOUNT_ACCESS_REVOKED");
    if(operation.equals("session.login")){assertEquals(CODE,payload.getString("code"));byte[] random=new byte[32];new SecureRandom().nextBytes(random);token=ProtocolJson.base64(random);return grant(installation).put("sessionToken",token);}
    assertEquals(token,body.getString("sessionToken"));assertEquals(ProtocolJson.hash(token),proof.getString("sessionTokenHash"));
-   if(operation.equals("access.status"))return grant(installation);
+   if(operation.equals("access.status")){statusCalls++;return grant(installation);}
    if(operation.equals("sync.push")){
     pushCalls++;JSONArray response=new JSONArray(),commands=payload.getJSONArray("commands");
     for(int i=0;i<commands.length();i++){JSONObject command=commands.getJSONObject(i);String id=command.getString("operationId"),hash=ProtocolJson.hash(command);dispatchedIds.add(id);JSONObject receipt=receipts.get(id);if(receipt==null){applied++;receipt=new JSONObject().put("operationId",id).put("hash",hash).put("status","accepted");receipts.put(id,receipt);}else assertEquals("Same UUID may only retry identical content",hash,receipt.getString("hash"));response.put(copy(receipt));}

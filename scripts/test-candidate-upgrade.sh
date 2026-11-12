@@ -83,7 +83,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 29
+test "$CANDIDATE_VERSION_CODE" = 30
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -93,7 +93,7 @@ read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
 # All sixteen originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
@@ -107,7 +107,7 @@ adb install -r "$test_apk"
 adb shell pm clear "$app"
 assert_offline account-access-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.AccountAccessTest -e accountAccessIsolation true "$runner" | tee "$proof_dir/AccountAccessTest.txt"
-grep -Eq '^OK \(8 tests\)' "$proof_dir/AccountAccessTest.txt"
+grep -Eq '^OK \(9 tests\)' "$proof_dir/AccountAccessTest.txt"
 assert_offline account-access-network-after
 adb shell pm clear "$app"
 assert_offline offline-account-control-network-before true
@@ -233,7 +233,7 @@ import json,re
 from pathlib import Path
 root=Path('candidate-proof')
 checks=[]
-for baseline in range(13,29):
+for baseline in range(13,30):
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
@@ -241,8 +241,8 @@ for baseline in range(13,29):
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==96
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':29,'upgradeScenarios':32,'preservationChecks':96,'checks':checks},indent=2)+'\n',encoding='utf-8')
+assert len(checks)==102
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':30,'upgradeScenarios':34,'preservationChecks':102,'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt

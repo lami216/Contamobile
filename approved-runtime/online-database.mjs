@@ -1,37 +1,67 @@
 import {canonical,commandHash,financialProjection,domainApply} from './platform/shared/accounting-domain.mjs';
 import {materializeLocalView} from './platform/shared/local-identities.mjs';
+import {applySharedDelta,viewHash} from './shared-delta.mjs';
 const clone=value=>structuredClone(value);
 const failure=code=>Object.assign(Error(code),{code});
+const authorityVersion=context=>canonical({role:context.member.role,capabilities:context.member.capabilities,branchIds:context.member.branchIds,membershipVersion:context.member.membershipVersion});
 
 // Institution data is never opened in ShopDatabase/IndexedDB. Only native owns
 // the authenticated transport and the durable journal of an uncertain command.
 export class OnlineDatabase{
  constructor(context,transport){this.context=clone(context);this.transport=transport;this.revision=0;this.cachedState=null;this.epoch=0;this.cursor=0;this.branchId=null;this.connected=false;this.pending=false;this.pendingPayload=null;this.settlement=false;this.settlementCode='';this.reviewRequired=false;this.lastReceipt=null;this.committedOperations=new Set();this.meta=new Map();this.drafts=new Map();this.onGate=()=>{};this.onAdopt=()=>{};this.onCommitted=()=>{};this.onSaveFailure=()=>{};this.prepareSave=null;this.inflight=false;this.contextVersion=canonical(context);}
  async call(operation,payload={}){return this.transport('online-call',{operation,payload});}
+ deltaCapable(){return this.context.protocolCapabilities?.sharedDeltaVersion===1;}
+ salesOnly(){const m=this.context.member;return m.role!=='org-admin'&&!m.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read');}
  actor(){const m=this.context.member;return {id:m.id,name:m.name,username:m.username,role:m.role==='org-admin'?'owner':m.role,active:true,capabilities:m.role==='org-admin'?['*']:[...(m.capabilities||[])]};}
  async open(branchId){
   const branches=this.context.branches||[],selected=branchId||this.branchId||branches[0]?.id;
   if(!selected||!branches.some(b=>b.id===selected)||!(this.context.member?.branchIds||[]).includes(selected))throw failure('BRANCH_READ_REQUIRED');
   if(this.pending&&this.branchId&&selected!==this.branchId)throw failure('ONLINE_RESULT_UNCERTAIN');
-  if(this.branchId&&this.branchId!==selected){this.cachedState=null;this.meta.clear();}
+  if(this.branchId&&this.branchId!==selected){this.cachedState=null;this.remoteState=null;this.meta.clear();}
   this.branchId=selected;await this.refresh();return this;
  }
  async status(){
   try{
    const result=await this.transport('online-status',{}),context=result.context||result;
    if(context.organization?.id!==this.context.organization.id||context.member?.id!==this.context.member.id||!context.member.branchIds?.includes(this.branchId))throw failure('AUTHOR_CHANGED');
-   if(context.member.role!=='org-admin'&&!context.member.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read'))throw failure('BRANCH_READ_REQUIRED');
-   this.context=clone(context);this.connected=true;this.onGate();return context;
+   if(context.member.role!=='org-admin'&&!context.member.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read')&&!(context.protocolCapabilities?.salesViewVersion===1&&context.member.capabilities?.some(cap=>['pos.view','pos.create'].includes(cap))))throw failure('BRANCH_READ_REQUIRED');
+   const authority=authorityVersion(context);
+   if((this.authorityVersion||authorityVersion(this.context))!==authority){this.cachedState=null;this.remoteState=null;this.identityHint=null;this.reviewRequired=true;}
+   this.authorityVersion=authority;this.context=clone(context);this.connected=true;this.onGate();return context;
   }catch(error){this.connected=false;this.onGate(error);throw error;}
  }
- async refresh(){
+ async refresh(forceBootstrap=false){
   try{
-   const result=await this.call('online.bootstrap',{branchId:this.branchId});
+   if(!forceBootstrap&&this.deltaCapable()&&this.remoteState){
+    let pages=0,changed=false,remote=this.remoteState,cursor=this.cursor,hash=this.remoteHash;
+    while(true){
+     const result=await this.call('online.delta',{branchId:this.branchId,epoch:this.epoch,cursor,viewVersion:1,limit:50});
+     if(result.needsBootstrap){if(result.organizationId!==this.context.organization.id||result.branchId!==this.branchId)throw failure('ONLINE_DELTA_INVALID');return this.refresh(true);}
+     const applied=applySharedDelta(remote,{epoch:this.epoch,cursor,view:this.viewMode,hash},result,{organizationId:this.context.organization.id,branchId:this.branchId});
+     remote=applied.state;cursor=applied.cursor;hash=applied.hash;changed=changed||applied.changed;
+     if(!result.hasMore)break;if(++pages>1000)throw failure('ONLINE_DELTA_INVALID');
+    }
+    this.remoteState=remote;this.cursor=cursor;this.remoteHash=hash;if(changed||this.identityHint)this.adoptRemote();this.lastRefreshChanged=changed;this.connected=true;this.onGate();return clone(this.cachedState);
+   }
+   const result=await this.call('online.bootstrap',{branchId:this.branchId,...(this.deltaCapable()?{viewVersion:1}:{})});
    if(result.mode!=='online'||result.organizationId!==this.context.organization.id||result.branchId!==this.branchId||!Number.isSafeInteger(result.epoch)||result.epoch<1||!Number.isSafeInteger(result.cursor)||result.cursor<0||!result.state||result.state.syncScope?.organizationId!==result.organizationId||result.state.syncScope?.branchId!==result.branchId)throw failure('ONLINE_BOOTSTRAP_INVALID');
    const expected=this.context.branches.find(b=>b.id===this.branchId)?.originId;if(expected&&result.state.originId!==expected)throw failure('CROSS_SCOPE');
-   const previous=this.epoch===result.epoch?(this.identityHint||this.cachedState):null;
-   this.cachedState=materializeLocalView(result.state,previous);this.identityHint=null;this.epoch=result.epoch;this.cursor=result.cursor;this.connected=true;this.onAdopt(clone(this.cachedState));this.onGate();return clone(this.cachedState);
-  }catch(error){this.connected=false;this.onGate(error);throw error;}
+   if(this.deltaCapable()&&(!['full','sales'].includes(result.view)||result.viewHash!==viewHash(result.state)||result.view!==(this.salesOnly()?'sales':'full')))throw failure('ONLINE_BOOTSTRAP_INVALID');
+   const oldEpoch=this.epoch;if(oldEpoch&&oldEpoch!==result.epoch)this.reviewRequired=true;
+   this.remoteState=clone(result.state);this.viewMode=result.view||'full';this.remoteHash=result.viewHash||null;this.epoch=result.epoch;this.cursor=result.cursor;this.adoptRemote(oldEpoch!==result.epoch);this.lastRefreshChanged=true;this.connected=true;this.onGate();return clone(this.cachedState);
+  }catch(error){if(error.code==='ONLINE_DELTA_INVALID'&&!forceBootstrap)return this.refresh(true);this.connected=false;this.onGate(error);throw error;}
+ }
+ adoptRemote(newEpoch=false){
+  const previous=newEpoch?null:(this.identityHint||this.cachedState),state=clone(this.remoteState);
+  if(this.viewMode==='sales'){
+   // Presentation defaults contain no authoritative cost, profit or balances.
+   for(const product of state.products||[])product.cost=0;
+   for(const account of state.accounts||[]){account.balance=0;account.openingBalance=0;}
+   for(const party of state.parties||[])party.balance=0;
+   state.opening={accounts:{},parties:{},stocks:{}};state.stockEvents=[];state.stockEventSequence=0;
+  }
+  try{this.cachedState=materializeLocalView(state,previous);this.onAdopt(clone(this.cachedState));this.identityHint=null;}
+  catch(error){this.remoteState=null;this.cachedState=null;this.identityHint=null;this.connected=false;throw error;}
  }
  async load(){if(!this.cachedState)await this.open();return clone(this.cachedState);}
  async all(store){return store==='users'?[this.actor()]:[];}
@@ -127,5 +157,5 @@ export class OnlineDatabase{
   const hadSettlement=this.settlement,oldEpoch=this.epoch;
   this.settlement=false;await this.refresh();if(hadSettlement||oldEpoch!==this.epoch)this.reviewRequired=true;return result;
  }
- clear(){this.cachedState=null;this.meta.clear();this.drafts.clear();this.committedOperations.clear();this.pendingPayload=null;this.connected=false;}
+ clear(){this.cachedState=null;this.remoteState=null;this.meta.clear();this.drafts.clear();this.committedOperations.clear();this.pendingPayload=null;this.connected=false;}
 }

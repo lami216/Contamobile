@@ -46,6 +46,11 @@ export class ShopDatabase {
   }
   async get(store,id){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
   async all(store){return this.run(store,'readonly',(tx,result)=>{const request=tx.objectStore(store).getAll();request.onsuccess=()=>result(request.result)},'تعذّرت قراءة البيانات المحلية')}
+  async cloudRevision(){
+    const value=await this.get('meta','cloud-backup-revision');
+    if(!Number.isSafeInteger(value?.value)||value.value<0)throw new StoreError('تعذّر قراءة إصدار النسخ؛ بيانات المحل لم تتغير');
+    return value.value;
+  }
   async cloudSnapshot(){
     return this.run(['snapshots','users','meta'],'readonly',(tx,result,abort,guard)=>{
       const values={};let pending=3;

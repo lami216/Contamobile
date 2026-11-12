@@ -49,6 +49,19 @@ try{
    const api={database:{async get(){return {context:{shopId:'backup-shop',ownerId:'backup-owner'}}},async put(store,value){writes.push({store,value})},async cloudSnapshot(){if(snapshotGate)await snapshotGate;if(snapshotError)throw Error('export failed');return {revision:5,payload}}},state,users:()=>[owner()],actor:()=>({...owner(),role}),language:()=>lang,escape:v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),form:()=>form,modal:()=>modal,modalMarkup:(title,body,submit,label)=>`<h2>${title}</h2>${body}${submit?`<button data-action="${submit}">${label}</button>`:''}`,render:()=>{},isVisible:()=>false,show:v=>{modal=v},fail:v=>{errors.push(v)},preview:async v=>{preview=v}};
    return {controller:installCloudBackup(api),calls,errors,writes,status,api,setForm:v=>{form=v},preview:()=>preview};
   }
+  await check('unchanged revision reads metadata without cloning or serializing the full accounting snapshot',async()=>{
+   const h=harness();h.status.stagedRevision='5';let fullReads=0,revisionReads=0;
+   h.api.database.cloudRevision=async()=>{revisionReads++;return 5};h.api.database.cloudSnapshot=async()=>{fullReads++;throw Error('Unchanged shop must not be cloned')};
+   await h.controller.start();h.controller.committed();await new Promise(resolve=>setTimeout(resolve,1600));
+   expect(revisionReads>0&&fullReads===0,'Unchanged metadata path performed a full snapshot');expect(!h.calls.some(x=>x.command==='stage'),'Unchanged revision was staged');
+  });
+  await check('explicit coalescing and start-spread settings preserve cadence, Wi-Fi, consent and explain unsent local changes',async()=>{
+   const h=harness();h.status.lastBackedUpRevision='2';await h.controller.start();h.setForm({cloudConsent:'on',cloudSchedule:'weekly',cloudTime:'19:30',cloudWeekday:'2',cloudWifi:'on',cloudSnapshotWindow:'60000',cloudSpread:'on'});
+   await h.controller.action('cloud:save');const configured=h.calls.find(x=>x.command==='configure').data;
+   expect(configured.snapshotWindowMs===60000&&configured.startSpreadMs===30000,'Explicit timing settings were not passed to native validation');expect(configured.schedule==='weekly'&&configured.wifiOnly===true&&configured.consent===true,'Existing consent/schedule/network choices changed');
+   expect(h.controller.sheet().includes('تغييرات محلية لم تصل للسيرفر')&&h.controller.sheet().includes('<b>3</b>'),'Pending committed revisions were not shown');
+   await h.controller.action('cloud:settings');expect(h.controller.sheet().includes('cloudSnapshotWindow')&&h.controller.sheet().includes('حتى تُجهّز النسخة وتُرفع بنجاح'),'Timing effect on unsent local data was not explained');
+  });
   await check('first manual upload asks for consent without opening the automatic schedule',async()=>{
    const h=harness({consent:false});await h.controller.start();h.controller.committed();await new Promise(r=>setTimeout(r,1600));
    expect(!h.calls.some(x=>x.command==='stage'),'Snapshot staged before consent');await h.controller.action('cloud:run');
