@@ -30,8 +30,6 @@ finish_candidate() {
  fi
  exit "$status"
 }
-trap finish_candidate EXIT
-host_diagnostics before
 test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 
 preservation_progress() {
@@ -75,6 +73,8 @@ done
 if [ "$root_ready" != true ]; then cat "$proof_dir/root-readiness.txt" >&2;exit 1;fi
 cat "$proof_dir/root-readiness.txt"
 : > "$proof_dir/network-egress-block.txt"
+trap finish_candidate EXIT
+host_diagnostics before
 for firewall in iptables ip6tables; do
  if ! adb shell "$firewall" -w 5 -n -L ALKARNA_SYNTHETIC_OFFLINE >/dev/null 2>&1; then
   adb shell "$firewall" -w 5 -N ALKARNA_SYNTHETIC_OFFLINE
