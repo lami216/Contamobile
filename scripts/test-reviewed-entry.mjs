@@ -133,9 +133,9 @@ try{
   const width=typeof variant==='number'?variant:variant==='short'?360:393,height=variant==='short'?420:852;
   const x=await open({language,width,height});try{
    await x.page.evaluate(()=>document.fonts.ready);
-   if(variant==='large')await x.page.addStyleTag({content:'.access-entry{font-size:20px}.access-card p,.access-card label,.access-card button,.entry-brand small{font-size:18px!important}'});
+   if(variant==='large')await x.page.addStyleTag({content:'.access-entry{font-size:20px}.auth-card p,.auth-card label,.auth-card button,.entry-brand strong{font-size:18px!important}'});
    if(variant==='short'){await x.page.locator('#code').focus();await x.page.locator('#code').scrollIntoViewIfNeeded();assert.equal(await x.page.evaluate(()=>document.activeElement.id),'code')}
-   const dimensions=await inspectLayout(x.page);assert(dimensions.scrollWidth<=width,'No horizontal clipping');assert(dimensions.buttonHeight>=48);assert.match(dimensions.font,/Arabic/);assert.equal(dimensions.background,'rgb(8, 14, 25)');assert.equal(dimensions.language,language);assert.equal(dimensions.brand,language==='fr'?'AlKarna':'الكرنه');assert.deepEqual(x.errors,[]);
+   const dimensions=await inspectLayout(x.page);assert(dimensions.scrollWidth<=width,'No horizontal clipping');assert(dimensions.buttonHeight>=48);assert.equal(await x.page.locator('.auth-screen .auth-card').count(),1);assert.equal(await x.page.locator('.access-page,.access-card,.entry-eyebrow').count(),0);assert.match(dimensions.font,/Arabic/);assert.equal(dimensions.background,'rgb(8, 14, 25)');assert.equal(dimensions.language,language);assert.equal(dimensions.brand,language==='fr'?'AlKarna':'الكرنه');assert.deepEqual(x.errors,[]);
    layouts.push({language,variant,...dimensions,scope:variant==='short'?'Shrunken viewport/focused input; not a physical keyboard':variant==='large'?'CSS large-font stress; not an Android OS setting':'Browser responsive viewport'});
    if(directory){await mkdir(directory,{recursive:true});await x.page.screenshot({path:path.join(directory,`reviewed-entry-${language}-${variant}.png`),fullPage:true})}
   }finally{await x.context.close()}

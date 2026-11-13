@@ -4,12 +4,23 @@ import {applySharedDelta,viewHash} from './shared-delta.mjs';
 const clone=value=>structuredClone(value);
 const failure=code=>Object.assign(Error(code),{code});
 const authorityVersion=context=>canonical({role:context.member.role,capabilities:context.member.capabilities,branchIds:context.member.branchIds,membershipVersion:context.member.membershipVersion});
+const monotonic=()=>globalThis.performance?.now()??Date.now();
+const presentationWindow=14000; // Native foreground admission is at most 15 seconds.
 
 // Institution data is never opened in ShopDatabase/IndexedDB. Only native owns
 // the authenticated transport and the durable journal of an uncertain command.
 export class OnlineDatabase{
  constructor(context,transport){this.context=clone(context);this.transport=transport;this.revision=0;this.cachedState=null;this.epoch=0;this.cursor=0;this.branchId=null;this.connected=false;this.pending=false;this.pendingPayload=null;this.settlement=false;this.settlementCode='';this.reviewRequired=false;this.lastReceipt=null;this.committedOperations=new Set();this.meta=new Map();this.drafts=new Map();this.onGate=()=>{};this.onAdopt=()=>{};this.onCommitted=()=>{};this.onSaveFailure=()=>{};this.prepareSave=null;this.inflight=false;this.contextVersion=canonical(context);}
  async call(operation,payload={}){return this.transport('online-call',{operation,payload});}
+ disconnect(){this.admissionGeneration=(this.admissionGeneration||0)+1;this.connected=false;}
+ projectionScope(){return canonical({organizationId:this.context.organization.id,memberId:this.context.member.id,branchId:this.branchId,authority:authorityVersion(this.context)});}
+ canPresent(){
+  const expiry=this.context.entitlement?.payload?.expiresAt;
+  const expires=typeof expiry==='number'?expiry:expiry?Date.parse(expiry):null;
+  const origin=this.context.branches.find(branch=>branch.id===this.branchId)?.originId;
+  return this.connected&&!!this.cachedState&&!!this.remoteState&&this.cachedState.syncScope?.organizationId===this.context.organization.id&&this.cachedState.syncScope?.branchId===this.branchId&&this.remoteState.syncScope?.organizationId===this.context.organization.id&&this.remoteState.syncScope?.branchId===this.branchId&&(!origin||this.cachedState.originId===origin&&this.remoteState.originId===origin)&&Number.isSafeInteger(this.epoch)&&this.epoch>0&&Number.isSafeInteger(this.cursor)&&this.cursor>=0&&this.cachedScope===this.projectionScope()&&Number.isFinite(this.verifiedAt)&&monotonic()-this.verifiedAt<presentationWindow&&(!expiry||Number.isFinite(expires)&&Date.now()<expires);
+ }
+ clearProjection(){this.cachedState=null;this.remoteState=null;this.identityHint=null;this.cachedScope=null;}
  deltaCapable(){return this.context.protocolCapabilities?.sharedDeltaVersion===1;}
  salesOnly(){const m=this.context.member;return m.role!=='org-admin'&&!m.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read');}
  actor(){const m=this.context.member;return {id:m.id,name:m.name,username:m.username,role:m.role==='org-admin'?'owner':m.role,active:true,capabilities:m.role==='org-admin'?['*']:[...(m.capabilities||[])]};}
@@ -21,35 +32,43 @@ export class OnlineDatabase{
   this.branchId=selected;await this.refresh();return this;
  }
  async status(allowRecent=false){
+  const generation=this.admissionGeneration||0;
   try{
    const result=await this.transport('online-status',allowRecent?{allowRecent:true}:{}),context=result.context||result;
+   if(generation!==(this.admissionGeneration||0))throw failure('ONLINE_REQUIRED');
    if(context.organization?.id!==this.context.organization.id||context.member?.id!==this.context.member.id||!context.member.branchIds?.includes(this.branchId))throw failure('AUTHOR_CHANGED');
    if(context.member.role!=='org-admin'&&!context.member.capabilities?.some(cap=>cap==='*'||cap==='branch.sync.read')&&!(context.protocolCapabilities?.salesViewVersion===1&&context.member.capabilities?.some(cap=>['pos.view','pos.create'].includes(cap))))throw failure('BRANCH_READ_REQUIRED');
    const authority=authorityVersion(context);
    if((this.authorityVersion||authorityVersion(this.context))!==authority){this.cachedState=null;this.remoteState=null;this.identityHint=null;this.reviewRequired=true;}
-   this.authorityVersion=authority;this.context=clone(context);this.connected=true;this.onGate();return context;
-  }catch(error){this.connected=false;this.onGate(error);throw error;}
+   if(!allowRecent||context.entitlement?.signature!==this.context.entitlement?.signature)this.verifiedAt=monotonic();this.authorityVersion=authority;this.context=clone(context);this.connected=true;this.onGate();return context;
+  }catch(error){this.disconnect();if(!/NETWORK|TIMEOUT|HTTP_50|CONNECTION|OFFLINE|ONLINE_REQUIRED|fetch/i.test(String(error.code||'')+' '+String(error.message||'')))this.clearProjection();this.onGate(error);throw error;}
  }
- async refresh(forceBootstrap=false){
+ async refresh(forceBootstrap=false,background=false){
+  const scope=this.projectionScope(),revision=this.revision,generation=this.admissionGeneration||0;
+  const superseded=()=>background&&(generation!==(this.admissionGeneration||0)||scope!==this.projectionScope()||revision!==this.revision||this.inflight||this.pending||this.canAdoptBackground?.()===false);
   try{
    if(!forceBootstrap&&this.deltaCapable()&&this.remoteState){
     let pages=0,changed=false,remote=this.remoteState,cursor=this.cursor,hash=this.remoteHash;
     while(true){
      const result=await this.call('online.delta',{branchId:this.branchId,epoch:this.epoch,cursor,viewVersion:1,limit:50});
-     if(result.needsBootstrap){if(result.organizationId!==this.context.organization.id||result.branchId!==this.branchId)throw failure('ONLINE_DELTA_INVALID');return this.refresh(true);}
+     if(superseded()){this.lastRefreshChanged=false;return clone(this.cachedState);}
+     if(result.needsBootstrap){if(result.organizationId!==this.context.organization.id||result.branchId!==this.branchId)throw failure('ONLINE_DELTA_INVALID');if(superseded())return clone(this.cachedState);return this.refresh(true,background);}
      const applied=applySharedDelta(remote,{epoch:this.epoch,cursor,view:this.viewMode,hash},result,{organizationId:this.context.organization.id,branchId:this.branchId});
      remote=applied.state;cursor=applied.cursor;hash=applied.hash;changed=changed||applied.changed;
      if(!result.hasMore)break;if(++pages>1000)throw failure('ONLINE_DELTA_INVALID');
     }
+    if(superseded()){this.lastRefreshChanged=false;return clone(this.cachedState);}
     this.remoteState=remote;this.cursor=cursor;this.remoteHash=hash;if(changed||this.identityHint)this.adoptRemote();this.lastRefreshChanged=changed;this.connected=true;this.onGate();return clone(this.cachedState);
    }
    const result=await this.call('online.bootstrap',{branchId:this.branchId,...(this.deltaCapable()?{viewVersion:1}:{})});
+   if(superseded()){this.lastRefreshChanged=false;return clone(this.cachedState);}
    if(result.mode!=='online'||result.organizationId!==this.context.organization.id||result.branchId!==this.branchId||!Number.isSafeInteger(result.epoch)||result.epoch<1||!Number.isSafeInteger(result.cursor)||result.cursor<0||!result.state||result.state.syncScope?.organizationId!==result.organizationId||result.state.syncScope?.branchId!==result.branchId)throw failure('ONLINE_BOOTSTRAP_INVALID');
    const expected=this.context.branches.find(b=>b.id===this.branchId)?.originId;if(expected&&result.state.originId!==expected)throw failure('CROSS_SCOPE');
    if(this.deltaCapable()&&(!['full','sales'].includes(result.view)||result.viewHash!==viewHash(result.state)||result.view!==(this.salesOnly()?'sales':'full')))throw failure('ONLINE_BOOTSTRAP_INVALID');
+   if(superseded()){this.lastRefreshChanged=false;return clone(this.cachedState);}
    const oldEpoch=this.epoch;if(oldEpoch&&oldEpoch!==result.epoch)this.reviewRequired=true;
    this.remoteState=clone(result.state);this.viewMode=result.view||'full';this.remoteHash=result.viewHash||null;this.epoch=result.epoch;this.cursor=result.cursor;this.adoptRemote(oldEpoch!==result.epoch);this.lastRefreshChanged=true;this.connected=true;this.onGate();return clone(this.cachedState);
-  }catch(error){if(error.code==='ONLINE_DELTA_INVALID'&&!forceBootstrap)return this.refresh(true);this.connected=false;this.onGate(error);throw error;}
+  }catch(error){if(error.code==='ONLINE_DELTA_INVALID'&&!forceBootstrap)return this.refresh(true,background);this.connected=false;if(/CROSS_SCOPE|AUTHOR_CHANGED|FORBIDDEN|REVOKED|DISABLED|SUSPENDED|EXPIRED|INVALID|BRANCH_READ_REQUIRED/.test(String(error.code||'')))this.clearProjection();this.onGate(error);throw error;}
  }
  adoptRemote(newEpoch=false){
   const previous=newEpoch?null:(this.identityHint||this.cachedState),state=clone(this.remoteState);
@@ -60,7 +79,7 @@ export class OnlineDatabase{
    for(const party of state.parties||[])party.balance=0;
    state.opening={accounts:{},parties:{},stocks:{}};state.stockEvents=[];state.stockEventSequence=0;
   }
-  try{this.cachedState=materializeLocalView(state,previous);this.onAdopt(clone(this.cachedState));this.identityHint=null;}
+  try{this.cachedState=materializeLocalView(state,previous);this.cachedScope=this.projectionScope();this.onAdopt(clone(this.cachedState));this.identityHint=null;}
   catch(error){this.remoteState=null;this.cachedState=null;this.identityHint=null;this.connected=false;throw error;}
  }
  async load(){if(!this.cachedState)await this.open();return clone(this.cachedState);}
@@ -77,16 +96,25 @@ export class OnlineDatabase{
   if(this.settlement)throw failure('NEEDS_SETTLEMENT');
   if(this.reviewRequired)throw failure('REVIEW_REQUIRED');
   if(!this.connected)throw failure('ONLINE_REQUIRED');
+  this.inflight=true;
   try{
+   this.onGate();
    const prepared=await this.prepareSave?.(clone(submitted));
    if(!prepared)throw failure('SEMANTIC_COMMAND_REQUIRED');
-   if(prepared.nonFinancial){if(canonical(financialProjection(this.cachedState))!==canonical(financialProjection(submitted)))throw failure('SEMANTIC_COMMAND_REQUIRED');if(this.cachedState.warehouses.includes(submitted.warehouse))this.cachedState.warehouse=submitted.warehouse;return;}
+   if(prepared.nonFinancial){if(!this.canPresent())throw failure('ONLINE_REQUIRED');if(canonical(financialProjection(this.cachedState))!==canonical(financialProjection(submitted)))throw failure('SEMANTIC_COMMAND_REQUIRED');if(this.cachedState.warehouses.includes(submitted.warehouse))this.cachedState.warehouse=submitted.warehouse;return;}
+   // Central write boundary, including mutations from newly added UI actions:
+   // obtain fresh native/server authority before any command validation or push.
+   await this.status();
+   if(this.pending)throw failure('ONLINE_RESULT_UNCERTAIN');
+   if(this.settlement)throw failure('NEEDS_SETTLEMENT');
+   if(this.reviewRequired)throw failure('REVIEW_REQUIRED');
+   if(!this.canPresent())throw failure('ONLINE_REQUIRED');
    const command=prepared.command;
    if(!command||command.organizationId!==this.context.organization.id||command.authorMemberId!==this.context.member.id||command.branchId!==this.branchId||command.epoch!==this.epoch)throw failure('CROSS_SCOPE');
    // Reject malformed/unsupported commands before native creates its durable
    // journal. This is validation only; reducer output never becomes confirmed.
    domainApply(this.cachedState,command,{organizationId:this.context.organization.id,branchId:this.branchId,memberId:this.context.member.id,role:this.context.member.role,capabilities:this.context.member.capabilities,branchIds:this.context.member.branchIds,epoch:this.epoch});
-   this.identityHint=prepared.localView||null;this.inflight=true;this.onGate();
+   this.identityHint=prepared.localView||null;this.onGate();
    return await this.push({branchId:this.branchId,epoch:this.epoch,commands:[command]});
   }catch(error){this.onSaveFailure(error);throw error;}finally{this.inflight=false;this.onGate();}
  }
@@ -157,5 +185,5 @@ export class OnlineDatabase{
   const hadSettlement=this.settlement,oldEpoch=this.epoch;
   this.settlement=false;await this.refresh();if(hadSettlement||oldEpoch!==this.epoch)this.reviewRequired=true;return result;
  }
- clear(){this.cachedState=null;this.remoteState=null;this.meta.clear();this.drafts.clear();this.committedOperations.clear();this.pendingPayload=null;this.connected=false;}
+ clear(){this.disconnect();this.cachedState=null;this.remoteState=null;this.meta.clear();this.drafts.clear();this.committedOperations.clear();this.pendingPayload=null;this.connected=false;}
 }

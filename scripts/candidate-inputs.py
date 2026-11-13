@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 CERT='a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2'
 APP='mr.alkarna.mobile.approved'
-CANDIDATE='candidate-output/alkarna-1.0.31-v32.apk'
+CANDIDATE='candidate-output/alkarna-1.0.32-v33.apk'
 TEST_APK='approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk'
 BASELINES={
  '13':'9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c',
@@ -38,9 +38,10 @@ BASELINES={
  '29':'4a14cb5cc87db8a42b56a0de91a504c2aa799f53d661ac7ba2cd234051c2c592',
  '30':'60c767766a2d6478b7e7b9fbfb6c085559e364d8e1b440369a28269e5ad56360',
  '31':'e75975757752b6ce29cc2ea234561d1ed98edeafdab056438d6d4b189a90118e',
+ '32':'043a302c8b4fcd12b3963b2f51b4a79b5982343e9937eb8baed94c3fa64e8761',
 }
-GROUPS={'native':[],**{'upgrade-'+str(a)+'-'+str(b):list(range(a,b+1)) for a,b in [(13,15),(16,18),(19,21),(22,24),(25,27),(28,31)]}}
-BROWSER_JSON={'accounting-parity-ux-proof.json','backup-ux-proof.json','device-lifecycle-ux-proof.json','owner-recovery-ux-proof.json','phone-replacement-ux-proof.json','signed-accounts-ux-proof.json','reviewed-entry-ux-proof.json','normal-login-ux-proof.json'}
+GROUPS={'native':[],**{'upgrade-'+str(a)+'-'+str(b):list(range(a,b+1)) for a,b in [(13,15),(16,18),(19,21),(22,24),(25,27),(28,32)]}}
+BROWSER_JSON={'accounting-parity-ux-proof.json','backup-ux-proof.json','device-lifecycle-ux-proof.json','owner-recovery-ux-proof.json','phone-replacement-ux-proof.json','signed-accounts-ux-proof.json','reviewed-entry-ux-proof.json','normal-login-ux-proof.json','online-navigation-ux-proof.json'}
 BROWSER_PNG=re.compile(r'(?:reviewed-entry-(?:ar|fr)-(?:320|360|393|short|large)|accounting-reset-fr-393|(?:backup-ux|manual-backup)-(?:ar|fr)-393|cloud-bootstrap-(?:ar|fr)-(?:360|393)|(?:online-activation|bootstrap-terminal)-(?:ar|fr)-360|owner-recovery-ux-(?:ar|fr)-(?:360|393)|phone-replacement-(?:replaced|accepted)-(?:ar|fr)-(?:360|393))\.png')
 PUBLIC=[CANDIDATE,TEST_APK,'candidate-output/candidate-verified.json','candidate-output/baseline-verified.json','candidate-output/SHA256SUMS.txt']
 REQUIRED=PUBLIC+['candidate-proof/jvm-release-summary.json']+[f'baseline-v{version}/alkarna-approved.apk' for version in BASELINES]+['build-browser-proof/'+name for name in sorted(BROWSER_JSON)]
@@ -67,7 +68,7 @@ def identity(inputs):
   package=re.search(r"^package: name='([^']+)' versionCode='(\d*)' versionName='([^']*)'",badge,re.M)
   assert package and package[1]==app,relative
   if relative==CANDIDATE:
-   assert package.groups()[1:] == ('32','1.0.31') and "targetSdkVersion:'36'" in badge and 'application-debuggable' not in badge
+   assert package.groups()[1:] == ('33','1.0.32') and "targetSdkVersion:'36'" in badge and 'application-debuggable' not in badge
   else:
    manifest=subprocess.check_output([str(aapt),'dump','xmltree',str(apk),'AndroidManifest.xml'],text=True)
    assert re.search(r'android:targetPackage\(0x[0-9a-fA-F]+\)="'+re.escape(APP)+'"',manifest),'Instrumentation target missing'
@@ -81,7 +82,7 @@ def verify(inputs,head,run,official=True):
  assert m['schema']=='contamobile-candidate-build-inputs' and m['version']==1
  assert re.fullmatch('[0-9a-f]{40}',head) and m['sourceHead']==head
  assert type(run) is int and run>0 and type(m['workflowRunId']) is int and m['workflowRunId']==run
- assert m['candidateVersionCode']==32 and m['baselines']==BASELINES
+ assert m['candidateVersionCode']==33 and m['baselines']==BASELINES
  assert isinstance(m['files'],dict) and set(REQUIRED)<=set(m['files']) and len(m['files'])<=10000
  for name,expected in m['files'].items():
   assert known_file(name) and re.fullmatch('[0-9a-f]{64}',expected),name
@@ -90,7 +91,7 @@ def verify(inputs,head,run,official=True):
  for version,expected in BASELINES.items():assert m['files'][f'baseline-v{version}/alkarna-approved.apk']==expected
  candidate=load(safe(inputs,'candidate-output/candidate-verified.json'))
  assert candidate['sha256']==m['candidateSha256'] and candidate['certificateSha256']==CERT
- assert candidate['applicationId']==APP and candidate['versionCode']==32 and candidate['versionName']=='1.0.31' and candidate['apksignerVerified'] is True
+ assert candidate['applicationId']==APP and candidate['versionCode']==33 and candidate['versionName']=='1.0.32' and candidate['apksignerVerified'] is True
  assert safe(inputs,'candidate-output/SHA256SUMS.txt').read_text().split()[0]==m['candidateSha256']
  jvm=load(safe(inputs,'candidate-proof/jvm-release-summary.json'))
  assert jvm['passed'] is True and jvm['executed']==49 and jvm['failed']==jvm['skipped']==0
@@ -120,7 +121,7 @@ def main():
   for directory in ['approved-android/app/build/reports/tests','approved-android/app/build/test-results/testReleaseUnitTest']:
    files.update(str(p.relative_to(inputs)).replace('\\','/') for p in (inputs/directory).rglob('*') if p.is_file())
   for name in files:assert safe(inputs,name).is_file(),name
-  m={'schema':'contamobile-candidate-build-inputs','version':1,'sourceHead':args.head,'workflowRunId':args.run,'candidateVersionCode':32,'candidateSha256':sha(safe(inputs,CANDIDATE)),'testApkSha256':sha(safe(inputs,TEST_APK)),'baselines':BASELINES,'files':{name:sha(safe(inputs,name)) for name in sorted(files)}}
+  m={'schema':'contamobile-candidate-build-inputs','version':1,'sourceHead':args.head,'workflowRunId':args.run,'candidateVersionCode':33,'candidateSha256':sha(safe(inputs,CANDIDATE)),'testApkSha256':sha(safe(inputs,TEST_APK)),'baselines':BASELINES,'files':{name:sha(safe(inputs,name)) for name in sorted(files)}}
   (inputs/'build-inputs.json').write_text(json.dumps(m,indent=2)+'\n',encoding='utf-8')
  m=verify(inputs,args.head,args.run)
  copies=PUBLIC+[f'baseline-v{version}/alkarna-approved.apk' for version in BASELINES]
@@ -142,9 +143,9 @@ def main():
    for name,count in [('AccountAccessTest',13),('OfflineAccountControlTest',16),('CloudBackupTest',7)]:assert len([s for s in suites if s['suite']==name and s['executed']==count])==1
   else:
    p=load(proof/'preservation-summary.json');selected=GROUPS[args.group]
-   assert p['candidateVersionCode']==32 and p['selectedBaselines']==selected
+   assert p['candidateVersionCode']==33 and p['selectedBaselines']==selected
    assert p['upgradeScenarios']==len(selected)*2 and p['preservationChecks']==len(selected)*6
-  child={'schema':'contamobile-candidate-child-proof','version':1,'sourceHead':args.head,'workflowRunId':args.run,'candidateVersionCode':32,'candidateSha256':m['candidateSha256'],'testApkSha256':m['testApkSha256'],'group':args.group,'baselines':GROUPS[args.group],'completed':True,'buildInputsSha256':sha(inputs/'build-inputs.json')}
+  child={'schema':'contamobile-candidate-child-proof','version':1,'sourceHead':args.head,'workflowRunId':args.run,'candidateVersionCode':33,'candidateSha256':m['candidateSha256'],'testApkSha256':m['testApkSha256'],'group':args.group,'baselines':GROUPS[args.group],'completed':True,'buildInputsSha256':sha(inputs/'build-inputs.json')}
   (proof/'child-proof.json').write_text(json.dumps(child,indent=2)+'\n',encoding='utf-8')
  print(json.dumps({'mode':args.mode,'sourceHead':args.head,'candidateSha256':m['candidateSha256'],'testApkSha256':m['testApkSha256'],'pinnedOriginalBaselines':len(BASELINES),'group':args.group,'verified':True}))
 
