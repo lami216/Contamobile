@@ -12,10 +12,10 @@ match=re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^'
 assert match,'Missing APK identity'
 app,code,name=match.groups();code=int(code)
 assert app=='mr.alkarna.mobile.approved'
-# The baseline is the exact delivered signed v31 from successful run 43269127378,
-# source 9b7e6179d3d24089d48c9727c54420ffad299667; it must never be rebuilt.
-assert (code,name)==((31,'1.0.30') if mode=='baseline' else (32,'1.0.31'))
-if mode=='baseline':assert actual=='e75975757752b6ce29cc2ea234561d1ed98edeafdab056438d6d4b189a90118e'
+# The baseline is the exact delivered signed v32 from successful run 43306139583,
+# source edeaee1745e7c01dc7e62143dc880e879abdbfb3; it must never be rebuilt.
+assert (code,name)==((32,'1.0.31') if mode=='baseline' else (33,'1.0.32'))
+if mode=='baseline':assert actual=='043a302c8b4fcd12b3963b2f51b4a79b5982343e9937eb8baed94c3fa64e8761'
 if mode=='candidate':
  target=re.search(r"^targetSdkVersion:'(\d+)'",badging,re.M)
  assert target and int(target.group(1))==36,'Candidate must target Android API 36'

@@ -1,4 +1,4 @@
-"""Merge seven executed CI shards only after the complete v32 proof gate passes.
+"""Merge seven executed CI shards only after the complete v33 proof gate passes.
 
 This validates CI evidence; it does not run app tests, verify APK signatures itself,
 or turn source declarations into execution evidence. Build/signature checks run
@@ -18,12 +18,12 @@ from pathlib import Path
 
 APP = "mr.alkarna.mobile.approved"
 CERT = "a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2"
-CANDIDATE = "candidate-output/alkarna-1.0.31-v32.apk"
+CANDIDATE = "candidate-output/alkarna-1.0.32-v33.apk"
 TEST_APK = "approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
 GROUPS = {"native": [], "upgrade-13-15": [13, 14, 15],
           "upgrade-16-18": [16, 17, 18], "upgrade-19-21": [19, 20, 21],
           "upgrade-22-24": [22, 23, 24], "upgrade-25-27": [25, 26, 27],
-          "upgrade-28-31": [28, 29, 30, 31]}
+          "upgrade-28-32": [28, 29, 30, 31, 32]}
 BASELINE_HASHES = {
     "13": "9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c",
     "14": "4d69fc1f88d4709d4928c906e15801ff2028995ad0131d611e946973bb831c90",
@@ -44,6 +44,7 @@ BASELINE_HASHES = {
     "29": "4a14cb5cc87db8a42b56a0de91a504c2aa799f53d661ac7ba2cd234051c2c592",
     "30": "60c767766a2d6478b7e7b9fbfb6c085559e364d8e1b440369a28269e5ad56360",
     "31": "e75975757752b6ce29cc2ea234561d1ed98edeafdab056438d6d4b189a90118e",
+    "32": "043a302c8b4fcd12b3963b2f51b4a79b5982343e9937eb8baed94c3fa64e8761",
 }
 NATIVE = {
     "AccountAccessTest": ("ACCOUNT ACCESS CASE PASS", "account-access", 13),
@@ -73,7 +74,7 @@ RESERVED = {"candidate-verified.json", "SHA256SUMS.txt", "after-test-sha256.txt"
             "preservation-summary.json", "runtime-errors.txt"}
 BROWSER_JSON = {"accounting-parity-ux-proof.json", "backup-ux-proof.json",
                 "device-lifecycle-ux-proof.json", "owner-recovery-ux-proof.json",
-                "phone-replacement-ux-proof.json", "signed-accounts-ux-proof.json", "reviewed-entry-ux-proof.json", "normal-login-ux-proof.json"}
+                "phone-replacement-ux-proof.json", "signed-accounts-ux-proof.json", "reviewed-entry-ux-proof.json", "normal-login-ux-proof.json", "online-navigation-ux-proof.json"}
 BROWSER_PNG = re.compile(r"(?:reviewed-entry-(?:ar|fr)-(?:320|360|393|short|large)|accounting-reset-fr-393|(?:backup-ux|manual-backup)-(?:ar|fr)-393|"
                          r"cloud-bootstrap-(?:ar|fr)-(?:360|393)|"
                          r"(?:online-activation|bootstrap-terminal)-(?:ar|fr)-360|"
@@ -216,7 +217,7 @@ def common_metadata(meta, head, run, candidate_hash, test_hash, label):
          f"Foreign immutable build workflow run: {label}")
     need(type(meta.get("version")) is int and meta["version"] == 1,
          f"Unsupported metadata version: {label}")
-    need(type(meta.get("candidateVersionCode")) is int and meta["candidateVersionCode"] == 32,
+    need(type(meta.get("candidateVersionCode")) is int and meta["candidateVersionCode"] == 33,
          f"Wrong candidate version: {label}")
     need(meta.get("candidateSha256") == candidate_hash and meta.get("testApkSha256") == test_hash,
          f"Different candidate/test APK bytes: {label}")
@@ -280,7 +281,7 @@ def check_upgrades(root: Path, versions):
     progress = read(root / "preservation-progress.txt")
     rows = re.findall(r"^PRESERVATION (BEGIN|PASS) baseline=v(\d+) activation=(\w+) "
                       r"phase=([\w-]+) candidate=v(\d+)\s*$", progress, re.M)
-    expected_progress = [(verb, str(v), activation, phase, "32") for v in versions
+    expected_progress = [(verb, str(v), activation, phase, "33") for v in versions
                          for activation in ("temporary", "perpetual")
                          for phase in ("seed-before",) + PHASES for verb in ("BEGIN", "PASS")]
     need(len(rows) == len(set(rows)) == len(expected_progress) and rows == expected_progress,
@@ -303,7 +304,7 @@ def check_upgrades(root: Path, versions):
             junit(root / f"{label}-network.txt", 1, ["CandidateNetworkIsolationTest"])
             junit(root / f"{label}-network-after.txt", 1, ["CandidateNetworkIsolationTest"])
     summary = document(root / "preservation-summary.json")
-    need(summary.get("candidateVersionCode") == 32 and summary.get("selectedBaselines") == versions and
+    need(summary.get("candidateVersionCode") == 33 and summary.get("selectedBaselines") == versions and
          summary.get("upgradeScenarios") == len(versions) * 2 and
          summary.get("preservationChecks") == len(checks) and summary.get("checks") == checks,
          f"Child preservation summary differs from executed evidence: {root}")
@@ -333,7 +334,7 @@ def merge(inputs: Path, children: Path, source: Path, head: str, output: Path, r
              f"Original baseline bytes changed: v{version}")
     candidate = document(inputs / "candidate-output/candidate-verified.json")
     need(candidate.get("sha256") == candidate_hash and candidate.get("applicationId") == APP and
-         candidate.get("versionCode") == 32 and candidate.get("versionName") == "1.0.31" and
+         candidate.get("versionCode") == 33 and candidate.get("versionName") == "1.0.32" and
          candidate.get("certificateSha256") == CERT and candidate.get("apksignerVerified") is True,
          "Missing or inconsistent candidate identity/signature evidence")
     checksum(inputs / "candidate-output/SHA256SUMS.txt", candidate_hash)
@@ -361,17 +362,17 @@ def merge(inputs: Path, children: Path, source: Path, head: str, output: Path, r
             need(not any(list(root.rglob(suite + ".txt")) for suite in NATIVE),
                  f"Upgrade child must not carry duplicated native suites: {group}")
             checks.extend(check_upgrades(root, versions))
-    matrix = {(version, activation, phase) for version in range(13, 32)
+    matrix = {(version, activation, phase) for version in range(13, 33)
               for activation in ("temporary", "perpetual") for phase in PHASES}
-    need(len(checks) == 114 and {(r["baseline"], r["activation"], r["phase"]) for r in checks} == matrix,
-         "The complete 38-scenario/114-check preservation matrix is mandatory")
+    need(len(checks) == 120 and {(r["baseline"], r["activation"], r["phase"]) for r in checks} == matrix,
+         "The complete 40-scenario/120-check preservation matrix is mandatory")
     summary = {"schema": "contamobile-candidate-proof-aggregation", "version": 1,
                "sourceHead": head, "workflowRunId": run, "buildInputsSha256": build_hash,
-               "candidateVersionCode": 32, "candidateSha256": candidate_hash,
+               "candidateVersionCode": 33, "candidateSha256": candidate_hash,
                "testApkSha256": test_hash, "groups": list(GROUPS), "nativeJvmCases": 49,
                "nativeSuiteCases": sum(s["executed"] for s in suites), "offlineCases": 10,
-               "upgradeScenarios": 38, "seedChecks": 38, "preservationChecks": 114,
-               "totalPreservationInvocations": 152, "passed": True,
+               "upgradeScenarios": 40, "seedChecks": 40, "preservationChecks": 120,
+               "totalPreservationInvocations": 160, "passed": True,
                "scope": "Validated actual child execution evidence; not physical-device acceptance"}
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".candidate-proof-merge-", dir=output.parent))
@@ -408,8 +409,8 @@ def merge(inputs: Path, children: Path, source: Path, head: str, output: Path, r
                     shutil.copy2(path, destination)
         shutil.copy2(inputs / TEST_APK, proof / "app-release-androidTest.apk")
         for name, value in (("native-scenario-summary.json", {"suites": suites}),
-                            ("preservation-summary.json", {"candidateVersionCode": 32,
-                             "upgradeScenarios": 38, "preservationChecks": 114, "checks": checks}),
+                            ("preservation-summary.json", {"candidateVersionCode": 33,
+                             "upgradeScenarios": 40, "preservationChecks": 120, "checks": checks}),
                             ("aggregation-summary.json", summary)):
             (proof / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
         (proof / "after-test-sha256.txt").write_text(candidate_hash + "  " + CANDIDATE + "\n", encoding="utf-8")

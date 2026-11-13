@@ -464,7 +464,18 @@ function arrangeWarehouseContent(html){
  const warehouse=prefix[1].replace(/<span>[\s\S]*?<\/span>/,'<span class="warehouse-filter-label">المخزن</span>');
  return (actions?.[0]||'')+'<fieldset class="warehouse-product-filters"><legend>تصفية المنتجات</legend>'+prefix[3]+warehouse+prefix[2]+'</fieldset>'+remaining;
 }
-inventory=function(...args){return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args)))};
+inventory=function(...args){
+ const all=S.products,list=all.filter(p=>!p.archived&&searchMatches(p.name+' '+p.sku,search)&&(inventoryTab!=='low'||p.qty<=10));
+ if(list.length<=LIST_PAGE_SIZE)return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args)));
+ const key=listWindowKey('منتجات المخزن'),sort=listWindowSorts.get(listWindowSortKey('منتجات المخزن'));
+ const value=p=>sort?.label==='المتوفر'?p.qty:sort?.label==='سعر الشراء'?p.cost:p.name;
+ const ordered=sort?list.map((p,i)=>({p,i,value:value(p)})).sort((a,b)=>compareValues19(a.value,b.value,sort.direction)||a.i-b.i).map(item=>item.p):list;
+ const page=Math.min(Math.max(1,listWindowPages.get(key)||1),Math.ceil(list.length/LIST_PAGE_SIZE)),start=(page-1)*LIST_PAGE_SIZE,pending=listWindowPending;
+ // Format only the visible page. The complete store and full-list sort remain
+ // authoritative; no catalog, stock or accounting data is truncated or saved.
+ try{S.products=ordered.slice(start,start+LIST_PAGE_SIZE);listWindowPending={key,total:list.length};return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args))).replace('<span>'+S.products.length+' منتجات</span>','<span>'+all.length+' منتجات</span>');}
+ finally{S.products=all;listWindowPending=pending;}
+};
 table13=function(...args){return boundedTableHtml(listTableBefore(...args))};
 rows=function(list,desc){if(list.length<7)return listRowsBefore(list,desc);const label=view==='transfer'?'سجل التحويلات':view==='adjustment'?'سجل التصحيحات':view==='home'?'آخر الفواتير':'سجل المستندات',key=listWindowKey(label),sort=listWindowSorts.get(listWindowSortKey(label)),value=r=>sort.label==='التاريخ'?(r.date||'')+' '+(r.time||''):sort.label==='النوع'?documentLabels[r.kind]:sort.label==='المبلغ'?r.total:sort.label==='من'?r.from:sort.label==='إلى'?r.toWarehouse:sort.label==='الكمية'?(r.lines||[]).reduce((n,l)=>n+Number(l.qty),0):r.title;const ordered=sort?list.map((r,i)=>({r,i,v:value(r)})).sort((a,b)=>compareValues19(a.v,b.v,sort.direction)||a.i-b.i).map(x=>x.r):list,page=Math.min(Math.max(1,listWindowPages.get(key)||1),Math.ceil(list.length/LIST_PAGE_SIZE)),start=(page-1)*LIST_PAGE_SIZE;listWindowPending={key,total:list.length};try{return boundedTableHtml(listRowsBefore(ordered.slice(start,start+LIST_PAGE_SIZE),desc))}finally{listWindowPending=null}};
 parties=function(...args){return boundedTableHtml(listPartiesBefore(...args))};
