@@ -122,7 +122,11 @@ public class UpgradePersistenceTest {
         js("NativeHost.openAccountAccess();true");
         until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#login-form #identifier')&&!!document.querySelector('#legacy:not(:disabled)')");
         assertEquals("The upgraded entry cannot expose manual activation or activation contacts","false",js("!!document.querySelector('#manual,#license-file,#license-text,#install-text,.activation-contact,a[href^=\"tel:\"],a[href*=\"wa.me\"]')"));
-        assertEquals("The upgraded entry uses the new form and localized brand","true",js("!!document.querySelector('#brand-caption')&&!!document.querySelector('#login-form #code')&&document.querySelector('.entry-brand strong').textContent===(document.documentElement.lang==='fr'?'AlKarna':'الكرنه')&&document.querySelector('h1').textContent===(document.documentElement.lang==='fr'?'Connexion':'تسجيل الدخول')"));
+        if(ExistingLicenseAccess.installedVersion()>=33){
+            assertEquals("The upgraded entry preserves the familiar flat login and localized brand","true",js("!!document.querySelector('.auth-screen .auth-card #login-form #identifier')&&!!document.querySelector('#login-form #code')&&!!document.querySelector('#login-form #consent')&&document.querySelector('.entry-brand strong').textContent===(document.documentElement.lang==='fr'?'AlKarna':'الكرنه')&&document.querySelector('.auth-card h1').textContent===(document.documentElement.lang==='fr'?'Connexion':'تسجيل الدخول')"));
+        }else{
+            assertEquals("The previous reviewed entry retains its delivered form and localized brand","true",js("!!document.querySelector('#brand-caption')&&!!document.querySelector('#login-form #code')&&document.querySelector('.entry-brand strong').textContent===(document.documentElement.lang==='fr'?'AlKarna':'الكرنه')&&document.querySelector('h1').textContent===(document.documentElement.lang==='fr'?'Connexion':'تسجيل الدخول')"));
+        }
         if(ExistingLicenseAccess.installedVersion()>=32){
             assertEquals("The current entry has no separate company route or advertised phone activation","false",js("!!document.querySelector('#company-retry,#activate,#manual')||/رقم من 8|طلب تفعيل|رقم الهاتف أو بريد المنشأة|8 chiffres ou|Téléphone ou e-mail de l’établissement/.test(document.body.innerText+' '+(document.querySelector('#identifier')?.placeholder||''))"));
         }
@@ -136,12 +140,13 @@ public class UpgradePersistenceTest {
         System.out.println("UPGRADE ENTRY PASS: reviewed current form/brand, no manual activation/contact bridge, explicit old local return and unchanged database/preferences/licence.");
     }
     private void warmOldEntryBeforeSnapshot() throws Exception {
-        long version=ExistingLicenseAccess.installedVersion();if(version!=29&&version!=30&&version!=31)return;
+        long version=ExistingLicenseAccess.installedVersion();if(version!=29&&version!=30&&version!=31&&version!=32)return;
         String databaseBefore=databaseSnapshot(),preferencesBefore=preferences();
         js("NativeHost.openAccountAccess();true");
         until("location.pathname.endsWith('/access.html')&&!!document.querySelector('#identifier')&&!!document.querySelector('#legacy:not(:disabled)')");
         if(version<=30)assertEquals("The actual old v29/v30 entry still exposes its original manual-import control","true",js("!!document.querySelector('#manual')&&!!document.querySelector('#identifier')&&!!document.querySelector('#code')"));
-        else assertEquals("The actual old v31 entry still exposes its delivered phone-or-company explanation","true",js("!!document.querySelector('#login-form #code')&&/رقم الهاتف أو بريد المنشأة|Téléphone ou e-mail de l’établissement/.test(document.body.innerText)"));
+        else if(version==31)assertEquals("The actual old v31 entry still exposes its delivered phone-or-company explanation","true",js("!!document.querySelector('#login-form #code')&&/رقم الهاتف أو بريد المنشأة|Téléphone ou e-mail de l’établissement/.test(document.body.innerText)"));
+        else assertEquals("The actual old v32 entry retains its framed generic form before the familiar-layout upgrade","true",js("!!document.querySelector('#brand-caption')&&!!document.querySelector('#login-form #identifier')&&!!document.querySelector('#login-form #code')&&!document.querySelector('#company-retry,#activate,#manual')"));
         js("document.querySelector('#legacy').click();true");
         until("location.pathname.endsWith('/index.html')&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
         assertEquals("Warming the old entry cannot change a local database row",databaseBefore,databaseSnapshot());

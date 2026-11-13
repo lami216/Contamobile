@@ -468,12 +468,15 @@ inventory=function(...args){
  const all=S.products,list=all.filter(p=>!p.archived&&searchMatches(p.name+' '+p.sku,search)&&(inventoryTab!=='low'||p.qty<=10));
  if(list.length<=LIST_PAGE_SIZE)return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args)));
  const key=listWindowKey('منتجات المخزن'),sort=listWindowSorts.get(listWindowSortKey('منتجات المخزن'));
- const value=p=>sort?.label==='المتوفر'?p.qty:sort?.label==='سعر الشراء'?p.cost:p.name;
+ // Column indices are stable after RTL/LTR translation. Preserve the original
+ // label-only descriptor as a fallback for an already open legacy table.
+ const column=[0,1,2].includes(sort?.column)?sort.column:sort?.label==='المتوفر'?1:sort?.label==='سعر الشراء'?2:0;
+ const value=p=>column===1?p.qty:column===2?p.cost:p.name;
  const ordered=sort?list.map((p,i)=>({p,i,value:value(p)})).sort((a,b)=>compareValues19(a.value,b.value,sort.direction)||a.i-b.i).map(item=>item.p):list;
  const page=Math.min(Math.max(1,listWindowPages.get(key)||1),Math.ceil(list.length/LIST_PAGE_SIZE)),start=(page-1)*LIST_PAGE_SIZE,pending=listWindowPending;
  // Format only the visible page. The complete store and full-list sort remain
  // authoritative; no catalog, stock or accounting data is truncated or saved.
- try{S.products=ordered.slice(start,start+LIST_PAGE_SIZE);listWindowPending={key,total:list.length};return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args))).replace('<span>'+S.products.length+' منتجات</span>','<span>'+all.length+' منتجات</span>');}
+ try{S.products=ordered.slice(start,start+LIST_PAGE_SIZE);listWindowPending={key,total:list.length};const visible=S.products.length,lowCount=all.filter(p=>!p.archived&&p.qty<=10).length,lowLabel=count=>count===1?'منتج منخفض واحد':count+' منتجات منخفضة';return boundedTableHtml(arrangeWarehouseContent(listInventoryBefore(...args))).replace('<span>'+visible+' منتجات</span>','<span>'+all.length+' منتجات</span>').replace('<span>'+lowLabel(visible)+'</span>','<span>'+lowLabel(lowCount)+'</span>');}
  finally{S.products=all;listWindowPending=pending;}
 };
 table13=function(...args){return boundedTableHtml(listTableBefore(...args))};

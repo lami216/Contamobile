@@ -96,16 +96,25 @@ export class OnlineDatabase{
   if(this.settlement)throw failure('NEEDS_SETTLEMENT');
   if(this.reviewRequired)throw failure('REVIEW_REQUIRED');
   if(!this.connected)throw failure('ONLINE_REQUIRED');
+  this.inflight=true;
   try{
+   this.onGate();
    const prepared=await this.prepareSave?.(clone(submitted));
    if(!prepared)throw failure('SEMANTIC_COMMAND_REQUIRED');
-   if(prepared.nonFinancial){if(canonical(financialProjection(this.cachedState))!==canonical(financialProjection(submitted)))throw failure('SEMANTIC_COMMAND_REQUIRED');if(this.cachedState.warehouses.includes(submitted.warehouse))this.cachedState.warehouse=submitted.warehouse;return;}
+   if(prepared.nonFinancial){if(!this.canPresent())throw failure('ONLINE_REQUIRED');if(canonical(financialProjection(this.cachedState))!==canonical(financialProjection(submitted)))throw failure('SEMANTIC_COMMAND_REQUIRED');if(this.cachedState.warehouses.includes(submitted.warehouse))this.cachedState.warehouse=submitted.warehouse;return;}
+   // Central write boundary, including mutations from newly added UI actions:
+   // obtain fresh native/server authority before any command validation or push.
+   await this.status();
+   if(this.pending)throw failure('ONLINE_RESULT_UNCERTAIN');
+   if(this.settlement)throw failure('NEEDS_SETTLEMENT');
+   if(this.reviewRequired)throw failure('REVIEW_REQUIRED');
+   if(!this.canPresent())throw failure('ONLINE_REQUIRED');
    const command=prepared.command;
    if(!command||command.organizationId!==this.context.organization.id||command.authorMemberId!==this.context.member.id||command.branchId!==this.branchId||command.epoch!==this.epoch)throw failure('CROSS_SCOPE');
    // Reject malformed/unsupported commands before native creates its durable
    // journal. This is validation only; reducer output never becomes confirmed.
    domainApply(this.cachedState,command,{organizationId:this.context.organization.id,branchId:this.branchId,memberId:this.context.member.id,role:this.context.member.role,capabilities:this.context.member.capabilities,branchIds:this.context.member.branchIds,epoch:this.epoch});
-   this.identityHint=prepared.localView||null;this.inflight=true;this.onGate();
+   this.identityHint=prepared.localView||null;this.onGate();
    return await this.push({branchId:this.branchId,epoch:this.epoch,commands:[command]});
   }catch(error){this.onSaveFailure(error);throw error;}finally{this.inflight=false;this.onGate();}
  }

@@ -50,6 +50,7 @@ export function installOnlineRuntime(api){
   if(locked||checking||api.isBusy())return;
   if(localOnly.test(action)){api.fail(t('تُدار حسابات المنشأة ونسخها وأجهزتها من مسؤول المنشأة.','Les comptes, sauvegardes et appareils sont gérés par le responsable de l’établissement.'));return;}
   if(!db.connected||db.pending||db.settlement){mask();return;}
+  if(!db.canPresent()){mask();void heartbeat();return;}
   if(db.reviewRequired&&(posting.test(action)||editing.test(action))){api.fail(accessReason({code:'REVIEW_REQUIRED'},api.language()));return;}
   if(isOnlinePresentationAction(action)){
    if(!db.canPresent()){mask();void heartbeat();return;}
@@ -60,9 +61,8 @@ export function installOnlineRuntime(api){
   }
   locked=true;
   try{
-   await db.status(true);if(!db.cachedState)await db.refresh();
-   if(!db.canPresent())throw Object.assign(Error('ONLINE_REQUIRED'),{code:'ONLINE_REQUIRED'});
-   if(db.reviewRequired&&(posting.test(action)||editing.test(action)))throw Object.assign(Error('REVIEW_REQUIRED'),{code:'REVIEW_REQUIRED'});
+   // Drafts and local editor navigation use this admitted projection. Any real
+   // mutation still passes the app rollback boundary and the save gate below.
    encoder.begin(action);if(posting.test(action))confirming(true);
    return await originalAct(action);
   }catch(error){lastError=error;api.fail(accessReason(error,api.language()));}
