@@ -399,6 +399,7 @@ jobs:
           node scripts/test-owner-recovery-ux.mjs
           ENTRY_PROOF_DIR=candidate-proof node scripts/test-reviewed-entry.mjs
           NORMAL_LOGIN_PROOF_DIR=candidate-proof node scripts/test-normal-login-ux.mjs
+          ONLINE_NAVIGATION_PROOF_DIR=candidate-proof node scripts/test-online-navigation-ux.mjs
           node scripts/test-user-integrity.mjs
           node scripts/test-import-html-escaping.mjs
           node --test scripts/test-import-allocation.mjs scripts/test-native-adapter.mjs scripts/test-native-save-boundary.mjs scripts/test-cloud-native-adapter.mjs scripts/test-reset-native-adapter.mjs scripts/test-accounting-reset-lock.mjs
@@ -415,7 +416,7 @@ jobs:
           python3 scripts/verify-activation-package.py candidate-output/alkarna-1.0.32-v33.apk
           python3 scripts/verify-approved-signature.py baseline-v13/alkarna-approved.apk baseline-v14/alkarna-approved.apk baseline-v15/alkarna-approved.apk baseline-v16/alkarna-approved.apk baseline-v17/alkarna-approved.apk baseline-v18/alkarna-approved.apk baseline-v19/alkarna-approved.apk baseline-v20/alkarna-approved.apk baseline-v21/alkarna-approved.apk baseline-v22/alkarna-approved.apk baseline-v23/alkarna-approved.apk baseline-v24/alkarna-approved.apk baseline-v25/alkarna-approved.apk baseline-v26/alkarna-approved.apk baseline-v27/alkarna-approved.apk baseline-v28/alkarna-approved.apk baseline-v29/alkarna-approved.apk baseline-v30/alkarna-approved.apk baseline-v31/alkarna-approved.apk baseline-v32/alkarna-approved.apk candidate-output/alkarna-1.0.32-v33.apk
           sha256sum candidate-output/alkarna-1.0.32-v33.apk > candidate-output/SHA256SUMS.txt
-      - name: Freeze the one signed build and all nineteen original baselines
+      - name: Freeze the one signed build and all twenty original baselines
         run: python3 -B scripts/candidate-inputs.py create --inputs . --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID"
       - name: Retain immutable build inputs, not a customer release
         id: build_inputs

@@ -104,6 +104,13 @@ class InputGateTests(unittest.TestCase):
  def test_unapproved_certificate_fails(self):self.assertRaises(AssertionError,self.official_fixture,cert='0'*64)
 
 class FixedPartitionTests(unittest.TestCase):
+ def test_each_browser_proof_producer_runs_in_the_runtime_and_candidate_jobs(self):
+  workflow=(SOURCE.parents[1]/'.github/workflows/contatools-candidate.yml').read_text(encoding='utf-8')
+  for job in ['runtime_access','candidate']:
+   body=re.search(r'^  '+job+r':\n(.*?)(?=^  [a-z_]+:|\Z)',workflow,re.M|re.S)
+   self.assertIsNotNone(body,job)
+   self.assertIn('ONLINE_NAVIGATION_PROOF_DIR=candidate-proof node scripts/test-online-navigation-ux.mjs',body[1],job)
+   self.assertIn('NORMAL_LOGIN_PROOF_DIR=candidate-proof node scripts/test-normal-login-ux.mjs',body[1],job)
  def test_the_six_known_groups_cover_each_original_once(self):
   groups=[values for key,values in module.GROUPS.items() if key!='native']
   self.assertEqual(len(groups),6);self.assertEqual([v for group in groups for v in group],list(range(13,33)));self.assertEqual(module.GROUPS['native'],[])
