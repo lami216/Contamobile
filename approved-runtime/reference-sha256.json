@@ -4,7 +4,7 @@
   "theme.css": "52751cf7ba580769d13aedb4b274049f1762f04f0a0b7c8d32b7ee9c7caf00c3",
   "site.css": "ebaee5579c54d9311f0c862a79339a84cf25153c5bb07f2480cb5be1f2ef72ce",
   "pos.css": "f503e5e69fd21a37f010597c9a64f2019e4a746357f1e631f6b2622154144fe1",
-  "app.js": "377e31486e2a3bfdee3c867b1f353146107e62ac8cb0ac5e89eff5ff20b6733a",
+  "app.js": "bbfd710ce65753dad26be47eaced5162bf7a20e99de2bfe479c3e28c951dee71",
   "database.js": "b839896e68b916f8b42e724eba51f96081949d3a86b4fbf540bcd660bbd0f310",
   "product-names.js": "3b3b11bd46db412755892bf8a32283da5e9842a5df057616ea52340e85b113d8",
   "barcode-camera.js": "de26f25e5bf9a3982181655ea874f693d7ea7670b0c00c37188f0c8ef171d95f",
@@ -18,7 +18,7 @@
   "party-summary.css": "a3e5b128b32aff36442bc443aa04276674069b3efb17a89aedaaa69a8b46f141",
   "account-support.css": "c921307728963a09e8d23550cc0e3044348eb40a6c7e23b4bd2d8aebd2a8b8e1",
   "desktop-french.js": "a0dae0427653205d4d0922c45773303365cbcd8e6fb45add15cb8868d81fe634",
-  "mobile-french.js": "45fb0b0ad2fd0a9b8e6210cc7861ae69f47b15dab7f009d797dc2a7fc24ead1c",
+  "mobile-french.js": "19b2e96f20862bc0aa02573817c5be1960273fb154fab5ee4d7603922238c40c",
   "i18n.js": "e40044024ac89dc2b0520b52f730e571d90ed51e858e3ee6af9071b9e2a176f0",
   "locale-layout.css": "557704b5678d1771a8f532b6eed7de8942fa713375cb444cbc27095a9200021a",
   "upgrade-state.js": "f4fc67c818c28e0b81df76e2e846ecfcdaa0a38bb5012339a081a9a9d6df1532",
@@ -48,5 +48,7 @@
   "accounting-reset.js": "4af814364b5112988a66f6ca4496310f1878457f75367f63fa24288b2dabc5a9",
   "accounting-lifecycle.js": "ecd7bc3b8a5f978557e9549e8ec75e77a47a6cf037c4a2251ead1a70ab266ba6",
   "device-lifecycle.js": "85007b3f815f66eb0cf0c9f8b08078cefa817bf82e7afd5a18a7f17d462d998e",
-  "activation.js": "e17e97c79020b829aa07580e420c8cbf763453b822dc32cd5f3140711959e1fe"
+  "activation.js": "2721b965adc6e16ab6d58c7ccb0a4a3e0a82bb93632cff0f34f407eece5fe452",
+  "privacy.html": "09ef6ba48ad527c3c4c7adc57e32a694f68b010f631cd9738fdfad538071583b",
+  "privacy.css": "59aa7415c015e9451e4dfcc3b0d15cfc99c39dcdb43d547fe7ff148cec86efa2"
 }

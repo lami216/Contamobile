@@ -41,9 +41,11 @@ final class PhoneEntitlement {
     if(license.isEmpty()!=hash.isEmpty()||!hash.isEmpty()&&!hash.matches("[a-f0-9]{64}"))throw new IOException("INVALID_ENTITLEMENT_LICENSE");
     number(p,"sequence");number(p,"bindingGeneration");number(p,"issuedAt");
     String currentCode=text(p,"currentDeviceCode",false),currentInstallation=text(p,"currentInstallationId",false);
-    if(!oneOf(status,"active","pending","replaced"))throw new IOException("INVALID_ENTITLEMENT_STATUS");
+    if(!oneOf(status,"active","pending","replaced","suspended"))throw new IOException("INVALID_ENTITLEMENT_STATUS");
     if("active".equals(status)){
       if(license.isEmpty()||!"ACTIVE_PHONE".equals(reason)||!device.equals(currentCode)||!installation.equals(currentInstallation))throw new IOException("INVALID_ACTIVE_ENTITLEMENT");
+    }else if("suspended".equals(status)){
+      if(license.isEmpty()||!"OWNER_SUSPENDED".equals(reason)||!device.equals(currentCode)||!installation.equals(currentInstallation))throw new IOException("INVALID_SUSPENDED_ENTITLEMENT");
     }else if("pending".equals(status)){
       if(!"PENDING_REPLACEMENT".equals(reason))throw new IOException("INVALID_ENTITLEMENT_REASON");
     }else if(!oneOf(reason,"REPLACED_PHONE","REPLACED_INSTALLATION"))throw new IOException("INVALID_ENTITLEMENT_REASON");
@@ -54,7 +56,7 @@ final class PhoneEntitlement {
   static JSONObject offer(JSONObject envelope,JSONObject issuers,String installation,String fingerprint,String device,boolean current,long now) throws Exception {
     JSONObject p=ProtocolJson.verifyEnvelope(envelope,issuers,OFFER_PURPOSE);
     exact(p,OFFER_FIELDS);binding(p,installation,fingerprint,device);text(p,"offerId",false);
-    if(!oneOf(text(p,"kind",false),"reinstall","replacement","renew"))throw new IOException("INVALID_ENTITLEMENT_OFFER");
+    if(!oneOf(text(p,"kind",false),"reinstall","replacement","renew","reactivate"))throw new IOException("INVALID_ENTITLEMENT_OFFER");
     number(p,"expectedGeneration");long issued=number(p,"issuedAt"),expires=number(p,"expiresAt");
     if(expires<=issued||expires-issued>86400000L||current&&expires<=now)throw new IOException("ENTITLEMENT_OFFER_EXPIRED");
     return ProtocolJson.copy(p);
@@ -65,6 +67,10 @@ final class PhoneEntitlement {
     for(String scope:new String[]{"entitlementId","clientId","installationId","keyFingerprint","deviceCode"})if(!previous.getString(scope).equals(next.getString(scope)))throw new IOException("ENTITLEMENT_SCOPE_CHANGED");
     long seq=number(next,"sequence"),oldSeq=number(previous,"sequence"),generation=number(next,"bindingGeneration"),oldGeneration=number(previous,"bindingGeneration");
     if(seq<oldSeq||generation<oldGeneration)throw new IOException("ENTITLEMENT_REPLAY");
+    if(seq==oldSeq&&oneOf(previous.getString("status"),"active","suspended")&&oneOf(next.getString("status"),"active","suspended")
+        &&previous.getString("currentInstallationId").equals(next.getString("currentInstallationId"))&&previous.getString("currentDeviceCode").equals(next.getString("currentDeviceCode"))){
+      for(String name:new String[]{"licenseId","licenseDocumentHash","type","endsAt"})if(!ProtocolJson.canonical(previous.get(name)).equals(ProtocolJson.canonical(next.get(name))))throw new IOException("ENTITLEMENT_TERM_CHANGED_WITHOUT_RENEWAL");
+    }
     if(seq==oldSeq&&generation==oldGeneration){
       // Reviewing, replacing or withdrawing an offer does not change the
       // assignment generation. Signed inactive messages may change their offer

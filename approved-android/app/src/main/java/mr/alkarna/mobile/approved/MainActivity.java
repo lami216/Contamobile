@@ -46,8 +46,11 @@ public final class MainActivity extends Activity {
     private static java.util.concurrent.ThreadPoolExecutor createAdministrationQueue(){java.util.concurrent.ThreadPoolExecutor queue=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8));queue.allowCoreThreadTimeOut(true);return queue;}
     private boolean activationPage,activationTransitionPending;
     private volatile boolean activityResumed;
+    private volatile boolean controlChecking;
+    private long controlLastAttempt,controlNextAttempt;
+    private int controlFailures;
     private final Handler licenseTimer=new Handler(Looper.getMainLooper());
-    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();licenseTimer.postDelayed(this,1000);}};
+    private final Runnable licensePulse=new Runnable(){public void run(){if(!activationPage&&!licenseAllowed())showActivation();reconcileControl(false);licenseTimer.postDelayed(this,1000);}};
     private final ConcurrentHashMap<String,Export> exports = new ConcurrentHashMap<>();
     private final java.util.Set<String> backupTransfers=ConcurrentHashMap.newKeySet();
     private final CloudBackupBridgeScope backupScope=new CloudBackupBridgeScope();
@@ -168,10 +171,34 @@ public final class MainActivity extends Activity {
     });}
     private void watchNetwork(){
         if(networkCallback!=null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);if(manager==null)return;
-        networkCallback=new android.net.ConnectivityManager.NetworkCallback(){@Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))runOnUiThread(()->{if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('alkarna-network-available'))",null);});}};
+        networkCallback=new android.net.ConnectivityManager.NetworkCallback(){@Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))runOnUiThread(()->{reconcileControl(true);if(trusted()&&!activationPage)web.evaluateJavascript("window.dispatchEvent(new Event('alkarna-network-available'))",null);});}};
         try{manager.registerDefaultNetworkCallback(networkCallback);}catch(Exception unavailable){networkCallback=null;}
     }
     private void stopWatchingNetwork(){if(networkCallback==null)return;android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);try{if(manager!=null)manager.unregisterNetworkCallback(networkCallback);}catch(Exception ignored){}networkCallback=null;}
+    /** The signed native gate keeps checking while the activation screen is blocked. */
+    private void reconcileControl(boolean wake){
+        if(!activityResumed||licensing==null||controlChecking||isDestroyed()||isFinishing())return;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(now-controlLastAttempt<10000 || !wake&&now<controlNextAttempt)return;
+        android.net.ConnectivityManager manager=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        android.net.NetworkCapabilities caps=manager==null?null:manager.getNetworkCapabilities(manager.getActiveNetwork());
+        if(caps==null||!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))return;
+        controlChecking=true;controlLastAttempt=now;
+        try{administrationQueue.execute(()->{
+            boolean success=false;
+            try{
+                if(isDestroyed()||!activityResumed)return;
+                if(deviceLifecycle==null)deviceLifecycle=new DeviceLifecycleClient(MainActivity.this,licensing);
+                if(!deviceLifecycle.remoteEnabled()){success=true;return;}
+                deviceLifecycle.refresh();success=true;
+            }catch(Exception unavailable){/* Missing/untrusted/network replies never revoke a saved licence. */}
+            finally{final boolean completed=success;runOnUiThread(()->{
+                controlChecking=false;controlFailures=completed?0:Math.min(5,controlFailures+1);
+                controlNextAttempt=android.os.SystemClock.elapsedRealtime()+(completed?60000:Math.min(300000,15000L*(1L<<controlFailures)));
+                if(completed&&trusted()&&!isDestroyed()){web.evaluateJavascript("window.dispatchEvent(new Event('alkarna-control-updated'))",null);if(!activationPage&&!licenseAllowed())showActivation();}
+            });}
+        });}catch(java.util.concurrent.RejectedExecutionException full){controlChecking=false;controlNextAttempt=now+10000;}
+    }
     private void accountingResetRequest(String id,String command,String content){long page=backupScope.page();runOnUiThread(()->{
         if(!trusted()||activationPage||!licenseAllowed()||!backupScope.current(page)){error(id,"تعذّر التحقق من التفعيل المحلي");return;}
         // No support queue, server response or ACK is needed to close after a
@@ -235,7 +262,7 @@ public final class MainActivity extends Activity {
             return;
           }
           boolean beforeActivation =
-              command.equals("enroll") || command.equals("status") || command.equals("activate");
+              command.equals("enroll") || command.equals("status") || command.equals("local-status") || command.equals("activate");
           if (!beforeActivation && (activationPage || !licenseAllowed())) {
             error(id, "يلزم تفعيل الهاتف أولًا");
             return;
@@ -253,12 +280,18 @@ public final class MainActivity extends Activity {
                     JSONObject input = new JSONObject(content), answer;
                     switch (command) {
                       case "enroll":
-                        answer = deviceLifecycle.enroll(input);
+                        answer = deviceLifecycle.enableRemote(input);
                         break;
                       case "status":
-                        answer = deviceLifecycle.status();
+                        if(input.length()!=0)throw new IOException("INVALID_LIFECYCLE_INPUT");
+                        answer = deviceLifecycle.refresh();
+                        break;
+                      case "local-status":
+                        if(input.length()!=0)throw new IOException("INVALID_LIFECYCLE_INPUT");
+                        answer = deviceLifecycle.localStatus();
                         break;
                       case "activate":
+                        if(input.length()!=0)throw new IOException("INVALID_LIFECYCLE_INPUT");
                         answer = deviceLifecycle.activate();
                         break;
                       case "bootstrap-list":
@@ -335,11 +368,21 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void openActivation(){runOnUiThread(()->{if(trusted())showActivation();});}
         @JavascriptInterface public void activationStatus(String id){result(id,licenseStatus());}
         @JavascriptInterface public void closeApp(){runOnUiThread(()->{if(trusted()&&licenseAllowed())finish();});}
-        @JavascriptInterface public void activationContinue(){runOnUiThread(()->openApp());}
+        @JavascriptInterface public void activationContinue(){runOnUiThread(()->{if(trusted())openApp();});}
+        @JavascriptInterface public void openPrivacy(){runOnUiThread(()->{if(trusted())startActivity(new Intent(MainActivity.this,PrivacyActivity.class));});}
         @JavascriptInterface public void copyDeviceCode(){runOnUiThread(()->{if(trusted()&&licensing!=null)((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("AlKarna device",licensing.deviceCode()));});}
         @JavascriptInterface public void installActivation(String id,String content){
-            try{if(licensing==null)throw new IOException();JSONObject status=licensing.install(content);result(id,status);}
-            catch(Exception e){error(id,e instanceof LicenseVerifier.Rejected?e.getMessage():"تعذّر حفظ ملف التفعيل");}
+            long page=backupScope.page();runOnUiThread(()->{
+                if(!trusted()||!activationPage||!backupScope.current(page)||licensing==null||content==null||content.length()>65536){error(id,"تعذّر التحقق من الطلب");return;}
+                try{administrationQueue.execute(()->{
+                    try{
+                        if(isDestroyed()||!backupScope.current(page))throw new IOException("ACTIVATION_PAGE_CLOSED");
+                        if(deviceLifecycle==null)deviceLifecycle=new DeviceLifecycleClient(MainActivity.this,licensing);
+                        JSONObject status=deviceLifecycle.importManual(content);
+                        if(backupScope.current(page))result(id,status);
+                    }catch(Exception failure){if(backupScope.current(page)){JSONObject answer=value("error",NativeUi.text(MainActivity.this,failure instanceof LicenseVerifier.Rejected?failure.getMessage():"يلزم الاتصال بالإنترنت للتحقق من التفعيل. لم يُثبّت ملف جديد."));try{answer.put("code",failure instanceof LicenseVerifier.Rejected?((LicenseVerifier.Rejected)failure).code:"CONTROL_ADMISSION_UNAVAILABLE");}catch(Exception ignored){}result(id,answer);}}
+                });}catch(java.util.concurrent.RejectedExecutionException full){error(id,"هناك طلب جارٍ. أعد المحاولة بعد قليل.");}
+            });
         }
         @JavascriptInterface public void theme(String appearance){runOnUiThread(()->{
             if(!trusted())return;boolean light="light".equals(appearance);getSharedPreferences("appearance",MODE_PRIVATE).edit().putString("theme",light?"light":"dark").apply();root.setBackgroundColor(Color.parseColor(light?"#f1f4f8":"#080e19"));

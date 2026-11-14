@@ -50,14 +50,19 @@ public class ApprovedRuntimeTest {
         activity=ActivityScenario.launch(MainActivity.class);
         until("!!document.querySelector('#device-code')&&document.querySelector('#device-code').textContent.startsWith('AKD-')");
         capture("activation-required");
-        until("document.querySelector('.activation-contact img').naturalWidth>0");
-        assertEquals("true",js("document.querySelector('#contact-whatsapp').href.includes(document.querySelector('#device-code').textContent)"));
+        until("!!document.querySelector('#online-connect')&&!!document.querySelector('#remote-consent')");
+        assertEquals("false",js("!!document.querySelector('#contact-whatsapp')"));
         String activationDevice=new org.json.JSONTokener(js("document.querySelector('#device-code').textContent")).nextValue().toString();
         assertTrue(activationDevice.matches("AKD-(?:[A-F0-9]{4}-){4}[A-F0-9]{4}"));
         assertEquals("false",js("NativeHost.licenseAllowed()"));
         String license=TestLicenseIssuer.issue(activationDevice,"perpetual",0);
-        js("document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
-        until("!document.querySelector('#continue').hidden");assertEquals("true",js("new URL(document.querySelector('#contact-whatsapp').href).searchParams.get('text').includes('مساعدة')"));capture("activation-valid");
+        // Only the independent test APK injects a signed disposable service.
+        var fixtureContext=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        var fixtureService=new DeviceCloudLifecycleTest.FakeService(activationDevice);
+        var fixtureClient=new DeviceLifecycleClient(fixtureContext,new DeviceLicense(fixtureContext),fixtureService.issuers,fixtureService);
+        activity.onActivity(a->{try{var field=MainActivity.class.getDeclaredField("deviceLifecycle");field.setAccessible(true);field.set(a,fixtureClient);}catch(Exception failure){throw new AssertionError(failure);}});
+        js("document.querySelector('#manual-activation').open=true;document.querySelector('#remote-consent').checked=true;document.querySelector('#license-text').value="+JSONObject.quote(license)+";document.querySelector('#install-text').click();true");
+        until("!document.querySelector('#continue').hidden");assertEquals("true",js("!document.querySelector('#contact-whatsapp')&&document.querySelector('#status').classList.contains('success')"));capture("activation-valid");
         js("document.querySelector('#continue').click();true");
         until("!!document.querySelector('[data-action=\"site:setup\"]')");
         assertEquals("2",js("document.querySelectorAll('#site-auth-form input').length"));

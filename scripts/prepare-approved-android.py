@@ -8,7 +8,7 @@ if (target/'demo-data.js').exists():(target/'demo-data.js').unlink()
 for name,digest in json.loads((source/'reference-sha256.json').read_text()).items():
     assert hashlib.sha256((source/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==digest, 'Reference changed: '+name
     shutil.copyfile(source/name,target/name)
-for name in ['native-adapter.js','native.css','activation.html','activation.css','activation.js']:shutil.copyfile(source/name,target/name)
+for name in ['native-adapter.js','native.css','activation.html','activation.css','activation.js','privacy.html','privacy.css']:shutil.copyfile(source/name,target/name)
 fonts=target/'assets';fonts.mkdir(exist_ok=True)
 for name in ['StitchArabic.ttf','StitchArabicBold.ttf','OFL-IBM-Plex.txt']:shutil.copyfile(repo/'assets/fonts'/name,fonts/name)
 for name,digest in json.loads((source/'assets-sha256.json').read_text()).items():

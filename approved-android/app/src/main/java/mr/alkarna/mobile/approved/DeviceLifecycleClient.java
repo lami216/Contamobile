@@ -244,6 +244,7 @@ final class DeviceLifecycleClient {
             .put("applicationId", BuildConfig.APPLICATION_ID)
             .put("appVersion", BuildConfig.VERSION_NAME)
             .put("versionCode", BuildConfig.VERSION_CODE);
+    if(BuildConfig.VERSION_CODE>=34)payload.put("standaloneControlVersion",1);
     String customer = value.optString("customerName").trim(),
         store = value.optString("storeName").trim();
     try {
@@ -273,6 +274,57 @@ final class DeviceLifecycleClient {
                 : "");
     disk.save();
     return sanitize(answer);
+  }
+
+  synchronized JSONObject enableRemote(JSONObject input) throws Exception {
+    keys(input,"consent");
+    if(input.length()!=1 || !Boolean.TRUE.equals(input.opt("consent")))throw new IOException("REMOTE_CONSENT_REQUIRED");
+    disk.state.put("remoteConsent",true);disk.save();
+    return refresh();
+  }
+  synchronized boolean remoteEnabled() throws Exception {
+    return disk.state.optBoolean("remoteConsent") || disk.state.optBoolean("enrolled") || !license.documentHash().isEmpty();
+  }
+  synchronized JSONObject localStatus() throws Exception {
+    JSONObject value=disk.state.optJSONObject("lastControlView");
+    return (value==null?new JSONObject().put("status","pending"):ProtocolJson.copy(value)).put("remoteEnabled",remoteEnabled());
+  }
+  /** Automatic reconciliation never accepts an unclaimed activation offer. */
+  synchronized JSONObject refresh() throws Exception {
+    if(!remoteEnabled())return localStatus();
+    if(!disk.state.optBoolean("enrolled")||disk.state.optInt("enrolledVersionCode")!=BuildConfig.VERSION_CODE)enroll(new JSONObject());
+    // A malformed/unavailable legacy status must never suppress a signed device denial.
+    JSONObject decision=control(false,null),value;
+    try{value=status();}catch(Exception optionalStatus){value=new JSONObject().put("status","pending").put("activationAvailable",false).put("bootstrapAvailable",false).put("legacyStatusUnavailable",true);}
+    value.put("control",decision).put("remoteEnabled",true);
+    if(decision.getBoolean("banned")){value.put("activationAvailable",false).put("entitlementAvailable",false);}
+    disk.state.put("lastControlView",ProtocolJson.copy(value));disk.save();return value;
+  }
+  private JSONObject control(boolean admission,JSONObject document) throws Exception {
+    if(!disk.state.optBoolean("enrolled")||disk.state.optInt("enrolledVersionCode")!=BuildConfig.VERSION_CODE)enroll(new JSONObject());
+    long started=SystemClock.elapsedRealtime();
+    String nonce=UUID.randomUUID().toString(),hash=document==null?license.documentHash():ProtocolJson.hash(document);
+    JSONObject request=new JSONObject().put("requestNonce",nonce).put("queryDocumentHash",hash);
+    if(admission)request.put("licenseDocument",document.toString());
+    JSONObject response=call(admission?"control.admit":"control.status",request);
+    StandaloneControl.freshness(started,PhoneEntitlement.number(response,"_nativeEntitlementObservationStart"),SystemClock.elapsedRealtime());
+    if(PhoneEntitlement.number(response,"controlProtocol")!=1)throw new IOException("CONTROL_PROTOCOL_REQUIRED");
+    return license.control(response.getJSONObject("control"),issuers,identity.id(),identity.fingerprint(),nonce,hash);
+  }
+  private void admit(JSONObject document) throws Exception {
+    JSONObject decision=control(true,document);
+    if(decision.getBoolean("banned") || !"allowed".equals(decision.getString("documentStatus")))
+      throw new LicenseVerifier.Rejected(decision.getBoolean("banned")?"DEVICE_BANNED":"ACTIVATION_REVOKED",decision.getBoolean("banned")?"حُظر تفعيل هذا الهاتف. بيانات المحل محفوظة":"أُبطل هذا التفعيل. بيانات المحل محفوظة");
+  }
+  /** Sole production file/clipboard import path: fresh matching signed admission precedes consumption. */
+  synchronized JSONObject importManual(String content) throws Exception {
+    JSONObject document=LicenseVerifier.verify(content,license.deviceCode());
+    disk.state.put("remoteConsent",true);disk.save();
+    if(!disk.state.optBoolean("enrolled")||disk.state.optInt("enrolledVersionCode")!=BuildConfig.VERSION_CODE)enroll(new JSONObject());
+    admit(document);
+    license.install(content);
+    // Report the original installed document and its running clock, never reinstall it.
+    try{enroll(new JSONObject());return license.status();}catch(Exception pendingReport){return license.status().put("registrationPending",true);}
   }
 
   private JSONObject sanitize(JSONObject response) throws Exception {
@@ -347,7 +399,7 @@ final class DeviceLifecycleClient {
         enroll(new JSONObject());
     }
     JSONObject pending = disk.state.optJSONObject("activationPending");
-    if (pending != null && installed(pending)) activate();
+    if (pending != null && installed(pending)) acknowledgeActivation(pending);
     JSONObject result=sanitize(call("status",new JSONObject())),entitlement=disk.state.optJSONObject("entitlementPending");
     if(entitlement!=null&&!entitlement.has("outcome")&&entitlementInstalled(entitlement)){
       try{return activateEntitlement(entitlement);}catch(Exception acknowledgement){result.put("entitlementAckPending",true);}
@@ -419,6 +471,7 @@ final class DeviceLifecycleClient {
     if(!"active".equals(p.getString("status"))){pending.put("outcome",fresh.getJSONObject("entitlement"));disk.save();return new JSONObject().put("stage","entitlement-replaced").put("entitlement",p);}
     PhoneEntitlement.claimed(offer,p,intent,ProtocolJson.hash(prepared.getJSONObject("document")));
     JSONObject original=PhoneEntitlement.snapshot(prepared.getJSONObject("entitlement"),issuers,identity.id(),identity.fingerprint(),license.deviceCode());PhoneEntitlement.monotonic(original,p);
+    admit(prepared.getJSONObject("document"));
     JSONObject active=license.installEntitlement(prepared.getJSONObject("document").toString(),fresh.getJSONObject("entitlement"),issuers,identity.id(),identity.fingerprint(),observation(fresh));
     pending.put("stage","installed");disk.save();
     JSONObject result=new JSONObject().put("stage","activated").put("license",active).put("entitlement",p).put("offerId",offerId);
@@ -478,6 +531,7 @@ final class DeviceLifecycleClient {
   }
 
   synchronized JSONObject activate() throws Exception {
+    if(!disk.state.optBoolean("enrolled")||disk.state.optInt("enrolledVersionCode")!=BuildConfig.VERSION_CODE)enroll(new JSONObject());
     JSONObject entitlementPending=disk.state.optJSONObject("entitlementPending"),entitlementOffer=disk.state.optJSONObject("entitlementOffer");
     if(entitlementOffer!=null&&(entitlementPending==null||!entitlementOffer.getJSONObject("payload").getString("offerId").equals(entitlementPending.getJSONObject("offer").getJSONObject("payload").getString("offerId"))))return beginEntitlement(entitlementOffer);
     if(entitlementPending!=null&&(!entitlementPending.has("outcome")||entitlementOffer==null))return activateEntitlement(entitlementPending);
@@ -504,26 +558,35 @@ final class DeviceLifecycleClient {
     JSONObject p = activation(offer, !applied), document = offer.getJSONObject("licenseDocument");
     sequence(p);
     noDowngrade(document);
+    admit(document);
     JSONObject active = license.installOnline(document.toString());
     disk.state
         .put("licenseSequence", p.getLong("sequence"))
         .put("lastIssuanceId", p.getString("issuanceId"))
         .put("lastLicenseHash", p.getString("licenseDocumentHash"));
     disk.save();
+    return acknowledgeActivation(offer);
+  }
+
+  /** Receipt recovery names one installed issuance and never selects/claims another offer. */
+  private JSONObject acknowledgeActivation(JSONObject offer) throws Exception {
+    JSONObject p=activation(offer,false);
+    if(!installed(offer))throw new IOException("ACTIVATION_RECEIPT_MISMATCH");
     JSONObject result =
         new JSONObject()
             .put("stage", "activated")
-            .put("license", active)
+            .put("license", license.status())
             .put("issuanceId", p.getString("issuanceId"));
     try {
       JSONObject ack =
           call("license.accept", new JSONObject().put("issuanceId", p.getString("issuanceId")));
       if (!p.getString("issuanceId").equals(ack.optString("issuanceId")))
         throw new IOException("INVALID_ACTIVATION_ACK");
+      entitlementResponse(ack);
       disk.state.remove("activationPending");
       disk.state.remove("activationOffer");
       disk.save();
-      return result.put("ackPending", false);
+      return result.put("license",license.status()).put("ackPending", false);
     } catch (Exception failure) {
       if (failure instanceof ContatoolsClient.ServiceFailure
           && (((ContatoolsClient.ServiceFailure) failure).status == 404
