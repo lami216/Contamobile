@@ -1,0 +1,191 @@
+# OUTSIDE TEMPLATE. Fill all FIVE placeholders once from the final upstream artifact.
+# Publish ONLY as .github/workflows/v34-artifact-readback.yml on the dedicated chore branch.
+# No build, signing, test replay, deployment, or new acceptance claim.
+name: Read back immutable v34 inputs in three transport groups
+on:
+  push:
+    branches: [chore/v34-artifact-readback-final-20261114]
+    paths: ['.github/workflows/v34-artifact-readback.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: v34-artifact-readback-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  UPSTREAM_RUN: '43628322725'
+  UPSTREAM_HEAD: 'f973157c9b3b84ca2bd0b612d3e8ad3125f2693e'
+  BUILD_ARTIFACT_ID: '14127495528'
+  BUILD_ARTIFACT_DIGEST: 'sha256:e865b8dd194251ad7359fd225565a23c44043939abb9aea4a9f55dc63eba99ad'
+  BUILD_ARTIFACT_SIZE: '586332880'
+jobs:
+  readback:
+    if: >-
+      github.repository == 'lami216/Contamobile' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/chore/v34-artifact-readback-final-20261114'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Verify pinned upstream run, completed producer, and exact immutable artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          repository='lami216/Contamobile'
+          values={key:os.environ[key] for key in ('UPSTREAM_RUN','UPSTREAM_HEAD','BUILD_ARTIFACT_ID','BUILD_ARTIFACT_DIGEST','BUILD_ARTIFACT_SIZE')}
+          assert all('__' not in value for value in values.values()), 'Template constants must be filled exactly once before publication'
+          assert re.fullmatch('[1-9][0-9]*',values['UPSTREAM_RUN']) and re.fullmatch('[1-9][0-9]*',values['BUILD_ARTIFACT_ID']) and re.fullmatch('[1-9][0-9]*',values['BUILD_ARTIFACT_SIZE'])
+          assert re.fullmatch('[0-9a-f]{40}',values['UPSTREAM_HEAD'])
+          assert re.fullmatch('sha256:[0-9a-f]{64}',values['BUILD_ARTIFACT_DIGEST'])
+          def api(route):return json.loads(subprocess.check_output(['gh','api',f'repos/{repository}/'+route],text=True))
+          run=api('actions/runs/'+values['UPSTREAM_RUN'])
+          assert run['id']==int(values['UPSTREAM_RUN']) and run['head_sha']==values['UPSTREAM_HEAD']
+          assert run['repository']['full_name']==repository and run['path']=='.github/workflows/contatools-candidate.yml'
+          assert run['event'] in ('push','workflow_dispatch') and run['head_branch']=='feat/local-remote-control-20261114'
+          jobs=api('actions/runs/'+values['UPSTREAM_RUN']+'/jobs?per_page=100')['jobs']
+          producer=[job for job in jobs if job['name']=='candidate'];assert len(producer)==1
+          producer=producer[0]
+          assert producer['run_id']==run['id'] and producer['head_sha']==values['UPSTREAM_HEAD'] and producer['status']=='completed' and producer['conclusion']=='success'
+          artifact=api('actions/artifacts/'+values['BUILD_ARTIFACT_ID'])
+          assert artifact['id']==int(values['BUILD_ARTIFACT_ID']) and artifact['name']=='alkarna-candidate-v34-build-inputs' and artifact['expired'] is False
+          assert artifact['digest']==values['BUILD_ARTIFACT_DIGEST'] and artifact['size_in_bytes']==int(values['BUILD_ARTIFACT_SIZE'])
+          assert artifact['workflow_run']['id']==run['id'] and artifact['workflow_run']['head_sha']==values['UPSTREAM_HEAD']
+          assert artifact['workflow_run']['head_branch']=='feat/local-remote-control-20261114'
+          print(json.dumps({'upstreamRun':run['id'],'upstreamHead':run['head_sha'],'producerJob':producer['id'],'artifactId':artifact['id'],'digest':artifact['digest'],'size':artifact['size_in_bytes'],'metadataVerified':True,'newAcceptanceProof':False}))
+          PY
+      - name: Download and hard-verify original ZIP bytes before safe extraction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/lami216/Contamobile/actions/artifacts/${BUILD_ARTIFACT_ID}/zip" > original-artifact.zip
+          python3 - <<'PY'
+          import hashlib,os,stat,zipfile
+          from pathlib import Path
+          archive=Path('original-artifact.zip');root=Path('original-inputs')
+          assert archive.is_file() and not root.exists()
+          assert archive.stat().st_size==int(os.environ['BUILD_ARTIFACT_SIZE']), 'Original ZIP size differs from pinned upstream artifact'
+          with archive.open('rb')as stream:actual=hashlib.file_digest(stream,'sha256').hexdigest()
+          assert 'sha256:'+actual==os.environ['BUILD_ARTIFACT_DIGEST'], 'Original ZIP SHA256 differs from pinned upstream artifact'
+          def safe(name,directory=False):
+              assert isinstance(name,str) and name and not name.startswith('/') and chr(92) not in name and chr(0) not in name
+              value=name[:-1]if directory and name.endswith('/')else name
+              assert value and all(part not in ('','.','..')and ':'not in part for part in value.split('/'))
+              target=root/value;assert target.resolve().is_relative_to(root.resolve())
+              return target
+          with zipfile.ZipFile(archive)as package:
+              infos=package.infolist();assert infos and len(infos)<=20000
+              seen=set();total=0
+              for entry in infos:
+                  target=safe(entry.filename,entry.is_dir());key=entry.filename.rstrip('/').casefold()
+                  assert key not in seen,'Duplicate or case-colliding original ZIP path';seen.add(key)
+                  mode=(entry.external_attr>>16)&0o170000
+                  assert mode in (0,stat.S_IFREG,stat.S_IFDIR),'Links and special original ZIP entries forbidden'
+                  assert not entry.flag_bits&1,'Encrypted original ZIP entries forbidden'
+                  assert entry.file_size<=128*1024*1024
+                  total+=entry.file_size;assert total<=1024*1024*1024
+              assert package.testzip()is None,'Original ZIP CRC failure'
+              root.mkdir()
+              for entry in infos:
+                  target=safe(entry.filename,entry.is_dir())
+                  if entry.is_dir():target.mkdir(parents=True,exist_ok=True);continue
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  with package.open(entry)as source,target.open('xb')as output:
+                      copied=0
+                      while chunk:=source.read(1024*1024):copied+=len(chunk);output.write(chunk)
+                  assert copied==entry.file_size
+          print('Original immutable ZIP SHA256, size, CRC and safe-path extraction verified; no build or acceptance performed.')
+          PY
+      - name: Verify every original byte and copy all paths unchanged into bounded transport groups
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,re,shutil
+          from pathlib import Path
+          root=Path('original-inputs');target=Path('readback-groups');assert root.is_dir() and not target.exists()
+          pins={"13":"9c6f9ccc5000b58864191f2e6003d79560c811aa7190878620cb1900a61cfe8c","14":"4d69fc1f88d4709d4928c906e15801ff2028995ad0131d611e946973bb831c90","15":"6204cfe04ce59acb2d4e089bb9d1711524949441e04b05d5b10b0c985ff7b74d","16":"4b896ca65abe0ca8ec9e766c48f66442f0aa82dcbc24696f47d6cf52ea0ade7d","17":"4ea578e57144431cfc2aab9902f717834ba5f1e8936e3e77141f12d66cc10b9a","18":"ef3b276c51c7cfb92616080d1b8145dce2a7a4b6c48198356bdec9b34eaf59a4","19":"c5558a074e48c5705f10ef20b233d39d33ee1ccc3b91d5c0bfe1c745d0153f3e","20":"94848194716a6a794182ae4eb86d29af471899b79bc3a6c011903e58613c52e4","21":"8c662cc4b98578bacf04b60fbe302a4222a5aba8f4578d181dcb961c13554f90","22":"88e85413785a0a969f96a7545ae0d3eaf3f0dfce2b99373199610df0a84266cd","23":"fd337af2516d614319c4cbd2d61b29ca0b55e83e96c577df544020879dcaf587","24":"cc8f16481f1f185a29a089fd2c73c6b593db65dd6d672a53178ba485370c2a6c","25":"ceca18d43dceb2dd952923410b8c6c4e3c93157b2a56f338d0c64c311cce8cd4","26":"7226c40c95aed22d474aa146b7d53681c701a7818b2fed1a89820a41c461df45","27":"174da0f4e076250cda7aa436f9b776d1b6bebd5c60a6cd543d5702b9ac4a55e3","28":"9fde991e118b464dce9649bb3f86b9d20bbe5ebf01bbce3726f66265bb77bb59","29":"4a14cb5cc87db8a42b56a0de91a504c2aa799f53d661ac7ba2cd234051c2c592","30":"60c767766a2d6478b7e7b9fbfb6c085559e364d8e1b440369a28269e5ad56360","31":"e75975757752b6ce29cc2ea234561d1ed98edeafdab056438d6d4b189a90118e","32":"043a302c8b4fcd12b3963b2f51b4a79b5982343e9937eb8baed94c3fa64e8761","33":"2eca658375eae417ede583f413074b08e714d26d4498f3386f6249953b538f9a"}
+          def sha(path):
+              with path.open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
+          def unique(pairs):
+              result={}
+              for key,value in pairs:
+                  assert key not in result,'Duplicate original JSON key'
+                  result[key]=value
+              return result
+          def safe(name):
+              assert isinstance(name,str) and name and not name.startswith('/') and chr(92) not in name and chr(0) not in name
+              assert all(part not in ('','.','..') and ':' not in part for part in name.split('/'))
+              path=root/name;assert path.resolve().is_relative_to(root.resolve()) and not path.is_symlink()
+              return path
+          manifest_path=safe('build-inputs.json');manifest=json.loads(manifest_path.read_text(encoding='utf-8-sig'),object_pairs_hook=unique)
+          assert manifest['schema']=='contamobile-candidate-build-inputs' and manifest['version']==1 and manifest['candidateVersionCode']==34
+          assert manifest['sourceHead']==os.environ['UPSTREAM_HEAD'] and type(manifest['workflowRunId'])is int and manifest['workflowRunId']==int(os.environ['UPSTREAM_RUN'])
+          assert manifest['baselines']==pins and len(pins)==21
+          candidate='candidate-output/alkarna-1.0.33-v34.apk';test='approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk'
+          browser={'standalone-control-ux-proof.json','owner-recovery-ux-proof.json','phone-replacement-ux-proof.json','signed-accounts-ux-proof.json','backup-ux-proof.json','accounting-parity-ux-proof.json','device-lifecycle-ux-proof.json'}
+          required={candidate,test,'candidate-output/candidate-verified.json','candidate-output/baseline-verified.json','candidate-output/SHA256SUMS.txt','candidate-proof/jvm-release-summary.json'}|{'baseline-v'+version+'/alkarna-approved.apk'for version in pins}|{'build-browser-proof/'+name for name in browser}
+          files=manifest['files'];assert isinstance(files,dict) and required<=set(files) and len(files)<=10000
+          actual={};folded=set()
+          for path in root.rglob('*'):
+              assert not path.is_symlink() and (path.is_file() or path.is_dir())
+              name=path.relative_to(root).as_posix();safe(name)
+              assert name.casefold()not in folded,'Case-colliding original path';folded.add(name.casefold())
+              if path.is_file():actual[name]=path
+          assert set(actual)==set(files)|{'build-inputs.json'},'Original immutable artifact contains missing or extra files'
+          for name,expected in files.items():
+              assert re.fullmatch('[0-9a-f]{64}',expected) and safe(name).is_file() and sha(safe(name))==expected,name
+          assert manifest['candidateSha256']==files[candidate] and manifest['testApkSha256']==files[test]
+          for version,expected in pins.items():assert files['baseline-v'+version+'/alkarna-approved.apk']==expected
+          badge=json.loads(safe('candidate-output/candidate-verified.json').read_text(encoding='utf-8-sig'),object_pairs_hook=unique)
+          assert badge['sha256']==manifest['candidateSha256'] and badge['versionCode']==34 and badge['versionName']=='1.0.33'
+          assert badge['applicationId']=='mr.alkarna.mobile.approved' and badge['certificateSha256']=='a696960cb0e62dc311287331500a2a0b459bff8a0188c8d9ab55edbdaddd1fd2' and badge['apksignerVerified']is True
+          assert safe('candidate-output/SHA256SUMS.txt').read_text().split()[0]==manifest['candidateSha256']
+          groups={name:[]for name in ('core','originals-13-23','originals-24-33')}
+          for name,path in sorted(actual.items()):
+              match=re.fullmatch(r'baseline-v(\d+)/alkarna-approved.apk',name)
+              group=('originals-13-23'if 13<=int(match[1])<=23 else'originals-24-33')if match else'core'
+              if match:assert 13<=int(match[1])<=33
+              destination=target/group/name;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,destination)
+              assert sha(destination)==sha(path),'Readback copy changed original bytes'
+              groups[group].append({'path':name,'bytes':path.stat().st_size})
+          assert len(groups['originals-13-23'])==11 and len(groups['originals-24-33'])==10
+          assert sum(map(len,groups.values()))==len(actual)
+          for group,rows in groups.items():
+              # Uncompressed uploads with ample ZIP-header margin remain below the 512MiB connector boundary.
+              assert rows and sum(row['bytes']for row in rows)<500*1024*1024,group
+              copied={p.relative_to(target/group).as_posix()for p in(target/group).rglob('*')if p.is_file()}
+              assert copied=={row['path']for row in rows}
+          print(json.dumps({'upstreamRun':int(os.environ['UPSTREAM_RUN']),'upstreamHead':os.environ['UPSTREAM_HEAD'],'originalArtifactId':int(os.environ['BUILD_ARTIFACT_ID']),'originalArtifactDigest':os.environ['BUILD_ARTIFACT_DIGEST'],'buildInputsSha256':sha(manifest_path),'candidateSha256':manifest['candidateSha256'],'testApkSha256':manifest['testApkSha256'],'pinnedOriginalApks':21,'allOriginalPathsAndBytesUnchanged':True,'groupFiles':{key:len(rows)for key,rows in groups.items()},'groupUncompressedBytes':{key:sum(row['bytes']for row in rows)for key,rows in groups.items()},'newAcceptanceProof':False}))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a')as summary:summary.write('Copied immutable upstream v34 build inputs into three transport groups. Every original path, manifest and byte is unchanged. This job did not build, sign, test, deploy, or grant release acceptance.\n')
+          PY
+      - name: Upload unchanged core inputs below 512MiB
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-v34-readback-core-${{ env.UPSTREAM_RUN }}
+          path: readback-groups/core/
+          compression-level: 0
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload unchanged original APKs v13 through v23 below 512MiB
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-v34-readback-originals-13-23-${{ env.UPSTREAM_RUN }}
+          path: readback-groups/originals-13-23/
+          compression-level: 0
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload unchanged original APKs v24 through v33 below 512MiB
+        uses: actions/upload-artifact@v4
+        with:
+          name: alkarna-v34-readback-originals-24-33-${{ env.UPSTREAM_RUN }}
+          path: readback-groups/originals-24-33/
+          compression-level: 0
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
