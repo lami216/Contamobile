@@ -5,6 +5,7 @@ It must never be delivered as a real Android acceptance result. Original APK
 hash constants are patched only inside this unit-test process so tiny fixture
 bytes can exercise file-integrity checks without downloading release APKs.
 """
+import ast
 import hashlib
 import importlib.util
 import json
@@ -22,6 +23,9 @@ GATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GATE)
 HEAD = "a" * 40
 RUN = 123456789
+# Read the actual producer contract. Never construct its order or markers from
+# the consumer under test, which would hide a producer/consumer mismatch.
+HARNESS_NATIVE = ast.literal_eval(re.search(r"^for suite,prefix in (\[.*\]):$", (SOURCE / "scripts/test-candidate-upgrade.sh").read_text(encoding="utf-8"), re.M)[1])
 
 
 def write(path, value):
@@ -111,7 +115,9 @@ class CandidateProofGateTests(unittest.TestCase):
 
     def make_native(self, root):
         summaries = []
-        for suite, (prefix, label, count) in GATE.NATIVE.items():
+        for suite, prefix in HARNESS_NATIVE:
+            label = GATE.NATIVE[suite][1]
+            count = len(self.native_cases[suite])
             text = "\n" + GATE.APP + "." + suite + ":\n"
             text += "\n".join(prefix + " " + name for name in self.native_cases[suite])
             write(root / (suite + ".txt"), text + f"\nOK ({count} tests)\n")
@@ -185,6 +191,16 @@ class CandidateProofGateTests(unittest.TestCase):
         for phase in GATE.PHASES:
             self.assertEqual(sum(bool(re.fullmatch(r"v\d+-(?:temporary|perpetual)-" + phase + r"\.txt", path.name))
                                  for path in self.output.rglob("*.txt")), 42)
+
+    def test_native_gate_matches_actual_producer_order_and_markers(self):
+        self.assertEqual([(suite, value[0]) for suite, value in GATE.NATIVE.items()], HARNESS_NATIVE)
+
+    def test_native_summary_reordered_away_from_producer_cannot_be_laundered(self):
+        path = self.children / "native/native-scenario-summary.json"
+        summary = json.loads(path.read_text(encoding="utf-8"))
+        summary["suites"].reverse()
+        save(path, summary)
+        self.rejects("Native child summary differs from executed cases")
 
     def test_missing_child_rejects(self):
         (self.children / "native").rename(self.root / "missing-native")
