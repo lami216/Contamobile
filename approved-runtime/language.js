@@ -89,3 +89,5 @@ Object.assign(translations,{'دفعة جزئية محفوظة من المصدر'
 Object.assign(translations,{'لا يمكن تكرار المنتج في الفاتورة':'Un produit ne peut pas être répété dans la facture.'});
 
 Object.assign(translations,{'اسم الحساب مطلوب':'Le nom du compte est requis.','نوع الحساب غير صالح':'Le type de compte est invalide.','رقم الهاتف مستخدم لحساب آخر من النوع نفسه':'Ce numéro est déjà utilisé par un autre compte du même type.','الطرف غير موجود':'Le tiers est introuvable.'});
+
+Object.assign(translations,{'بيانات حفظ المسودة غير صالحة':'Les données de sauvegarde du brouillon sont invalides.','تعذّر إنهاء المسودة بأمان':'Impossible de terminer le brouillon en toute sécurité.'});
