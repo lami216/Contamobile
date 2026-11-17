@@ -93,7 +93,8 @@ public class Desktop862UpgradeTest extends UpgradePersistenceTest {
         fields("{name:'موظف 862',phone:'22001122',startDate:"+JSONObject.quote(start)+",amount:'500',intervalMonths:'1',entitlement:'beginning'}");action("site:feature:employees-save");
         check("Beginning-period salary accrues once without spending cash","S.employees.length===1&&S.employees[0].balance===500&&Math.abs(S.accounts[0].balance-("+cash+"+1000))<1e-8");
         action("site:feature:employees-payment-new");fields("{amount:'200',direction:'withdraw',paymentMethod:String(S.accounts[0].id),note:'دفعة راتب'}");action("site:feature:employees-payment-save");
-        js("window.__862Payroll=null;import('./payroll-domain.js').then(({payrollFacts})=>{const f=payrollFacts(S);window.__862Payroll=[f.workersAccrued,f.workersExpense,f.workersReserveChange]});true");until("window.__862Payroll!==null");
+        js("window.__862Payroll=null;window.__862PayrollError=null;window.__862PayrollDone=false;import(new URL('./payroll-domain.js',location.href).href).then(({payrollFacts})=>{const f=payrollFacts(S);window.__862Payroll=[f.workersAccrued,f.workersExpense,f.workersReserveChange]}).catch(error=>window.__862PayrollError=String(error)).finally(()=>window.__862PayrollDone=true);true");until("window.__862PayrollDone===true");
+        assertEquals("Native WebView payroll module loaded from its actual page URL","null",js("window.__862PayrollError"));
         assertEquals("Desktop salary/recognized expense/reserve agree","[500,200,300]",text("JSON.stringify(window.__862Payroll)"));
         check("Employee withdrawal spends only its actual cash","S.employees[0].balance===300&&Math.abs(S.accounts[0].balance-("+cash+"+800))<1e-8&&S.payrollFinancialMovements.length===1");
         String customer=js("S.parties.find(p=>p.type==='customer').id");double debt=Double.parseDouble(js("S.parties.find(p=>p.id==="+customer+").balance"));
