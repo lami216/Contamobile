@@ -13,6 +13,8 @@
  * prerequisite for edit/delete.
  */
 const prerequisites = {
+    "employees.manage": ["employees.view"],
+    "employees.pay": ["employees.view"],
     "pos.edit": ["pos.view"],
     "pos.delete": ["pos.view"],
     "purchases.edit": ["purchases.view"],

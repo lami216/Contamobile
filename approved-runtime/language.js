@@ -1,3 +1,7 @@
+import {employeeFrench} from './feature-employees.js';
+import {financeTranslations} from './finance-language.js';
+import {partyOpeningFrench} from './feature-party-opening.js';
+import {expenseCategoryFrench} from './feature-expense-categories.js';
 import {featureFrench} from './feature-french.js';
 import {desktopFrench} from './desktop-french.js';
 import {mobileFrench} from './mobile-french.js';
@@ -75,3 +79,13 @@ Object.assign(translations,{
  'تحديث بيانات العملية':'Informations de l’opération mises à jour',
  'مراجعة':'Révision'
 });
+
+Object.assign(translations,financeTranslations,partyOpeningFrench,expenseCategoryFrench,{'الموظفون':'Employés','حساب الموظف':'Compte de l’employé','استحقاق راتب':'Salaire acquis','حركة حساب موظف':'Mouvement employé','رصيد بداية طرف':'Solde initial de tiers','أرصدة بداية الأطراف':'Soldes initiaux des tiers','غير مؤكد':'Non confirmé','الحسابات والرواتب والحركات':'Comptes, salaires et mouvements'});
+
+Object.assign(translations,employeeFrench);
+
+Object.assign(translations,{'دفعة جزئية محفوظة من المصدر':'Paiement partiel conservé de la source','مدفوعة جزئيًا':'Partiellement réglée','المتبقي':'Reste à payer','لا يمكن تصحيح هذا المنتج في المخزن قبل دخوله برصيد بداية أو شراء أو تحويل':'Impossible de corriger ce produit avant son entrée dans le dépôt par un stock initial, un achat ou un transfert.','لا يمكن زيادة المخزون بالتصحيح دون مصدر تكلفة موثّق':'Impossible d’augmenter le stock par correction sans source de coût justifiée.','لا يوجد تغيير في المخزون لاعتماده':'Aucune variation du stock à valider.'});
+
+Object.assign(translations,{'لا يمكن تكرار المنتج في الفاتورة':'Un produit ne peut pas être répété dans la facture.'});
+
+Object.assign(translations,{'اسم الحساب مطلوب':'Le nom du compte est requis.','نوع الحساب غير صالح':'Le type de compte est invalide.','رقم الهاتف مستخدم لحساب آخر من النوع نفسه':'Ce numéro est déjà utilisé par un autre compte du même type.','الطرف غير موجود':'Le tiers est introuvable.'});

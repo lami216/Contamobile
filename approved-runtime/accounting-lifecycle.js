@@ -24,6 +24,7 @@ export function repairArchivedBalances(state) {
 export function reconcileHistoricalArchives(state, record, previous = null, cancelled = false) {
  const records = [record, previous].filter(Boolean);
  const accounts = new Set(records.flatMap(r => [r.account, r.to]).filter(id => id != null));
+ for(const name of new Set(records.flatMap(r=>[r.warehouse,r.from,r.toWarehouse,...(r.lines||[]).map(l=>l.warehouse)]).filter(Boolean)))if(state.warehouseMeta?.[name]?.archived&&(state.products||[]).some(p=>Number(p.stocks?.[name]||0)!==0))state.warehouseMeta[name].archived=false;
  const parties = new Set(records.flatMap(r => [r.party, r.otherParty]).filter(id => id != null));
  for (const account of state.accounts || []) {
   if (!accounts.has(account.id)) continue;
@@ -32,6 +33,7 @@ export function reconcileHistoricalArchives(state, record, previous = null, canc
   if (keptOriginal && (account.archived || account.active === false) ||
       account.archived && Number.isFinite(account.balance) && account.balance !== 0) expose(account, true);
  }
+ for(const product of state.products||[])if(product.archived&&records.some(r=>(r.lines||[]).some(l=>l.product===product.id))&&Object.values(product.stocks||{}).some(quantity=>quantity>0))expose(product);
  for (const party of state.parties || []) {
   if (parties.has(party.id) && party.archived && Number.isFinite(party.balance) && party.balance !== 0) expose(party);
  }

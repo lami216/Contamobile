@@ -1,5 +1,9 @@
+import {ensurePayrollState,validatePayrollState} from './payroll-domain.js';
+import {ensurePartyOpeningState,validatePartyOpeningState,partyOpeningNetDelta} from './party-opening-domain.js';
+import {ensureExpenseCategoryState,validateExpenseCategoryState} from './expense-category-domain.js';
+import {invoiceAmountFields,invoiceAmountNumber,sumInvoiceLineTotals} from './invoice-amount.js';
 // Additive approved-runtime state, following the desktop settings and sequence contracts.
-export const FEATURE_SCHEMA=2;
+export const FEATURE_SCHEMA=3;
 export const roundMoney=value=>Math.round((Number(value)+Number.EPSILON)*100)/100;
 export function currencyCode(state){return /^[A-Z]{3}$/.test(state?.currency?.code||'')?state.currency.code:'MRU'}
 export function validateCurrency(value){
@@ -11,6 +15,7 @@ export function validateCurrency(value){
 }
 export function upgradeState(state){
  const before=JSON.stringify(state);
+ ensurePayrollState(state);ensurePartyOpeningState(state);ensureExpenseCategoryState(state);
  state.currency=validateCurrency(state.currency||{code:'MRU',availableCodes:['MRU']});state.categories??=[];
  state.warehouseMeta??={};for(const name of state.warehouses)state.warehouseMeta[name]??={archived:false};
  state.salesWarehouse??=state.warehouse;state.sequences??={};state.brandInfo??={};
@@ -25,6 +30,16 @@ export function upgradeState(state){
 }
 export function nextDocumentNumber(state,kind){return Math.max(state.sequences?.[kind]||0,0,...state.records.filter(r=>r.kind===kind).map(r=>Number(r.sequence)||0))+1}
 export function validateFeatureState(state){
+ validatePayrollState(state);validatePartyOpeningState(state);validateExpenseCategoryState(state);
+ for(const r of state.records){
+  let hasExact=false;
+  for(const line of r.lines||[]){
+   if(line.lineTotalMode===undefined)continue;
+   if(!['exact','mobile-legacy','desktop-legacy'].includes(line.lineTotalMode)||!['sale','purchase','return'].includes(r.kind)||line.lineTotalMode==='exact'&&!['sale','purchase'].includes(r.kind))throw Error('نمط مجموع سطر الفاتورة غير صالح');
+   if(line.lineTotalMode==='exact'){invoiceAmountFields(line,line);hasExact=true;}
+  }
+  if(hasExact){const values=r.lines.map(line=>invoiceAmountNumber(line.lineTotal));if(values.some(value=>value===null)||sumInvoiceLineTotals(values,true)!==r.total)throw Error('إجمالي الفاتورة لا يطابق مجموع سطورها');}
+ }
  if(state.currency)validateCurrency(state.currency);
  if(state.categories){if(!Array.isArray(state.categories)||state.categories.length>10000)throw Error('قائمة الفئات غير صالحة');const ids=new Set(),names=new Set();for(const c of state.categories){const name=String(c.name||'').trim().toLocaleLowerCase();if(!Number.isSafeInteger(c.id)||c.id<=0||!name||ids.has(c.id)||names.has(name))throw Error('فئة مكررة أو غير صالحة');ids.add(c.id);names.add(name)}for(const p of state.products)if(p.categoryId&&!ids.has(p.categoryId))throw Error('فئة المنتج غير موجودة');}
  if(state.salesWarehouse&&!state.warehouses.includes(state.salesWarehouse))throw Error('مخزن البيع غير موجود');
@@ -44,7 +59,7 @@ export function setCategory(state,id,name){
  const next=Math.max(0,...state.categories.map(c=>c.id))+1;state.categories.push({id:next,name:value});return next;
 }
 export function deleteCategory(state,id){state.categories=state.categories.filter(c=>c.id!==id);for(const p of state.products)if(p.categoryId===id)p.categoryId=null;}
-export function archiveParty(state,id){const p=state.parties.find(p=>p.id===id);if(!p)throw Error('الحساب غير موجود');if(Math.abs(p.balance)>.005)throw Error('لا يمكن أرشفة حساب لديه رصيد قائم');p.archived=true;}
+export function archiveParty(state,id){const p=state.parties.find(p=>p.id===id);if(!p)throw Error('الحساب غير موجود');if(p.balance!==0)throw Error('لا يمكن أرشفة حساب لديه رصيد قائم');p.archived=true;}
 export function archiveWarehouse(state,name){
  if(!state.warehouses.includes(name))throw Error('المخزن غير موجود');
  if(state.salesWarehouse===name)throw Error('عيّن مخزن بيع آخر أولًا');
@@ -54,10 +69,17 @@ export function archiveWarehouse(state,name){
 }
 export function activeWarehouses(state){return state.warehouses.filter(w=>!state.warehouseMeta?.[w]?.archived)}
 export function partyNetDelta(record){
+ if(record.kind==='return')return (record.returnParentKind==='purchase'?1:-1)*Number(record.due||0);
+ if(record.kind==='party-opening')return partyOpeningNetDelta(record);
  if(record.kind==='sale')return Number(record.due)||0;if(record.kind==='purchase')return -(Number(record.due)||0);
  if(record.kind==='receive')return -Number(record.total);if(record.kind==='pay')return Number(record.total);return 0;
 }
 export function moneyAccountDelta(record,id){
+ if(record.kind==='return')return record.account===id?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
+ if(record.kind==='party-opening'||record.kind==='employee-accrual')return 0;
+ if(record.kind==='employee-payment')return record.account===id?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  let value=record.account===id?(['sale','receive','deposit'].includes(record.kind)?Number(record.paid||0):-Number(record.paid||0)):0;
- if(record.kind==='transfer'&&record.to===id)value+=Number(record.total);return roundMoney(value);
+ if(record.kind==='transfer'&&record.to===id)value+=Number(record.total);return value;
 }
+
+export function cashAccount(state){return state.accounts.find(a=>a.code==='cash'||a.desktop?.code==='cash')||state.accounts.find(a=>a.id===1&&!a.code&&!a.desktop?.code&&!a.desktopId)||null;}

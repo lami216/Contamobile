@@ -31,3 +31,12 @@ approved-runtime/assets/sql-asm.js
 # Disposable release verification evidence is attached to CI, not application source.
 candidate-proof/
 test-results/
+
+# Local browser evidence and materialized copies of existing pinned fonts.
+outputs/desktop862-qa/
+approved-runtime/assets/StitchArabic*.ttf
+parity-browser/
+desktop-862-source/
+
+__pycache__/
+*.pyc

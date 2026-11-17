@@ -5,7 +5,7 @@ import {adjustmentLineCount,stockOperationRecord,recordStockEvents} from '../app
 import {translateText} from '../approved-runtime/i18n.js';
 import {reportDataset,reportWorkbookData} from '../approved-runtime/report-data.js';
 
-const fixture=()=>({warehouse:'A',warehouses:['A','B'],warehouseMeta:{A:{},B:{}},products:[{id:1,name:'Rice',price:10,cost:4,qty:10,stocks:{A:10,B:5}},{id:2,name:'Oil',price:20,cost:8,qty:20,stocks:{A:20,B:7}}],accounts:[{id:1,name:'Cash',balance:100}],parties:[],records:[],opening:{accounts:{1:100},parties:{},stocks:{1:{A:10,B:5},2:{A:20,B:7}}},stockEvents:[]});
+const fixture=()=>({warehouse:'A',warehouses:['A','B'],warehouseMeta:{A:{},B:{}},products:[{id:1,name:'Rice',price:10,cost:4,openingCost:4,qty:10,stocks:{A:10,B:5}},{id:2,name:'Oil',price:20,cost:8,openingCost:8,qty:20,stocks:{A:20,B:7}}],accounts:[{id:1,name:'Cash',balance:100}],parties:[],records:[],opening:{accounts:{1:100},parties:{},stocks:{1:{A:10,B:5},2:{A:20,B:7}}},stockEvents:[]});
 const draft=(quantities,from='A',note='Count correction')=>({from,note,lines:Object.entries(quantities).map(([product,quantity])=>({product:Number(product),quantity}))});
 const record=(s,d,old=null,id=101)=>stockOperationRecord(s,'adjustment',d,old,id,'2026-11-03','10:00');
 let checks=0;const check=(label,fn)=>{fn();checks++;console.log('PASS '+label)};
@@ -81,15 +81,16 @@ check('consumed correction stock blocks cancellation without losing its history'
 check('posted corrections cannot replace, add or remove original products or warehouse',()=>{
  const s=fixture(),old=record(s,draft({1:12}));for(const d of [draft({2:12}),draft({1:12,2:20}),draft({1:12},'B')])assert.throws(()=>record(s,d,old),/لا يمكن تغيير/);assert.throws(()=>record(s,{from:'A',note:'Count',lines:[]},old));
 });
-check('fractional transfer validation and adjustment financial rounding remain separate',()=>{
- const s=fixture(),transfer=stockOperationRecord(s,'transfer',{from:'A',to:'B',lines:[{product:1,quantity:1.234}]},null,101,'2026-11-03','10:00');assert.equal(transfer.lines[0].qty,1.234);assert.equal(transfer.total,4.94);const r=record(s,draft({1:11.234}));assert.equal(r.total,4.94);assert(Math.abs(r.lines[0].delta-1.234)<1e-12);assert.throws(()=>stockOperationRecord(s,'transfer',{from:'A',to:'B',lines:[{product:1,quantity:100}]},null,101,'2026-11-03','10:00'));
+check('fractional transfer validation and stock-only document totals match Desktop862',()=>{
+ const s=fixture(),transfer=stockOperationRecord(s,'transfer',{from:'A',to:'B',lines:[{product:1,quantity:1.234}]},null,101,'2026-11-03','10:00');assert.equal(transfer.lines[0].qty,1.234);assert.equal(transfer.total,0);assert.equal(transfer.lines[0].price,0);const r=record(s,draft({1:11.234}));assert.equal(r.total,0);assert.equal(r.lines[0].price,4);assert(Math.abs(r.lines[0].delta-1.234)<1e-12);assert.throws(()=>stockOperationRecord(s,'transfer',{from:'A',to:'B',lines:[{product:1,quantity:100}]},null,101,'2026-11-03','10:00'));
 });
 check('stock ledger preserves fractional quantities before and after each movement',()=>{
- const s=fixture();s.products=[s.products[0]];s.opening.stocks={1:{A:0,B:0}};s.products[0].stocks={A:1.123,B:0};s.records=[record({...s,products:[{...s.products[0],stocks:{A:0,B:0}}]},draft({1:1.234})),{id:102,kind:'sale',date:'2026-11-03',time:'11:00',warehouse:'A',total:1.11,paid:0,due:1.11,profit:0.67,lines:[{product:1,name:'Rice',qty:0.111,price:10,costAtSale:4}]}];
- const data=reportDataset(s,{type:'stock',warehouse:'A'});assert.equal(data.rows[0].before,0);assert.equal(data.rows[0].after,1.234);assert.equal(data.rows[1].before,1.234);assert.equal(data.rows[1].delta,-0.111);assert.equal(data.rows[1].after,1.123);assert.equal(data.metrics.find(m=>m.label==='الوحدات').value,1.123);assert.equal(data.metrics.find(m=>m.label==='الداخل').value,1.234);assert.equal(data.metrics.find(m=>m.label==='الخارج').value,0.111);assert.equal(data.metrics.find(m=>m.label==='قيمة المخزون').value,4.49);const workbook=reportWorkbookData(s,data);assert.equal(workbook[1].rows[1][6],1.234);assert.equal(workbook[1].rows[2][6],1.123);
+ const s=fixture();s.products=[s.products[0]];s.opening.stocks={1:{A:0,B:0}};s.products[0].stocks={A:1.123,B:0};s.records=[{id:101,kind:'adjustment',date:'2026-11-03',time:'10:00',warehouse:'A',total:0,paid:0,due:0,lines:[{product:1,name:'Rice',qty:1.234,delta:1.234,actualQuantity:1.234,balanceBefore:0,balanceAfter:1.234,price:4}]},{id:102,kind:'sale',date:'2026-11-03',time:'11:00',warehouse:'A',total:1.11,paid:0,due:1.11,profit:0.67,lines:[{product:1,name:'Rice',qty:0.111,price:10,costAtSale:4}]}];
+ // 862 values stock from an accounting source, never the editable card suggestion.
+ s.products[0].openingCost=4;const data=reportDataset(s,{type:'stock',warehouse:'A'});assert.equal(data.rows[0].before,0);assert.equal(data.rows[0].after,1.234);assert.equal(data.rows[1].before,1.234);assert.equal(data.rows[1].delta,-0.111);assert.equal(data.rows[1].after,1.123);assert.equal(data.metrics.find(m=>m.label==='الوحدات').value,1.123);assert.equal(data.metrics.find(m=>m.label==='الداخل').value,1.234);assert.equal(data.metrics.find(m=>m.label==='الخارج').value,0.111);assert.equal(data.metrics.find(m=>m.label==='قيمة المخزون').value,1.123*4);const workbook=reportWorkbookData(s,data);assert.equal(workbook[1].rows[1][6],1.234);assert.equal(workbook[1].rows[2][6],1.123);
 });
-check('stock and overview valuations multiply unrounded stock quantities then round money only',()=>{
- const s=fixture();s.products=[s.products[0]];s.products[0].stocks={A:1.234,B:0.111};s.products[0].cost=100;
+check('862 stock and overview valuations use authoritative cost, with formatting independent of numeric quantity',()=>{
+ const s=fixture();s.products=[s.products[0]];s.products[0].stocks={A:1.234,B:0.111};s.products[0].cost=999;s.products[0].openingCost=100;
  const stock=reportDataset(s,{type:'stock'}),overview=reportDataset(s,{type:'overview'});assert.equal(stock.stockBalances[0].quantity,1.345);assert.equal(stock.stockBalances[0].value,134.5);assert.equal(stock.metrics.find(m=>m.label==='الوحدات').value,1.345);assert.equal(stock.metrics.find(m=>m.label==='قيمة المخزون').value,134.5);assert.equal(overview.metrics.find(m=>m.label==='قيمة المخزون').value,134.5);
 });
 check('product-sales unit totals retain quantity precision independently of sales money',()=>{

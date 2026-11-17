@@ -19,15 +19,16 @@ import static org.junit.Assert.*;
 /** Independent real APK upgrades, offline process death and repeat install-r without a data clear. */
 @RunWith(AndroidJUnit4.class)
 public class UpgradePersistenceTest {
-    private ActivityScenario<MainActivity> activity;
+    protected ActivityScenario<MainActivity> activity;
     private Map<String,PublicKey> originalKeys;
-    private Context target() { return InstrumentationRegistry.getInstrumentation().getTargetContext(); }
+    protected Context target() { return InstrumentationRegistry.getInstrumentation().getTargetContext(); }
     // Instrumentation executes with the target UID. Its temporary emulator-only state
     // must live under that UID, and survives the target APK replacement between phases.
-    private File testFile(String name) { return new File(target().getNoBackupFilesDir(),"instrumentation-"+name); }
-    private void write(String name,String content) throws Exception {try(var out=new FileOutputStream(testFile(name))){out.write(content.getBytes(StandardCharsets.UTF_8));}}
-    private String read(String name) throws Exception {try(var in=new FileInputStream(testFile(name))){return new String(in.readAllBytes(),StandardCharsets.UTF_8);}}
+    protected File testFile(String name) { return new File(target().getNoBackupFilesDir(),"instrumentation-"+name); }
+    protected void write(String name,String content) throws Exception {try(var out=new FileOutputStream(testFile(name))){out.write(content.getBytes(StandardCharsets.UTF_8));}}
+    protected String read(String name) throws Exception {try(var in=new FileInputStream(testFile(name))){return new String(in.readAllBytes(),StandardCharsets.UTF_8);}}
     @Before public void persistentInstrumentationIssuer() throws Exception {
+        assertTrue("Upgrade fixtures may only run on an isolated emulator",android.os.Build.HARDWARE.equals("ranchu")||android.os.Build.HARDWARE.equals("goldfish")||android.os.Build.FINGERPRINT.contains("emulator")||android.os.Build.MODEL.contains("sdk_gphone"));
         // This issuer lives only in the separate test APK, never in the installed customer APK.
         originalKeys=new HashMap<>(LicenseCompatibilityTest.keys());
         if(!testFile("upgrade-issuer.json").exists()){
@@ -44,29 +45,29 @@ public class UpgradePersistenceTest {
         if(activity!=null)activity.close();
         LicenseCompatibilityTest.keys().clear();LicenseCompatibilityTest.keys().putAll(originalKeys);
     }
-    private String js(String script) throws Exception {
+    protected String js(String script) throws Exception {
         var result=new ArrayBlockingQueue<String>(1);
         activity.onActivity(a->a.getWebView().evaluateJavascript(script,v->result.offer(v==null?"null":v)));
         String value=result.poll(20,TimeUnit.SECONDS);assertNotNull("WebView callback",value);return value;
     }
-    private String text(String script) throws Exception {return new JSONTokener(js(script)).nextValue().toString();}
-    private void until(String condition) throws Exception {
+    protected String text(String script) throws Exception {return new JSONTokener(js(script)).nextValue().toString();}
+    protected void until(String condition) throws Exception {
         long end=System.currentTimeMillis()+25000;
         while(System.currentTimeMillis()<end){if("true".equals(js(condition)))return;Thread.sleep(100);}
         fail("Timed out: "+condition+"; "+js("document.body.innerText"));
     }
-    private void action(String name) throws Exception {
+    protected void action(String name) throws Exception {
         js("window.__upgradeAction=false;act("+JSONObject.quote(name)+").finally(()=>window.__upgradeAction=true);true");
         until("window.__upgradeAction===true&&!document.querySelector('.busy')");
     }
-    private void fields(String values) throws Exception {
+    protected void fields(String values) throws Exception {
         assertEquals("All seed fields exist","true",js("(()=>{for(const [key,value]of Object.entries("+values+")){const input=document.querySelector('#sheet-form [name='+key+']');if(!input)throw Error('Missing field '+key);input.value=value}return true})()"));
     }
-    private String databaseSnapshot() throws Exception {
+    protected String databaseSnapshot() throws Exception {
         js("window.__upgradeSnapshot=null;(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('alkarna-site-v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});const result={};for(const name of [...db.objectStoreNames].sort())result[name]=await new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();window.__upgradeSnapshot=JSON.stringify(result)})();true");
         until("window.__upgradeSnapshot!==null");return text("window.__upgradeSnapshot");
     }
-    private String preferences() throws Exception {return text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))");}
+    protected String preferences() throws Exception {return text("JSON.stringify(Object.fromEntries(Object.keys(localStorage).sort().map(k=>[k,localStorage.getItem(k)])))");}
     private String signer() throws Exception {
         var info=target().getPackageManager().getPackageInfo(target().getPackageName(),PackageManager.GET_SIGNATURES);
         byte[] hash=MessageDigest.getInstance("SHA-256").digest(info.signatures[0].toByteArray());StringBuilder out=new StringBuilder();for(byte b:hash)out.append(String.format("%02x",b&255));return out.toString();
@@ -75,19 +76,49 @@ public class UpgradePersistenceTest {
         long expected=Long.parseLong(InstrumentationRegistry.getArguments().getString("expectedVersionCode"));
         assertEquals(expected,target().getPackageManager().getPackageInfo(target().getPackageName(),0).getLongVersionCode());
     }
-    private void preserved(Object oldValue,Object newValue,String path) throws Exception {
+    protected void preserved(Object oldValue,Object newValue,String path) throws Exception {
         if(oldValue instanceof JSONObject){assertTrue(path,newValue instanceof JSONObject);JSONObject old=(JSONObject)oldValue,next=(JSONObject)newValue;for(Iterator<String> keys=old.keys();keys.hasNext();){String key=keys.next();assertTrue(path+"."+key+" retained",next.has(key));preserved(old.get(key),next.get(key),path+"."+key);}}
         else if(oldValue instanceof JSONArray){assertTrue(path,newValue instanceof JSONArray);JSONArray old=(JSONArray)oldValue,next=(JSONArray)newValue;assertEquals(path+" length",old.length(),next.length());for(int i=0;i<old.length();i++)preserved(old.get(i),next.get(i),path+"["+i+"]");}
         else assertEquals(path,oldValue,newValue);
     }
+    private JSONObject shopRow(JSONArray rows) throws Exception {
+        for(int i=0;i<rows.length();i++)if("shop".equals(rows.getJSONObject(i).getString("id")))return rows.getJSONObject(i);
+        throw new AssertionError("Shop snapshot is missing");
+    }
+    private JSONObject byId(JSONArray rows,String id) throws Exception {
+        for(int i=0;i<rows.length();i++)if(id.equals(rows.getJSONObject(i).getString("id")))return rows.getJSONObject(i);
+        return null;
+    }
     private void businessPreserved(String beforeText,String afterText) throws Exception {
         JSONObject old=new JSONObject(beforeText),next=new JSONObject(afterText);
-        for(Iterator<String> names=old.keys();names.hasNext();){String name=names.next();assertTrue("Existing store retained: "+name,next.has(name));if(!"snapshots".equals(name))preserved(old.getJSONArray(name),next.getJSONArray(name),name);}
         JSONArray snapshots=old.getJSONArray("snapshots"),updated=next.getJSONArray("snapshots");
-        for(int i=0;i<snapshots.length();i++){JSONObject row=snapshots.getJSONObject(i),found=null;for(int j=0;j<updated.length();j++)if(updated.getJSONObject(j).getString("id").equals(row.getString("id")))found=updated.getJSONObject(j);assertNotNull("Old snapshot retained",found);if(row.getString("id").equals("shop")){preserved(row.getJSONObject("state"),found.getJSONObject("state"),"all existing business fields");assertTrue("Additive migration schema",found.getJSONObject("state").getInt("featureSchema")>=2);}else preserved(row,found,"historical snapshot");}
-        for(int i=0;i<updated.length();i++){String id=updated.getJSONObject(i).getString("id");boolean existed=false;for(int j=0;j<snapshots.length();j++)existed|=id.equals(snapshots.getJSONObject(j).getString("id"));assertTrue("Only known migration backup rows may be added: "+id,existed||"before-compact-product-names".equals(id)||"safety-backup".equals(id));}
+        JSONObject oldShop=shopRow(snapshots),newShop=shopRow(updated),oldState=oldShop.getJSONObject("state"),newState=newShop.getJSONObject("state");
+        int expectedSchema=Integer.parseInt(InstrumentationRegistry.getArguments().getString("expectedFeatureSchema","3"));
+        assertEquals("The installed runtime has the expected additive schema",expectedSchema,newState.getInt("featureSchema"));
+        boolean migrated=oldState.optInt("featureSchema",0)<expectedSchema;
+        assertEquals("Exactly one atomic migration commit",oldShop.getLong("revision")+(migrated?1:0),newShop.getLong("revision"));
+        for(Iterator<String> names=old.keys();names.hasNext();){String name=names.next();assertTrue("Existing store retained: "+name,next.has(name));
+            if("snapshots".equals(name))continue;
+            if(!"meta".equals(name)||!migrated){preserved(old.getJSONArray(name),next.getJSONArray(name),name);continue;}
+            JSONArray prior=old.getJSONArray(name),current=next.getJSONArray(name);
+            JSONObject oldCloud=byId(prior,"cloud-backup-revision"),newCloud=byId(current,"cloud-backup-revision");
+            assertNotNull("Migration retains/creates the backup revision",newCloud);
+            long cloudBefore=oldCloud==null?oldShop.getLong("revision"):oldCloud.getLong("value");
+            assertEquals("Only the committed migration advances cloud backup revision",Math.max(cloudBefore,oldShop.getLong("revision"))+1,newCloud.getLong("value"));
+            for(int i=0;i<prior.length();i++){JSONObject row=prior.getJSONObject(i),found=byId(current,row.getString("id"));assertNotNull("Metadata retained",found);if(!row.getString("id").equals("cloud-backup-revision"))preserved(row,found,"metadata "+row.getString("id"));}
+            assertEquals("No unrelated metadata is introduced",prior.length()+(oldCloud==null?1:0),current.length());
+        }
+        for(int i=0;i<snapshots.length();i++){JSONObject row=snapshots.getJSONObject(i),found=byId(updated,row.getString("id"));assertNotNull("Old snapshot retained",found);
+            if(row.getString("id").equals("shop")){JSONObject expected=new JSONObject(row.getJSONObject("state").toString());expected.remove("featureSchema");preserved(expected,found.getJSONObject("state"),"all existing business fields");}
+            else preserved(row,found,"historical snapshot");
+        }
+        for(int i=0;i<updated.length();i++){JSONObject row=updated.getJSONObject(i);String id=row.getString("id");boolean existed=byId(snapshots,id)!=null;
+            if("before-feature-upgrade-862".equals(id)&&!existed){assertTrue("Migration backup requires a real migration",migrated);preserved(oldState,row.getJSONObject("state"),"pre-862 migration backup");preserved(row.getJSONObject("state"),oldState,"pre-862 migration backup has no substituted fields");}
+            else assertTrue("Only known migration backup rows may be added: "+id,existed||"before-compact-product-names".equals(id)||"safety-backup".equals(id));
+        }
+        if(migrated)assertNotNull("An exact pre-migration copy is retained",byId(updated,"before-feature-upgrade-862"));
     }
-    private DeviceLicense nativePreserved(JSONObject before,boolean chargedOfflineInterval) throws Exception {
+    protected DeviceLicense nativePreserved(JSONObject before,boolean chargedOfflineInterval) throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());
         assertEquals(before.getString("certificate"),signer());assertEquals(before.getString("device"),license.deviceCode());
         JSONObject status=license.status();assertTrue("Activation survived APK replacement/process death: "+status,status.getBoolean("valid"));JSONObject active=status.getJSONObject("license");
@@ -99,7 +130,7 @@ public class UpgradePersistenceTest {
         try{license.install(before.getString("document"));fail("Consumed activation was reset by update/restart");}catch(LicenseVerifier.Rejected e){assertEquals("LICENSE_ALREADY_USED",e.code);}
         return license;
     }
-    private JSONObject checkpoint(JSONObject before,DeviceLicense license) throws Exception {
+    protected JSONObject checkpoint(JSONObject before,DeviceLicense license) throws Exception {
         license.checkpoint();JSONObject snapshot=new JSONObject(before.toString());
         return snapshot.put("database",databaseSnapshot()).put("localStorage",preferences())
             .put("remainingSeconds",license.status().getJSONObject("license").get("remainingSeconds"))
@@ -153,6 +184,7 @@ public class UpgradePersistenceTest {
         fields("{name:'قهوة',price:'150',cost:'60',qty:'12',openingWarehouse:S.warehouse}");action("save-product");
         until("S.products.length===1&&modal===null");action("new:sale");action("pos:add:"+js("S.products[0].id"));action("pos:checkout");action("post-sale");
         assertEquals("11",js("S.products[0].qty"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));
+        long seedSaleId=Long.parseLong(js("S.records.find(r=>r.kind==='sale').id"));
         action("go:parties");action("partytype:supplier");action("open:party");fields("{name:'مورد الترقية'}");action("save-party");
         String supplierId=js("S.parties.find(p=>p.name==='مورد الترقية').id");
         action("new:purchase");action("pos:add:"+js("S.products[0].id"));action("pos:party");action("pos:party-pick:"+supplierId);action("pos:checkout");action("post-sale");
@@ -172,7 +204,7 @@ public class UpgradePersistenceTest {
         JSONObject snapshot=new JSONObject().put("database",databaseSnapshot()).put("device",license.deviceCode()).put("certificate",signer()).put("document",document)
             .put("licenseId",license.status().getJSONObject("license").getString("licenseId"))
             .put("type",type).put("remainingSeconds",license.status().getJSONObject("license").get("remainingSeconds"))
-            .put("localStorage",preferences());
+            .put("localStorage",preferences()).put("seedSaleId",seedSaleId);
         // The actual v13 APK predates Contatools; do not manufacture a pre-upgrade identity.
         if(target().getPackageManager().getPackageInfo(target().getPackageName(),0).getLongVersionCode()>=14)
             snapshot.put("installationId",new InstallationIdentity().id()).put("installationFingerprint",new InstallationIdentity().fingerprint());
@@ -186,7 +218,7 @@ public class UpgradePersistenceTest {
         businessPreserved(before.getString("database"),databaseSnapshot());
         assertEquals(before.getString("localStorage"),preferences());
         js("document.querySelector('[name=username]').value='upgrade-owner';document.querySelector('[name=password]').value='1234';true");action("site:login");until("!!document.querySelector('.nav')");
-        assertEquals("true",js("S.products[0].qty===12&&S.parties.length===2&&['sale','purchase','receive','pay'].every(kind=>S.records.some(r=>r.kind===kind))"));assertEquals("150",js("S.records.find(r=>r.kind==='sale').total"));assertEquals("true",js("document.documentElement.lang==='fr'&&document.querySelector('#phone').dir==='ltr'&&previewAppearance29==='light'"));
+        assertEquals("true",js("S.products[0].qty===12&&S.parties.length===2&&['sale','purchase','receive','pay'].every(kind=>S.records.some(r=>r.kind===kind))"));assertEquals("150",js("S.records.find(r=>r.id==="+before.getLong("seedSaleId")+").total"));assertEquals("true",js("document.documentElement.lang==='fr'&&document.querySelector('#phone').dir==='ltr'&&previewAppearance29==='light'"));
         action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");
         js("document.querySelector('[name=username]').value='upgrade-worker';document.querySelector('[name=password]').value='worker-5678';true");action("site:login");until("!!document.querySelector('.nav')");
         assertEquals("12",js("S.products[0].qty"));action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");

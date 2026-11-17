@@ -62,7 +62,7 @@ export function installAdminFeatures(api){
    if(command==='user-save')return this.saveUser();
    if(command==='logo-remove'){this.setLogo('');return}
    if(command==='party-archived'){partyType=id;modal='feature-party-archived';return render()}
-   if(command==='party-archive'){const party=S.parties.find(p=>p.id===Number(id));if(!party)throw Error('الحساب غير موجود');if(Math.abs(party.balance)>.005)throw Error('لا يمكن أرشفة حساب لديه رصيد قائم');confirm={cap:(party.type==='supplier'?'suppliers':'customers')+'.delete',message:'سيؤرشف الحساب مع بقاء كل مستنداته.',run:()=>{archiveParty(S,party.id);view='parties';selected=0;modal=null}};modal='feature-confirm';return render()}
+   if(command==='party-archive'){const party=S.parties.find(p=>p.id===Number(id));if(!party)throw Error('الحساب غير موجود');if(party.balance!==0)throw Error('لا يمكن أرشفة حساب لديه رصيد قائم');confirm={cap:(party.type==='supplier'?'suppliers':'customers')+'.delete',message:'سيؤرشف الحساب مع بقاء كل مستنداته.',run:()=>{archiveParty(S,party.id);view='parties';selected=0;modal=null}};modal='feature-confirm';return render()}
    if(command==='party-restore'){const p=S.parties.find(p=>p.id===Number(id));if(!p)throw Error('الحساب غير موجود');p.archived=false;return render()}
    if(command==='warehouse-default'){const name=decodeURIComponent(id);if(!activeWarehouses(S).includes(name))throw Error('المخزن غير موجود');S.salesWarehouse=name;return render()}
    if(command==='warehouse-archive'){const name=decodeURIComponent(id);const copy=structuredClone(S);archiveWarehouse(copy,name);confirm={cap:'warehouses.delete',message:'سيؤرشف المخزن الفارغ مع بقاء سجلاته.',run:()=>{archiveWarehouse(S,name);syncStock()}};modal='feature-confirm';return render()}
@@ -71,7 +71,7 @@ export function installAdminFeatures(api){
    if(command==='account-opening'){selected=Number(id);editingId=null;modal='feature-account-opening';return render()}
    if(command==='account-opening-save'){
     const a=S.accounts.find(a=>a.id===selected),old=S.records.find(r=>r.id===editingId),f=api.form(),value=Number(f.opening),before=old?.openingBalanceBefore??a.openingBalance??S.opening.accounts[a.id]??0;
-    if(!Number.isFinite(value)||Math.abs(value)>1e14||!f.reason?.trim())throw Error('أدخل رصيدًا صحيحًا وسبب التصحيح');const difference=roundMoney(value-before);if(difference===0)throw Error('الرصيد لم يتغير');
+    if(!Number.isFinite(value)||Math.abs(value)>1e14||!f.reason?.trim())throw Error('أدخل رصيدًا صحيحًا وسبب التصحيح');const difference=value-before;if(difference===0)throw Error('الرصيد لم يتغير');
     const record={...newRecord(difference>0?'deposit':'withdraw'),total:Math.abs(difference),paid:Math.abs(difference),account:a.id,title:'تصحيح رصيد البداية',note:f.reason.trim(),openingAccountCorrection:true,openingBalanceBefore:before,openingBalanceAfter:value};
     if(commitRecord(record))a.openingBalance=value;return;
    }

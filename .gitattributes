@@ -1,0 +1,3 @@
+
+# Byte-pinned license must be identical on Windows and CI.
+approved-runtime/assets/sql.js-LICENSE text eol=lf

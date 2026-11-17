@@ -1,3 +1,4 @@
+import {mobileLineTotal} from './invoice-amount.js';
 import {currencyCode} from './upgrade-state.js';
 import {translateText} from './i18n.js';
 // Shared report content for the downloaded PDF and the separate print action.
@@ -7,16 +8,16 @@ const number=(v,language)=>Number(v||0).toLocaleString(language==='fr'?'fr-FR':'
 export function invoicePdfModel(state,r,labels,{language='ar'}={}){
  const t=v=>translateText(v,language),currency=currencyCode(state),system=v=>['نقدي','بنكيلي','مصرفي','السداد','أمانتي','بيم','المخزن الرئيسي','مخزن الاحتياط'].includes(v)?t(v):v,account=id=>system(state.accounts.find(a=>a.id===id)?.name||'—'),party=state.parties.find(p=>p.id===r.party),kind=labels[r.kind]||r.kind;
  const blocks=[{kind:'heading',text:t(kind)},{kind:'text',text:(r.number||r.kind.toUpperCase()+'-'+r.id)+' · '+t(r.date)+' '+(r.time||'')}];
- const fields=[[t('الحالة'),t(r.voided?'ملغاة':r.due?'على الحساب':'مسجلة')],...(party?[[t(party.type==='supplier'?'المورد':'العميل'),party.name]]:[[t('البيان'),localizedRecordTitle(r,language)]]),...(r.account?[[t('وسيلة الدفع'),account(r.account)]]:[]),...(r.to?[[t('الحساب المستلم'),account(r.to)]]:[]),...(r.warehouse?[[t('المخزن'),system(r.warehouse)]]:[]),...(r.from?[[t('من مخزن'),system(r.from)],[t('إلى مخزن'),system(r.toWarehouse)]]:[])];
+ const fields=[[t('الحالة'),t(r.voided?'ملغاة':r.due?'على الحساب':'مسجلة')],...(party?[[t(party.type==='supplier'?'المورد':'العميل'),party.name]]:[[t('البيان'),localizedRecordTitle(r,language,state)]]),...(r.account?[[t('وسيلة الدفع'),account(r.account)]]:[]),...(r.to?[[t('الحساب المستلم'),account(r.to)]]:[]),...(r.warehouse?[[t('المخزن'),system(r.warehouse)]]:[]),...(r.from?[[t('من مخزن'),system(r.from)],[t('إلى مخزن'),system(r.toWarehouse)]]:[])];
  blocks.push({kind:'table',rows:fields,header:false,widths:[.24,.76]});
- if(r.lines.length){const adjustment=r.kind==='adjustment';blocks.push({kind:'subheading',text:t(adjustment?'تفاصيل التصحيح':'بنود الفاتورة')},{kind:'table',widths:[.46,.12,.20,.22],rows:[[t('المنتج'),t(adjustment?'التغيير':'الكمية'),t('سعر الوحدة')+' '+currency,t('المجموع')+' '+currency],...r.lines.map(l=>[l.name+(l.warehouse?' · '+system(l.warehouse):''),adjustment?l.delta:l.qty,l.price,roundTotal(l.qty*l.price)])]});}
+ if(r.lines.length){const adjustment=r.kind==='adjustment';blocks.push({kind:'subheading',text:t(adjustment?'تفاصيل التصحيح':'بنود الفاتورة')},{kind:'table',widths:[.46,.12,.20,.22],rows:[[t('المنتج'),t(adjustment?'التغيير':'الكمية'),t('سعر الوحدة')+' '+currency,t('المجموع')+' '+currency],...r.lines.map(l=>[l.name+(l.warehouse?' · '+system(l.warehouse):''),adjustment?l.delta:l.qty,l.price,mobileLineTotal(l)])]});}
  blocks.push({kind:'table',rows:[[t('الإجمالي')+' '+currency,r.total],...(r.paid!=null?[[t('المدفوع')+' '+currency,r.paid]]:[]),...(r.due!=null?[[t('على الحساب')+' '+currency,r.due]]:[])],header:false,widths:[.60,.40]});if(r.note)blocks.push({kind:'subheading',text:t('الملاحظة')},{kind:'text',text:r.note});
  return {language,dir:language==='fr'?'ltr':'rtl',brand:state.branding||'AlKarna',created:new Date().toLocaleDateString(language==='fr'?'fr-MR':'en-GB'),logo:state.brandInfo?.logo||'',branding:state.brandInfo||{},includeFooter:['sale','purchase'].includes(r.kind),blocks};
 }
 const roundTotal=n=>Math.round((n+Number.EPSILON)*100)/100;
 export function reportModel(state,records,labels,scope='كل الفترة',{language='ar'}={}){const t=value=>translateText(value,language).replace(/MRU/g,currencyCode(state));
  const blocks=[{kind:'heading',text:'سجل الفواتير'},{kind:'text',text:scope},{kind:'text',text:`${records.length} مستندات · العملة MRU`},
-  {kind:'table',widths:[.06,.17,.17,.40,.20],rows:[['الرقم','التاريخ','النوع','الطرف / البيان','المبلغ MRU'],...records.map((r,i)=>[i+1,t(r.date),t(labels[r.kind]||r.kind),localizedRecordTitle(r,language),number(r.total,language)])]},
+  {kind:'table',widths:[.06,.17,.17,.40,.20],rows:[['الرقم','التاريخ','النوع','الطرف / البيان','المبلغ MRU'],...records.map((r,i)=>[i+1,t(r.date),t(labels[r.kind]||r.kind),localizedRecordTitle(r,language,state),number(r.total,language)])]},
   {kind:'heading',text:'تفاصيل المستندات الكاملة'}];
  records.forEach((r,i)=>{
   const sheets=recordExportData(state,[r],labels,{language}),headers=sheets[0].rows[0],values=sheets[0].rows[1];
