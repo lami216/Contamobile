@@ -11,12 +11,13 @@ import {installEmployeeFeatures} from '../approved-runtime/feature-employees.js'
 // below always run). When available, execute its actual pure functions too.
 let desktop=null,desktopLedger=null;
 try{
- const source=await fs.readFile((process.env.DESKTOP_862_ROOT?path.join(process.env.DESKTOP_862_ROOT,'lib/payroll.ts'):new URL('../../Desktop/lib/payroll.ts',import.meta.url)),'utf8');
- assert.equal(createHash('sha256').update(source).digest('hex'),'d607f04e3a4570b84b1408962a7bb0ef318732393df5de6e7985f75df9971fdc');
+ // Pin Git's canonical LF content; Windows checkouts may expand LF to CRLF.
+ const source=(await fs.readFile((process.env.DESKTOP_862_ROOT?path.join(process.env.DESKTOP_862_ROOT,'lib/payroll.ts'):new URL('../../Desktop/lib/payroll.ts',import.meta.url)),'utf8')).replaceAll('\r\n','\n');
+ assert.equal(createHash('sha256').update(source).digest('hex'),'95f275d49d1154ade28c987f41a8361dbda87db550603809471b4fb2ffe25b5e');
  const js=stripTypeScriptTypes(source,{mode:'transform'}).replace(/^import .*from "\.\/transaction-lifecycle\.ts";\r?\n/m,'');
  desktop=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
- const ledger=await fs.readFile((process.env.DESKTOP_862_ROOT?path.join(process.env.DESKTOP_862_ROOT,'lib/employee-ledger.ts'):new URL('../../Desktop/lib/employee-ledger.ts',import.meta.url)),'utf8');
- assert.equal(createHash('sha256').update(ledger).digest('hex'),'c5a6036ab48aee632d1433b4a28cace69df04a0d36d3cd0f6185c5ecf5120e3d');
+ const ledger=(await fs.readFile((process.env.DESKTOP_862_ROOT?path.join(process.env.DESKTOP_862_ROOT,'lib/employee-ledger.ts'):new URL('../../Desktop/lib/employee-ledger.ts',import.meta.url)),'utf8')).replaceAll('\r\n','\n');
+ assert.equal(createHash('sha256').update(ledger).digest('hex'),'db22f0ee64ba8b8adc01b56c1a29af8e4439ce0ce2a76e7176f17196b1ef8bb1');
  const code=stripTypeScriptTypes(ledger,{mode:'transform'}).replace(/^import .*;\r?\n/gm,'');
  desktopLedger=await import('data:text/javascript;base64,'+Buffer.from(`const displayDocumentNumber=d=>String(d.number??d.id);const employeePaymentDirection=d=>d.employeePaymentDirection??'withdraw';\n`+code).toString('base64'));
 }catch(error){if(error.code!=='ENOENT')throw error}

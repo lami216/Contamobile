@@ -1,13 +1,13 @@
 {
   "sourceHashes": {
-    "app/invoice-line-amount.ts": "63c7ebdc3dd9f730bc79a0984c1529b9e8efca745947e234b83a73b526504057",
-    "lib/stock-numbers.ts": "c4d56c6d72c95d0e806a009b330155702b5712b80f7b7036ccb34982b76275c6",
-    "lib/report-commerce.ts": "4286c6b74cdb3dc36fe37e6497d0c54c1ae77a62a3f0ed98b686928fc54e2075",
-    "lib/product-cost.ts": "b75cd23138addc3e0431f5db97803515c800008c3d22a92f764829f349686a78",
-    "lib/adjustment-stock-cost.ts": "81ce3453b535efc030835fa7f4453b62a52bd211d87b7e73c9461316060c473e"
+    "app/invoice-line-amount.ts": "27fdce1669225620a674a3e178798e6a76911ed4cb47aeb95287186d18a3e72e",
+    "lib/stock-numbers.ts": "30b944a9b453785a629921133c983db68d59e72e1f62857191c3b771ad9cd02e",
+    "lib/report-commerce.ts": "4fbbe6841ba2a147ebfad8e2c7b9de04353d1f4fe4e39244a3415bf83b91d6a9",
+    "lib/product-cost.ts": "59d10ec86523567c94b02c8da5f366f58d700ad08f84852ecd7917a3626c9f75",
+    "lib/adjustment-stock-cost.ts": "f0d8b9d8dcd19f55315ab2a0b43b1399a719ddf65134378e9b5cfa3aa8475b10"
   },
   "sourceCommit": "bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0",
-  "sourceSha256": "63c7ebdc3dd9f730bc79a0984c1529b9e8efca745947e234b83a73b526504057",
+  "sourceSha256": "27fdce1669225620a674a3e178798e6a76911ed4cb47aeb95287186d18a3e72e",
   "values": {
     "amounts": [
       {

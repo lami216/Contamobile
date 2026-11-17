@@ -66,7 +66,7 @@ public class Desktop862UpgradeTest extends UpgradePersistenceTest {
         backup.writeSnapshot(id,bytes);backup.state.put("settings",settings).put("context",new JSONObject().put("shopId",business.getString("originId")).put("ownerId",owner))
             .put("latest",new JSONObject().put("id",id).put("sha256",hash).put("sizeBytes",bytes.length).put("localRevision",Long.toString(cloudRevision(database))).put("snapshotAt",System.currentTimeMillis()))
             .put("stage","scheduled").put("dueAt",due);backup.save();
-        String consumed=UUID.randomUUID().toString();DeviceLifecycleStore lifecycle=new DeviceLifecycleStore(target(),identity.fingerprint());lifecycle.consume(consumed);
+        String consumed=UUID.randomUUID().toString();DeviceLifecycleStore lifecycle=new DeviceLifecycleStore(target(),license.deviceCode()+"|"+identity.fingerprint());lifecycle.consume(consumed);
         JSONObject control=fixtureControl(license,identity,baseline.getString("document"));license.checkpoint();
         return new JSONObject().put("backupId",id).put("backupHash",hash).put("backupSettings",settings).put("backupContext",backup.state.getJSONObject("context"))
             .put("lifecycleConsumedId",consumed).put("identityJwk",identity.publicJwk()).put("control",control);
@@ -80,7 +80,7 @@ public class Desktop862UpgradeTest extends UpgradePersistenceTest {
         assertEquals("Backup schedule/consent survive",ProtocolJson.canonical(expected.getJSONObject("backupSettings")),ProtocolJson.canonical(backup.state.getJSONObject("settings")));
         assertEquals("Backup stays attached to the original owner/shop",ProtocolJson.canonical(expected.getJSONObject("backupContext")),ProtocolJson.canonical(backup.state.getJSONObject("context")));
         if(requireOldBlob){byte[] bytes=backup.snapshot(expected.getString("backupId"));assertEquals("Original encrypted backup decrypts after APK replacement",expected.getString("backupHash"),CloudBackupStore.hash(bytes));CloudBackupStore.validateSnapshot(bytes,backup.state.getJSONObject("context").getString("shopId"));}
-        assertTrue("A consumed lifecycle authorization remains consumed",new DeviceLifecycleStore(target(),identity.fingerprint()).used(expected.getString("lifecycleConsumedId")));
+        assertTrue("A consumed lifecycle authorization remains consumed",new DeviceLifecycleStore(target(),new DeviceLicense(target()).deviceCode()+"|"+identity.fingerprint()).used(expected.getString("lifecycleConsumedId")));
         JSONObject control=new DeviceLicense(target()).status().getJSONObject("control");assertEquals("Remote control generation/fence are not reset",ProtocolJson.canonical(expected.getJSONObject("control")),ProtocolJson.canonical(control));
     }
     private void check(String message,String condition) throws Exception {assertEquals(message,"true",js(condition));}

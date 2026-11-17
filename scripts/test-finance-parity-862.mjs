@@ -16,6 +16,8 @@ import {invoicePdfModel} from '../approved-runtime/report-output.js';
 import {sha256Hex} from '../approved-runtime/accounting-hash.js';
 const root=fileURLToPath(new URL('../',import.meta.url)),desktop=process.env.DESKTOP_862_ROOT||path.resolve(root,'../Desktop'),fixturePath=path.join(root,'scripts/fixtures/desktop-862-finance.json');
 const canonical=value=>JSON.parse(JSON.stringify(value));
+// Hash canonical Git text identically on Windows CRLF and Linux LF checkouts.
+const sourceHash=source=>createHash('sha256').update(String(source).replaceAll('\r\n','\n')).digest('hex');
 const errorValue=fn=>{try{return canonical(fn())}catch(error){return {error:error.message,status:error.status??null}}};
 const cases=[];
 const check=(name,fn)=>{fn();cases.push(name);console.log('PASS '+name)};
@@ -43,8 +45,8 @@ try{
  async function compile(sourceFile){if(compiled.has(sourceFile))return compiled.get(sourceFile);const target=path.join(work,path.relative(desktop,sourceFile).replace(/\.ts$/,'.mjs'));compiled.set(sourceFile,target);await mkdir(path.dirname(target),{recursive:true});let text=stripTypeScriptTypes(await readFile(sourceFile,'utf8'),{mode:'transform'});for(const match of [...text.matchAll(/from\s+['"]([^'"]+\.ts)['"]/g)]){const next=await compile(path.resolve(path.dirname(sourceFile),match[1]));text=text.replace(match[0],`from ${JSON.stringify(pathToFileURL(next).href)}`);}await writeFile(target,text);return target;}
  try{
   const a=await import(pathToFileURL(await compile(path.join(desktop,'app/invoice-line-amount.ts')))),s=await import(pathToFileURL(await compile(path.join(desktop,'lib/stock-numbers.ts')))),r=await import(pathToFileURL(await compile(path.join(desktop,'lib/report-commerce.ts')))),c=await import(pathToFileURL(await compile(path.join(desktop,'lib/product-cost.ts'))));
-  const sourceHashes={};for(const file of ['app/invoice-line-amount.ts','lib/stock-numbers.ts','lib/report-commerce.ts','lib/product-cost.ts','lib/adjustment-stock-cost.ts'])sourceHashes[file]=createHash('sha256').update(await readFile(path.join(desktop,file))).digest('hex');
-  golden={sourceHashes,sourceCommit:'bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0',sourceSha256:createHash('sha256').update(source).digest('hex'),values:runGolden(a,{...s,...r},c)};
+  const sourceHashes={};for(const file of ['app/invoice-line-amount.ts','lib/stock-numbers.ts','lib/report-commerce.ts','lib/product-cost.ts','lib/adjustment-stock-cost.ts'])sourceHashes[file]=sourceHash(await readFile(path.join(desktop,file),'utf8'));
+  golden={sourceHashes,sourceCommit:'bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0',sourceSha256:sourceHash(source),values:runGolden(a,{...s,...r},c)};
   if(process.argv.includes('--update-golden')){await mkdir(path.dirname(fixturePath),{recursive:true});await writeFile(fixturePath,JSON.stringify(golden,null,2)+'\n');}
   else{const stored=JSON.parse(await readFile(fixturePath,'utf8'));assert.deepEqual(golden,stored,'Stored golden drifted from the exact source');}
  }finally{await rm(work,{recursive:true,force:true});}
