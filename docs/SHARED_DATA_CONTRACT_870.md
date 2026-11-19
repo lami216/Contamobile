@@ -18,6 +18,8 @@ Schema 4 retains all schema 2/3 financial state and adds `counters` and stock se
 
 The native JSON backup remains `alkarna-web-backup`. The official Desktop JSON and SQLite adapters retain the same source collections, including counters, payroll/audits, account transfers, recurring definitions and import mappings. Source users remain raw backup evidence; they do not replace Mobile login credentials or activation.
 
+`posDraftEpochs` and `workflowDraftEpochs[userId][kind]` are local UI completion metadata. A new workflow post commits its epoch with its financial snapshot, so a stale WebView cache cannot resurrect a completed draft. Existing unposted legacy drafts retain generation zero; editing a posted document does not consume a separate new draft. These epochs are not canonical accounting counters. A future common DTO must keep them local or scope them to an installation, rather than allowing one device to invalidate another device's pending draft.
+
 ## Employee account invariants
 
 - Profile corrections retain `accountStartDate`, canonical payment identities/dates, accrual snapshots, schedule rebasing proof and the deletion audit.

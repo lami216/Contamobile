@@ -90,8 +90,16 @@ public class Desktop870UpgradeTest extends UpgradePersistenceTest {
     private void stockOperation(String kind,String product,String quantity) throws Exception {
         action("go:"+kind);until("!!document.querySelector('#utility-form [name=product]')");
         utilityFields("{product:"+product+"}");action("site:feature:stock-add");fields("{quantity:"+JSONObject.quote(quantity)+"}");action("site:feature:stock-line-save");
-        utilityFields("transfer".equals(kind)?"{from:S.warehouse,to:'مخزن 870',note:'تسوية محفوظة عبر تحديث 870'}":"{note:'تسوية محفوظة عبر تحديث 870'}");action("review-utility");check("Stock review opens before posting","modal==='feature-stock-review'");action("site:feature:stock-confirm");
+        utilityFields("transfer".equals(kind)?"{from:S.warehouse,to:'مخزن 870',note:'تسوية محفوظة عبر تحديث 870'}":"{note:'تسوية محفوظة عبر تحديث 870'}");action("review-utility");check("Stock review opens before posting","modal==='feature-stock-review'");
+        if(ExistingLicenseAccess.installedVersion()==36){JSONObject drafts=testFile("870-completed-drafts.json").exists()?new JSONObject(read("870-completed-drafts.json")):new JSONObject();String cacheKey=text("'alkarna-workflow-draft:'+karnaCurrentActor().id+':"+kind+"'");String raw=text("localStorage.getItem("+JSONObject.quote(cacheKey)+")");assertTrue("Actual pre-post draft exists",raw.startsWith("{"));drafts.put(cacheKey,raw);write("870-completed-drafts.json",drafts.toString());}
+        action("site:feature:stock-confirm");
         check("Actual stock transaction is committed","view==='invoice'&&modal===null&&S.records.some(r=>r.id===selected)");
+    }
+    private void assertConsumedWorkflowDrafts(JSONObject baseline) throws Exception {
+        String owner=baseline.getJSONObject("desktop870Native").getJSONObject("backupContext").getString("ownerId"),prefix="alkarna-workflow-draft:"+owner+":";
+        check("Both completed stock workflows have durable owner-scoped epochs","S.workflowDraftEpochs["+JSONObject.quote(owner)+"].adjustment===1&&S.workflowDraftEpochs["+JSONObject.quote(owner)+"].transfer===1");
+        check("No completed stock draft survives into the next opening","localStorage.getItem("+JSONObject.quote(prefix+"adjustment")+")===null&&localStorage.getItem("+JSONObject.quote(prefix+"transfer")+")===null");
+        JSONObject original=new JSONObject(baseline.getString("localStorage"));assertEquals("An unrelated original35 expense draft is retained exactly",original.getString(prefix+"expense"),text("localStorage.getItem("+JSONObject.quote(prefix+"expense")+")"));
     }
     private void payrollFacts(String condition) throws Exception {
         js("window.__870FactsDone=false;window.__870FactsError=null;window.__870Facts=null;import(new URL('./payroll-domain.js',location.href).href).then(({payrollFacts})=>{window.__870Facts=payrollFacts(S)}).catch(e=>window.__870FactsError=String(e)).finally(()=>window.__870FactsDone=true);true");until("window.__870FactsDone===true");assertEquals("Actual payroll module loads in Android WebView","null",js("window.__870FactsError"));check("Desktop870 payroll expense/reserve facts",condition);
@@ -158,9 +166,21 @@ public class Desktop870UpgradeTest extends UpgradePersistenceTest {
         assertEquals("Candidate is exactly36",36,ExistingLicenseAccess.installedVersion());offline();JSONObject before=new JSONObject(read("upgrade-before.json"));assertNativeSurvived(before,true);
         super.verifyAfterInPlaceUpdate();loginOwner();
         check("Original35 unposted cart/note survive","cart.length===1&&cart[0].qty===1&&posNote==='مسودة فاتورة محفوظة عبر تحديث 870'");
-        businessSmokeOnCandidate(before);action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");assertNativeSurvived(before,false);write("upgrade-after.json",checkpoint(before,new DeviceLicense(target())).toString());
+        businessSmokeOnCandidate(before);assertConsumedWorkflowDrafts(before);action("site:logout");until("!!document.querySelector('[data-action=\"site:login\"]')");assertNativeSurvived(before,false);write("upgrade-after.json",checkpoint(before,new DeviceLicense(target())).toString());
+        // Reproduce WebView replaying an older localStorage disk image. The exact
+        // post-commit checkpoint above stays unchanged; cold boot must fence the
+        // actual obsolete drafts using epochs in the accounting transaction.
+        JSONObject obsolete=new JSONObject(read("870-completed-drafts.json"));assertEquals("Both completed workflow cache images were captured",2,obsolete.length());
+        check("Synthetic stale-disk cache replay is installed","(()=>{for(const[key,value]of Object.entries("+obsolete+"))localStorage.setItem(key,value);return true})()");
+        // Reload this WebView while its injected cache image is definitely in
+        // memory. This proves pruning without depending on disk flush timing.
+        js("window.__870BeforeReplayReload=true;true");activity.onActivity(a->a.getWebView().reload());
+        until("typeof window.__870BeforeReplayReload==='undefined'&&document.documentElement.dataset.runtimeState==='ready'&&!!document.querySelector('[data-action=\"site:login\"]')");
+        JSONObject stable=new JSONObject(read("upgrade-after.json")),expectedDatabase=new JSONObject(stable.getString("database")),reloadedDatabase=new JSONObject(databaseSnapshot());
+        preserved(expectedDatabase,reloadedDatabase,"native stale-cache reload database");preserved(reloadedDatabase,expectedDatabase,"native stale-cache reload has no new writes");assertEquals("Native stale-cache reload retains exact preferences",stable.getString("localStorage"),preferences());assertConsumedWorkflowDrafts(stable);
+        check("Reinstall stale cache before actual force-stopped cold boot","(()=>{for(const[key,value]of Object.entries("+obsolete+"))localStorage.setItem(key,value);return true})()");
         System.out.println("UPGRADE 870 PASS: original35 ->36 install-r preserved all durable data, credentials/preferences, activation countdown, device/private identity, backup consent/schedule/encrypted content and signed control/consumed authorization.");
     }
-    @Override @Test public void verifyAfterOfflineColdRestart() throws Exception {super.verifyAfterOfflineColdRestart();assertNativeSurvived(new JSONObject(read("upgrade-after.json")),false);}
-    @Override @Test public void verifyAfterRepeatedInPlaceUpdate() throws Exception {super.verifyAfterRepeatedInPlaceUpdate();assertNativeSurvived(new JSONObject(read("upgrade-after.json")),false);}
+    @Override @Test public void verifyAfterOfflineColdRestart() throws Exception {super.verifyAfterOfflineColdRestart();JSONObject baseline=new JSONObject(read("upgrade-after.json"));assertNativeSurvived(baseline,false);assertConsumedWorkflowDrafts(baseline);}
+    @Override @Test public void verifyAfterRepeatedInPlaceUpdate() throws Exception {super.verifyAfterRepeatedInPlaceUpdate();JSONObject baseline=new JSONObject(read("upgrade-after.json"));assertNativeSurvived(baseline,false);assertConsumedWorkflowDrafts(baseline);}
 }
