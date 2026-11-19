@@ -94,11 +94,47 @@ public class UpgradePersistenceTest {
         String number=row.optString("number").trim(),title=row.optString("title").trim();
         return !(row.optBoolean("openingStock")||row.optBoolean("openingCorrection")||number.startsWith("OPEN-COR")||number.equals("OPEN")||number.startsWith("OPEN-")||Arrays.asList("رصيد بداية","تصحيح رصيد البداية","إضافة رصيد افتتاحي").contains(title)||row.has("openingStockAfter")||row.has("openingTotalBefore")&&row.has("openingTotalAfter"));
     }
+    private Object presentOr(JSONObject row,String key,Object fallback) throws Exception {return row.has(key)&&!row.isNull(key)?row.get(key):fallback;}
+    private Double positiveRecordedCost(Object value) {
+        if(!(value instanceof Number)&&!(value instanceof String))return null;
+        if(value instanceof String&&!((String)value).trim().matches("(?i)\\+?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?"))return null;
+        try{double cost=Double.parseDouble(value.toString().trim());return Double.isFinite(cost)&&cost>0?cost:null;}catch(NumberFormatException ignored){return null;}
+    }
+    private boolean jsonTruthy(Object value) {return value!=null&&value!=JSONObject.NULL&&!Boolean.FALSE.equals(value)&&!(value instanceof String&&((String)value).isEmpty())&&!(value instanceof Number&&((Number)value).doubleValue()==0);}
+    private JSONObject productLine(JSONObject record,String product) throws Exception {
+        JSONArray lines=record.optJSONArray("lines");if(lines==null)return null;
+        for(int i=0;i<lines.length();i++){JSONObject line=lines.getJSONObject(i);if(product.equals(String.valueOf(presentOr(line,"product",line.opt("productId")))))return line;}return null;
+    }
+    private String recordedTimestamp(JSONObject record) throws Exception {
+        if(record.opt("occurredAt") instanceof String)return record.getString("occurredAt");JSONObject desktop=record.optJSONObject("desktop");if(desktop!=null&&desktop.opt("occurredAt") instanceof String)return desktop.getString("occurredAt");
+        String day=record.optString("date"),time=record.optString("time");if(!day.matches("\\d{4}-\\d{2}-\\d{2}"))return "";if(!time.matches("\\d{2}:\\d{2}(?::\\d{2})?"))time="00:00:00";else if(time.length()==5)time+=":00";return day+"T"+time+".000Z";
+    }
+    private double recordedOrder(JSONObject record) throws Exception {JSONObject desktop=record.optJSONObject("desktop");Object order=presentOr(record,"postingOrder",presentOr(record,"sequence",desktop==null?0:desktop.opt("sequence")));try{return Double.parseDouble(String.valueOf(order));}catch(NumberFormatException ignored){return 0;}}
+    /** Independently derive the three862 read caches from the OLD saved documents.
+     * Never trust a candidate cache or change a cache already present in the old APK. */
+    private JSONObject legacyCostCache(JSONObject oldState,JSONObject product) throws Exception {
+        String id=String.valueOf(product.get("id"));JSONObject latest=null,opening=null;JSONArray records=oldState.getJSONArray("records");
+        for(int i=0;i<records.length();i++){
+            JSONObject record=records.getJSONObject(i);if(record.optBoolean("voided")||"voided".equals(record.optString("status"))||jsonTruthy(record.opt("reversedBy"))||jsonTruthy(record.opt("reversalOf"))||productLine(record,id)==null)continue;
+            if("purchase".equals(record.optString("kind"))){int order=latest==null?1:recordedTimestamp(record).compareTo(recordedTimestamp(latest));if(latest==null||order>0||order==0&&recordedOrder(record)>=recordedOrder(latest))latest=record;}
+            String number=record.optString("number");if(record.optBoolean("openingStock")&&number.isEmpty())number="OPEN-"+record.get("id");if(record.optBoolean("openingCorrection")||number.startsWith("OPEN-"))opening=record;
+        }
+        Double cost=null;String source=null,at=null;
+        if(latest!=null){JSONObject line=productLine(latest,id);cost=positiveRecordedCost(presentOr(line,"price",line.opt("unitPrice")));if(cost!=null){source="purchase";at=recordedTimestamp(latest);}}
+        else{
+            cost=positiveRecordedCost(product.opt("openingCost"));
+            if(!product.has("openingCost")&&opening!=null){Object after=opening.opt("openingStockAfter");boolean hasAfter=opening.has("openingStockAfter");if(opening.optBoolean("openingStock")){after=presentOr(opening,"openingTotalAfter",opening.opt("newQty"));hasAfter=true;}else if(opening.optBoolean("openingCorrection")){after=opening.opt("openingTotalAfter");hasAfter=true;}
+                if(!hasAfter||positiveRecordedCost(after)!=null){JSONObject line=productLine(opening,id);cost=positiveRecordedCost(opening.has("openingCostAfter")?opening.get("openingCostAfter"):presentOr(line,"price",line.opt("unitPrice")));}}
+            if(cost!=null)source="opening";else{cost=positiveRecordedCost(product.opt("legacyOpeningCost"));if(cost!=null)source="legacy-opening";}
+        }
+        return new JSONObject().put("lastPurchaseCost",cost==null?JSONObject.NULL:cost).put("lastPurchaseCostSource",source==null?JSONObject.NULL:source).put("lastPurchaseAt",at==null?JSONObject.NULL:at);
+    }
     /** Only the declared additive migrations may change the old shop. In particular,
      * salaries, invoice raw numbers/IDs, balances and opaque provenance stay exact. */
     private JSONObject migratedBusiness(JSONObject original,int schema) throws Exception {
         JSONObject expected=new JSONObject(original.toString());expected.put("featureSchema",schema);
         if(schema>=3)for(String name:new String[]{"employees","payrollFinancialMovements","auditEvents","expenseCategories"})if(!expected.has(name))expected.put(name,new JSONArray());
+        if(schema>=3&&original.optInt("featureSchema")<3){JSONArray products=expected.getJSONArray("products");for(int i=0;i<products.length();i++){JSONObject product=products.getJSONObject(i),cache=legacyCostCache(original,product);for(String name:new String[]{"lastPurchaseCost","lastPurchaseCostSource","lastPurchaseAt"})if(!product.has(name))product.put(name,cache.get(name));}}
         if(schema>=4){
             assertTrue("Only reviewed schema2/schema3 -> schema4 migrations are accepted",original.getInt("featureSchema")==2||original.getInt("featureSchema")==3||original.getInt("featureSchema")==4);
             if(!expected.has("counters"))expected.put("counters",new JSONArray());
@@ -114,7 +150,10 @@ public class UpgradePersistenceTest {
                 if(counter==null){counter=new JSONObject().put("_id","documentSequence:stock-settlement");counters.put(counter);}counter.put("value",maximum);sequences.put("stock-settlement",maximum);
             }
         }
-        return expected;
+        // JSONObject.put(long) creates a Java Long even for JSON number1. The
+        // installed WebView's JSON parses that same number as Integer. Reparse
+        // only this constructed expectation; comparison still checks every value.
+        return new JSONObject(expected.toString());
     }
     private void businessPreserved(String beforeText,String afterText) throws Exception {
         JSONObject old=new JSONObject(beforeText),next=new JSONObject(afterText);
