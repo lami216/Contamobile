@@ -1,3 +1,4 @@
+import {recordNumber,recordReference} from './document-presentation.js';
 import {mobileLineTotal} from './invoice-amount.js';
 import {currencyCode} from './upgrade-state.js';
 import {translateText} from './i18n.js';
@@ -7,8 +8,10 @@ const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replac
 const number=(v,language)=>Number(v||0).toLocaleString(language==='fr'?'fr-FR':'en-US',{maximumFractionDigits:2});
 export function invoicePdfModel(state,r,labels,{language='ar'}={}){
  const t=v=>translateText(v,language),currency=currencyCode(state),system=v=>['نقدي','بنكيلي','مصرفي','السداد','أمانتي','بيم','المخزن الرئيسي','مخزن الاحتياط'].includes(v)?t(v):v,account=id=>system(state.accounts.find(a=>a.id===id)?.name||'—'),party=state.parties.find(p=>p.id===r.party),kind=labels[r.kind]||r.kind;
- const blocks=[{kind:'heading',text:t(kind)},{kind:'text',text:(r.number||r.kind.toUpperCase()+'-'+r.id)+' · '+t(r.date)+' '+(r.time||'')}];
+ const blocks=[{kind:'heading',text:t(kind)},{kind:'text',text:recordNumber(r)+' · '+t(r.date)+' '+(r.time||'')}];
  const fields=[[t('الحالة'),t(r.voided?'ملغاة':r.due?'على الحساب':'مسجلة')],...(party?[[t(party.type==='supplier'?'المورد':'العميل'),party.name]]:[[t('البيان'),localizedRecordTitle(r,language,state)]]),...(r.account?[[t('وسيلة الدفع'),account(r.account)]]:[]),...(r.to?[[t('الحساب المستلم'),account(r.to)]]:[]),...(r.warehouse?[[t('المخزن'),system(r.warehouse)]]:[]),...(r.from?[[t('من مخزن'),system(r.from)],[t('إلى مخزن'),system(r.toWarehouse)]]:[])];
+ if(recordNumber(r)!==recordReference(r))fields.push([t('المرجع الأصلي'),recordReference(r)]);
+ if(r.kind==='employee-closure')fields.push([t('نوع الحركة'),t('عملية غير نقدية')],[t('احتياطي الأجور المحرر'),r.salaryReserveReleased]);
  blocks.push({kind:'table',rows:fields,header:false,widths:[.24,.76]});
  if(r.lines.length){const adjustment=r.kind==='adjustment';blocks.push({kind:'subheading',text:t(adjustment?'تفاصيل التصحيح':'بنود الفاتورة')},{kind:'table',widths:[.46,.12,.20,.22],rows:[[t('المنتج'),t(adjustment?'التغيير':'الكمية'),t('سعر الوحدة')+' '+currency,t('المجموع')+' '+currency],...r.lines.map(l=>[l.name+(l.warehouse?' · '+system(l.warehouse):''),adjustment?l.delta:l.qty,l.price,mobileLineTotal(l)])]});}
  blocks.push({kind:'table',rows:[[t('الإجمالي')+' '+currency,r.total],...(r.paid!=null?[[t('المدفوع')+' '+currency,r.paid]]:[]),...(r.due!=null?[[t('على الحساب')+' '+currency,r.due]]:[])],header:false,widths:[.60,.40]});if(r.note)blocks.push({kind:'subheading',text:t('الملاحظة')},{kind:'text',text:r.note});
@@ -21,7 +24,7 @@ export function reportModel(state,records,labels,scope='كل الفترة',{lang
   {kind:'heading',text:'تفاصيل المستندات الكاملة'}];
  records.forEach((r,i)=>{
   const sheets=recordExportData(state,[r],labels,{language}),headers=sheets[0].rows[0],values=sheets[0].rows[1];
-  blocks.push({kind:'subheading',text:`${i+1}. ${t(labels[r.kind]||r.kind)} — ${r.number||r.kind.toUpperCase()+'-'+r.id}`});
+  blocks.push({kind:'subheading',text:`${i+1}. ${t(labels[r.kind]||r.kind)} — ${recordNumber(r)}`});
   const fields=headers.map((h,j)=>[h,values[j]]).filter(([,v])=>v!==''&&v!==undefined&&v!==null);
   const rows=[];for(let j=0;j<fields.length;j+=3)rows.push(fields.slice(j,j+3).flat().concat(Array(Math.max(0,6-fields.slice(j,j+3).flat().length)).fill('')));
   blocks.push({kind:'table',widths:[.17,.16,.17,.16,.17,.17],rows,header:false});

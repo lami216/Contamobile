@@ -89,11 +89,38 @@ public class UpgradePersistenceTest {
         for(int i=0;i<rows.length();i++)if(id.equals(rows.getJSONObject(i).getString("id")))return rows.getJSONObject(i);
         return null;
     }
+    private boolean ordinarySettlement(JSONObject row) {
+        if(!"adjustment".equals(row.optString("kind"))||row.optBoolean("productArchiveStockClearance"))return false;
+        String number=row.optString("number").trim(),title=row.optString("title").trim();
+        return !(row.optBoolean("openingStock")||row.optBoolean("openingCorrection")||number.startsWith("OPEN-COR")||number.equals("OPEN")||number.startsWith("OPEN-")||Arrays.asList("رصيد بداية","تصحيح رصيد البداية","إضافة رصيد افتتاحي").contains(title)||row.has("openingStockAfter")||row.has("openingTotalBefore")&&row.has("openingTotalAfter"));
+    }
+    /** Only the declared additive migrations may change the old shop. In particular,
+     * salaries, invoice raw numbers/IDs, balances and opaque provenance stay exact. */
+    private JSONObject migratedBusiness(JSONObject original,int schema) throws Exception {
+        JSONObject expected=new JSONObject(original.toString());expected.put("featureSchema",schema);
+        if(schema>=3)for(String name:new String[]{"employees","payrollFinancialMovements","auditEvents","expenseCategories"})if(!expected.has(name))expected.put(name,new JSONArray());
+        if(schema>=4){
+            assertTrue("Only reviewed schema2/schema3 -> schema4 migrations are accepted",original.getInt("featureSchema")==2||original.getInt("featureSchema")==3||original.getInt("featureSchema")==4);
+            if(!expected.has("counters"))expected.put("counters",new JSONArray());
+            JSONArray counters=expected.getJSONArray("counters");JSONObject counter=null;
+            for(int i=0;i<counters.length();i++)if("documentSequence:stock-settlement".equals(counters.getJSONObject(i).optString("_id")))counter=counters.getJSONObject(i);
+            JSONObject sequences=expected.getJSONObject("sequences");long maximum=Math.max(counter==null?0:counter.getLong("value"),sequences.optLong("stock-settlement",0));
+            ArrayList<JSONObject> rows=new ArrayList<>();JSONArray records=expected.getJSONArray("records");
+            for(int i=0;i<records.length();i++)if(ordinarySettlement(records.getJSONObject(i)))rows.add(records.getJSONObject(i));
+            rows.sort(Comparator.comparingLong(row->row.optLong("id")));Set<Long> used=new HashSet<>();ArrayList<JSONObject> missing=new ArrayList<>();
+            for(JSONObject row:rows){if(row.has("settlementSequence")){long sequence=row.getLong("settlementSequence");assertTrue("Existing settlement sequence is a unique positive integer",sequence>0&&used.add(sequence));maximum=Math.max(maximum,sequence);}else missing.add(row);}
+            for(JSONObject row:missing)row.put("settlementSequence",++maximum);
+            if(!rows.isEmpty()||counter!=null||maximum>0){
+                if(counter==null){counter=new JSONObject().put("_id","documentSequence:stock-settlement");counters.put(counter);}counter.put("value",maximum);sequences.put("stock-settlement",maximum);
+            }
+        }
+        return expected;
+    }
     private void businessPreserved(String beforeText,String afterText) throws Exception {
         JSONObject old=new JSONObject(beforeText),next=new JSONObject(afterText);
         JSONArray snapshots=old.getJSONArray("snapshots"),updated=next.getJSONArray("snapshots");
         JSONObject oldShop=shopRow(snapshots),newShop=shopRow(updated),oldState=oldShop.getJSONObject("state"),newState=newShop.getJSONObject("state");
-        int expectedSchema=Integer.parseInt(InstrumentationRegistry.getArguments().getString("expectedFeatureSchema","3"));
+        int expectedSchema=Integer.parseInt(InstrumentationRegistry.getArguments().getString("expectedFeatureSchema","4"));
         assertEquals("The installed runtime has the expected additive schema",expectedSchema,newState.getInt("featureSchema"));
         boolean migrated=oldState.optInt("featureSchema",0)<expectedSchema;
         assertEquals("Exactly one atomic migration commit",oldShop.getLong("revision")+(migrated?1:0),newShop.getLong("revision"));
@@ -109,14 +136,14 @@ public class UpgradePersistenceTest {
             assertEquals("No unrelated metadata is introduced",prior.length()+(oldCloud==null?1:0),current.length());
         }
         for(int i=0;i<snapshots.length();i++){JSONObject row=snapshots.getJSONObject(i),found=byId(updated,row.getString("id"));assertNotNull("Old snapshot retained",found);
-            if(row.getString("id").equals("shop")){JSONObject expected=new JSONObject(row.getJSONObject("state").toString());expected.remove("featureSchema");preserved(expected,found.getJSONObject("state"),"all existing business fields");}
+            if(row.getString("id").equals("shop")){JSONObject expected=migratedBusiness(row.getJSONObject("state"),expectedSchema);preserved(expected,found.getJSONObject("state"),"all existing business fields");preserved(found.getJSONObject("state"),expected,"no undeclared business migration");}
             else preserved(row,found,"historical snapshot");
         }
         for(int i=0;i<updated.length();i++){JSONObject row=updated.getJSONObject(i);String id=row.getString("id");boolean existed=byId(snapshots,id)!=null;
-            if("before-feature-upgrade-862".equals(id)&&!existed){assertTrue("Migration backup requires a real migration",migrated);preserved(oldState,row.getJSONObject("state"),"pre-862 migration backup");preserved(row.getJSONObject("state"),oldState,"pre-862 migration backup has no substituted fields");}
-            else assertTrue("Only known migration backup rows may be added: "+id,existed||"before-compact-product-names".equals(id)||"safety-backup".equals(id));
+            if((expectedSchema>=4?"before-feature-upgrade-870":"before-feature-upgrade-862").equals(id)&&!existed){assertTrue("Migration backup requires a real migration",migrated);preserved(oldState,row.getJSONObject("state"),"exact pre-migration backup");preserved(row.getJSONObject("state"),oldState,"pre-migration backup has no substituted fields");}
+            else assertTrue("Only known migration backup rows may be added: "+id,existed||expectedSchema<4&&("before-compact-product-names".equals(id)||"safety-backup".equals(id)));
         }
-        if(migrated)assertNotNull("An exact pre-migration copy is retained",byId(updated,"before-feature-upgrade-862"));
+        if(migrated)assertNotNull("An exact pre-migration copy is retained",byId(updated,expectedSchema>=4?"before-feature-upgrade-870":"before-feature-upgrade-862"));
     }
     protected DeviceLicense nativePreserved(JSONObject before,boolean chargedOfflineInterval) throws Exception {
         checkVersion();DeviceLicense license=new DeviceLicense(target());

@@ -1,3 +1,4 @@
+import {isStockSettlementDocument,nextStockSettlementSequence} from './stock-settlement.js';
 import {installAccountingHealthFeatures} from './feature-health.js';
 import {installEmployeeFeatures} from './feature-employees.js';
 import {installPartyOpeningFeatures} from './feature-party-opening.js';
@@ -25,12 +26,16 @@ export function installFeatures(api){
  const originalSite=api.siteAction;api.siteAction=async function(action){
   if(action==='site:user'||action.startsWith('site:user:')||action==='site:new-user')admin.resetUser();
   if(action.startsWith('site:feature:')){const {command,id,rest}=commandOf(action),group=groupFor(command);if(!group)throw Error('الإجراء غير متاح');const cap=group.permission(command,id);if(cap&&!api.can(cap))throw Error('لا تسمح صلاحيات حسابك بهذا الإجراء');return group.action(command,id,rest);}
+  if(action.startsWith('site:archive-product:'))return stock.action('stock-archive',action.split(':')[2]);
+  if(action.startsWith('site:unarchive:product:'))return stock.action('stock-restore',action.split(':')[3]);
   if(action==='site:save-user')return admin.saveUser();
   if(action==='site:export-excel')return report.output('excel');if(action==='site:export-pdf')return report.output('pdf');
   if(action.startsWith('site:archive-account:')&&Number(action.split(':')[2])===cashAccount(S)?.id)throw Error('لا يمكن أرشفة وسيلة الدفع النقدية الأساسية');
   return originalSite(action);
  };
  const originalPermission=api.permissionFor;api.permissionFor=function(action){
+  if(action.startsWith('site:archive-product:'))return 'products.delete';
+  if(action.startsWith('site:unarchive:product:'))return 'products.edit';
   if(action.startsWith('site:feature:')){const {command,id}=commandOf(action);return groupFor(command)?.permission(command,id)||null;}
   const [command,id]=action.split(':'),r=['source','void','confirm-void'].includes(command)?S.records.find(r=>r.id===Number(id||selected)):command==='commit-pending'?pendingRecord:null;
   if(r){const suffix=['void','confirm-void'].includes(command)?'delete':command==='source'||editingId?'edit':'create';
@@ -47,7 +52,9 @@ export function installFeatures(api){
   const now=new Date().toISOString();if(!old){r.occurredAt=now;r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;}else{for(const key of ['occurredAt','postingOrder']){if(Object.hasOwn(old,key))r[key]=old[key];else delete r[key];}}for(const line of r.lines||[])line.id??=crypto.randomUUID();
   if(old?.openingAccountCorrection){const latest=S.records.find(x=>!x.voided&&x.openingAccountCorrection&&x.account===old.account);if(latest?.id!==old.id)throw Error('يمكن تعديل آخر تصحيح فعال فقط');}
   if(!old&&['sale','purchase','expense'].includes(r.kind)){r.sequence=nextDocumentNumber(S,r.kind);r.number=String(r.sequence);}
-  if(!originalCommit(r))return false;
+  const numberingState=isStockSettlementDocument(r)?structuredClone(S):null;
+  if(isStockSettlementDocument(r)){if(old)r.settlementSequence=old.settlementSequence;else{r.canonicalId??='adjustment-'+crypto.randomUUID();r.number??='ADJ-'+Date.now()+'-'+crypto.randomUUID().slice(0,6);r.settlementSequence=nextStockSettlementSequence(S);}}
+  if(!originalCommit(r)){if(numberingState)api.replaceState(numberingState);return false;}
   S.auditEvents??=[];S.auditEvents.push({id:crypto.randomUUID(),action:r.kind+(previous?'.update':'.post'),status:'committed',entityId:String(r.id),createdAt:r.updatedAt,actor:{id:api.actor?.id,name:api.actor?.name,principalType:api.actor?.role==='owner'?'owner':'user'}});
   reconcileHistoricalArchives(S,r,previous);
   if(previous)applyOpeningMetadata(S,previous,true);
@@ -88,7 +95,7 @@ export function installFeatures(api){
   stock.after(action,oldView,oldModal,oldEditing);return result;
  };
  const oldSheet=sheet;sheet=function(){for(const group of groups){const html=group.sheet();if(html)return html;}let html=stock.expenseHtml(oldSheet());if(modal==='expense')html=html.replace('<form id="sheet-form">','<form id="sheet-form">'+categories.expenseField(S.records.find(r=>r.id===editingId))); if(modal==='site-export')html=html.replace(/<button type="button" data-action="site:export-print">[\s\S]*?<\/button>/,'');return html;};
- const oldProduct=productDetail;productDetail=function(){const p=S.products.find(p=>p.id===selected);return oldProduct()+(p?`<div class="management-actions"><button class="feature-button" data-action="site:feature:opening:${p.id}">رصيد البداية وسجله</button></div>`:'')};
+ const oldProduct=productDetail;productDetail=function(){const p=S.products.find(p=>p.id===selected),html=oldProduct().replace(/<button[^>]*data-action="site:(?:archive-product:|unarchive:product:)[^"]*"[^>]*>[\s\S]*?<\/button>/g,'');return html+(p?`<div class="management-actions"><button class="feature-button" data-action="site:feature:opening:${p.id}">رصيد البداية وسجله</button></div>`+stock.productActions(p):'')};
  const oldInvoice=invoice;invoice=function(){return oldInvoice().replace(/<button class="document-print" data-action="site:print">[\s\S]*?<\/button>/,`<button class="document-print" data-action="site:feature:document-output">${icon('receipt')}تصدير الفاتورة</button>`)};
  const oldRender=render;render=function(){oldRender();stock.restoreInputs();
   const root=document.querySelector('#phone');if(!api.actor||!root)return;
@@ -105,5 +112,5 @@ export function installFeatures(api){
   const file=event.target.files[0],actorId=api.actor?.id;if(!api.can('settings.branding.manage'))return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('اختر صورة PNG أو JPG أو WebP أصغر من 5 ميغابايت');const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),scale=Math.min(1,512/Math.max(bitmap.width,bitmap.height));canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const logo=canvas.toDataURL('image/png');if(logo.length>700000)throw Error('صورة الشعار كبيرة جدًا');if(api.actor?.id!==actorId||view!=='branding'||!api.can('settings.branding.manage'))return;admin.setLogo(logo);
   }catch(e){api.fail(e.message)}});
  const business=installBusinessRuntime(api,{employees,partyOpening,categories,health});
- return {report,admin,stock,business,async afterSave(){for(const group of [health,employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){for(const group of [health,employees,partyOpening,categories])group.afterFailure?.()}};
+ return {report,admin,stock,business,async afterSave(){for(const group of [health,employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){for(const group of [health,employees,partyOpening,categories,stock])group.afterFailure?.()}};
 }

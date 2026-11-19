@@ -5,6 +5,7 @@ import {mobileLineTotal,invoiceAmountFields,mobileInvoiceTotal} from './invoice-
 import {saleLineCost,refreshCurrentProductCosts,suggestedPurchasePrice} from './cost-provenance.js';
 
 export function financialRecordReadOnly(state,record){
+ if(record.kind==='employee-closure'||record.kind?.startsWith('employee-')&&(state.employees||[]).some(e=>e.id===record.employeeId&&e.isDeleted===true))return true;
  if(record.importReadOnly)return true;
  if(['sale','purchase','expense'].includes(record.kind)&&record.legacyKey)return true;
  return record.kind==='sale'&&(state.records||[]).some(row=>row.kind==='return'&&!row.voided&&(!row.status||row.status==='posted')&&[record.id,record.desktopId].filter(v=>v!=null).some(id=>String(row.parentDocumentId??row.desktop?.parentDocumentId)===String(id)));
@@ -21,7 +22,7 @@ export function storedPartyDelta(state,record,partyId){
 }
 export function cashDelta(record,accountId){
  if(record.kind==='return')return record.account===accountId?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
- if(record.kind==='employee-accrual'||record.kind==='party-opening')return 0;
+ if(record.kind==='employee-accrual'||record.kind==='employee-closure'||record.kind==='party-opening')return 0;
  if(record.kind==='employee-payment')return record.account===accountId?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  return (record.account===accountId?(['sale','receive','deposit'].includes(record.kind)?1:-1)*Number(record.paid||0):0)+(record.kind==='transfer'&&record.to===accountId?record.total:0);
 }

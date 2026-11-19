@@ -1,3 +1,4 @@
+import {isArchiveStockClearance} from './archive-stock-clearance.js';
 // Archive flags must never hide an outstanding balance. These changes are saved
 // in the same transaction as the edit/reversal; financial values stay untouched.
 function expose(entity, paymentAccount = false) {
@@ -33,7 +34,7 @@ export function reconcileHistoricalArchives(state, record, previous = null, canc
   if (keptOriginal && (account.archived || account.active === false) ||
       account.archived && Number.isFinite(account.balance) && account.balance !== 0) expose(account, true);
  }
- for(const product of state.products||[])if(product.archived&&records.some(r=>(r.lines||[]).some(l=>l.product===product.id))&&Object.values(product.stocks||{}).some(quantity=>quantity>0))expose(product);
+ for(const product of state.products||[]){const ids=new Set([product.id,product.desktopId,product.canonicalId].filter(v=>v!=null).map(String)),pending=(state.records||[]).some(r=>isArchiveStockClearance(r)&&!r.voided&&(r.status===undefined||r.status==='posted')&&((r.lines||[]).some(l=>l.product===product.id)||[r.productArchiveProductId,r.productArchiveCanonicalProductId].filter(v=>v!=null).some(v=>ids.has(String(v)))));if(product.archived&&!pending&&records.some(r=>(r.lines||[]).some(l=>l.product===product.id))&&Object.values(product.stocks||{}).some(quantity=>quantity>0))expose(product);}
  for (const party of state.parties || []) {
   if (parties.has(party.id) && party.archived && Number.isFinite(party.balance) && party.balance !== 0) expose(party);
  }

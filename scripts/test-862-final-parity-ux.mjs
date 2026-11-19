@@ -49,6 +49,8 @@ try{
    if(mode==='tiny-edit'){base.paid=base.total=1;base.lines=[{...base.lines[0]}];p.stocks[w]=1e-20;p.qty=1e-20;s.opening.stocks[1][w]=1;s.accounts[0].balance=1;s.records.push({...base,id:102,number:'AUDIT-102',kind:'purchase',paid:1e-20,total:1e-20,time:'11:00',lines:[{id:'TINY',product:1,name:p.name,qty:1e-20,price:1,lineTotal:1e-20,lineTotalMode:'exact'}]});}
    if(mode==='archived-warehouse'){const b=s.warehouses.find(x=>x!==w)||'مخزن سابق';if(!s.warehouses.includes(b))s.warehouses.push(b);s.warehouseMeta[b]={archived:true};p.stocks=Object.fromEntries(s.warehouses.map(x=>[x,0]));s.opening.stocks[1]={...p.stocks,[b]:2};base.warehouse=b;base.paid=base.total=2;base.lines=[{...base.lines[0],qty:2,lineTotal:2}];s.accounts[0].balance=2;s.salesWarehouse=w;s.warehouse=w;}
    if(mode==='archived-correction'){const b=s.warehouses.find(x=>x!==w)||'مخزن سابق';if(!s.warehouses.includes(b))s.warehouses.push(b);s.warehouseMeta[b]={archived:true};p.stocks=Object.fromEntries(s.warehouses.map(x=>[x,0]));s.opening.stocks[1]={...p.stocks,[b]:2};base.kind='adjustment';base.warehouse=b;base.paid=base.total=0;base.newQty=0;base.note='جرد أصل';base.lines=[{id:'COUNT',product:1,name:p.name,qty:2,delta:-2,price:1,actualQuantity:0,balanceBefore:2,balanceAfter:0}];s.salesWarehouse=w;s.warehouse=w;}
+   // Injected historical records need the same additive metadata preparation as imported legacy state.
+   const {upgradeState}=await import('./upgrade-state.js');upgradeState(s);
    await db.save(s);db.db.close();return {id:101,warehouse:base.warehouse};
   },mode);await reload(page);return info;
  }

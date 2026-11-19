@@ -19,7 +19,7 @@ const accountAdjustment=['banks.view','banks.movements.view','banks.deposit_with
 function readScope(state,record){
  if(!record||typeof record!=='object')return {caps:[],fallback:'records.view'};
  const kind=record.kind,party=partyOf(state,record),related=party?(partyType(party)==='customer'?customer:supplier):[];
- if(kind==='employee-accrual'||kind==='employee-payment')return {caps:['employees.view'],fallback:'employees.view',private:true};
+ if(kind==='employee-accrual'||kind==='employee-payment'||kind==='employee-closure')return {caps:['employees.view'],fallback:'employees.view',private:true};
  if(kind==='sale')return {caps:[...sale,...(party&&partyType(party)==='customer'?customer:[])],fallback:'pos.view'};
  if(kind==='purchase')return {caps:[...purchase,...(party&&partyType(party)==='supplier'?supplier:[])],fallback:'purchases.view'};
  if(kind==='party-opening')return {caps:['party.opening.manage',...related],fallback:'party.opening.manage'};

@@ -37,6 +37,9 @@ outputs/desktop862-qa/
 approved-runtime/assets/StitchArabic*.ttf
 parity-browser/
 desktop-862-source/
+desktop-870-source/
+outputs/desktop870-qa/
+build-870/
 
 __pycache__/
 *.pyc

@@ -1,3 +1,4 @@
+import {recordNumber} from './document-presentation.js';
 import {canReadRecord,recordReadCapability,validatePartyIdentity,partyDisplayName} from './business-identity.js';
 import {cashAccount} from './upgrade-state.js';
 import {inventoryUnitCost} from './cost-provenance.js';
@@ -10,7 +11,7 @@ export function installBusinessRuntime(api,groups){
  const {employees,partyOpening,categories,health}=groups;
  globalThis.karnaBusiness={
   profit:(state,records)=>{const facts=profitSummary(saleFacts(state,{records}));return facts.costKnown?facts.profit:null},
-  cashAccount,partyName:partyDisplayName,
+  cashAccount,partyName:partyDisplayName,documentNumber:recordNumber,
   revise:applyRecordRevision,
   unitCost:inventoryUnitCost,
   saleCost:saleLineCost,purchasePrice:suggestedPurchasePrice,stockAfter:stockBalanceAfter,lineTotal:mobileLineTotal,draftLine:invoiceDraftLine,
@@ -57,7 +58,7 @@ export function installBusinessRuntime(api,groups){
  partyDelta=function(record,id){return ['party-opening','return'].includes(record.kind)?storedPartyDelta(S,record,id):originalEffect(record,id)};
  accountDelta=function(record,id){return record.kind.startsWith('employee-')||['party-opening','return'].includes(record.kind)?cashDelta(record,id):originalCash(record,id)};
  documentLabels.return='مرتجع';
- documentLabels['party-opening']='رصيد بداية طرف';documentLabels['employee-accrual']='استحقاق راتب';documentLabels['employee-payment']='حركة حساب موظف';
+ documentLabels['party-opening']='رصيد بداية طرف';documentLabels['employee-accrual']='استحقاق راتب';documentLabels['employee-payment']='حركة حساب موظف';documentLabels['employee-closure']='إقفال حساب عامل محذوف';
  titles.employees='الموظفون';titles['employee-ledger']='حساب الموظف';
  sectionThemes.employees=sectionThemes.parties;sectionThemes['employee-ledger']=sectionThemes.parties;
  const oldRows=rows;rows=function(list,description){return oldRows(list.filter(r=>canReadRecord(S,r,api.can)),description)};

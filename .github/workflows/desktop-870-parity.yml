@@ -1,0 +1,77 @@
+name: Desktop 870 business parity
+on:
+  pull_request:
+  push:
+    branches: [feat/desktop-870-parity-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop870-parity-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  business-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PLAYWRIGHT_MODULE: ${{ github.workspace }}/parity-browser/node_modules/playwright
+      PLAYWRIGHT_USE_BUNDLED: '1'
+      DESKTOP_862_ROOT: ${{ github.workspace }}/desktop-862-source
+      DESKTOP_862_SOURCE: ${{ github.workspace }}/desktop-862-source
+      DESKTOP_870_ROOT: ${{ github.workspace }}/desktop-870-source
+      DESKTOP_870_SOURCE: ${{ github.workspace }}/desktop-870-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lami216/offline-conta
+          ref: bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0
+          path: desktop-862-source
+      - uses: actions/checkout@v4
+        with:
+          repository: lami216/offline-conta
+          ref: e4cbe46fd59e302140e6d885c69ca98376d4a00d
+          path: desktop-870-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned browser and runtime dependencies
+        run: |
+          npm install --prefix parity-browser --ignore-scripts --no-audit --no-fund playwright@1.62.1
+          parity-browser/node_modules/.bin/playwright install --with-deps chromium --only-shell
+          python scripts/prepare-approved-android.py
+          cp assets/fonts/StitchArabic*.ttf approved-runtime/assets/
+      - name: Preserve existing source comparisons and domain regressions
+        run: node scripts/test-862-regressions.mjs
+      - name: Compare new rules with the exact Desktop 870 source
+        run: |
+          node scripts/test-payroll-parity-870.mjs
+          node scripts/test-stock-parity-870.mjs
+          node scripts/test-shared-contract-870.mjs
+          node scripts/test-reports-parity-870.mjs
+      - name: Preserve mobile storage, activation, recovery and workflows
+        run: node scripts/test-862-regressions.mjs --browser
+      - name: Preserve existing workspaces and finance integration
+        run: |
+          node scripts/test-business-workspaces-862.mjs
+          node scripts/test-mobile-finance-862-ux.mjs
+          node scripts/test-862-historical-edges-ux.mjs
+          node scripts/test-862-final-parity-ux.mjs
+          node scripts/test-business-identity-ux-862.mjs
+          node scripts/test-pos-draft-lifecycle-862.mjs
+      - name: Exercise new mobile flows and frozen package
+        run: |
+          node scripts/test-workers-870-ux.mjs
+          node scripts/test-stock-parity-870-ux.mjs
+          node scripts/verify-870-package.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-870-parity-evidence
+          path: |
+            outputs/desktop870-qa/
+            outputs/desktop862-qa/
+          if-no-files-found: error

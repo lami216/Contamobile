@@ -1,4 +1,5 @@
 import {employeeFrench} from './feature-employees.js';
+import {stockFrench} from './feature-stock.js';
 import {financeTranslations} from './finance-language.js';
 import {partyOpeningFrench} from './feature-party-opening.js';
 import {expenseCategoryFrench} from './feature-expense-categories.js';
@@ -83,6 +84,20 @@ Object.assign(translations,{
 Object.assign(translations,financeTranslations,partyOpeningFrench,expenseCategoryFrench,{'الموظفون':'Employés','حساب الموظف':'Compte de l’employé','استحقاق راتب':'Salaire acquis','حركة حساب موظف':'Mouvement employé','رصيد بداية طرف':'Solde initial de tiers','أرصدة بداية الأطراف':'Soldes initiaux des tiers','غير مؤكد':'Non confirmé','الحسابات والرواتب والحركات':'Comptes, salaires et mouvements'});
 
 Object.assign(translations,employeeFrench);
+Object.assign(translations,stockFrench,{
+ 'إقفال حساب عامل محذوف':'Clôture du compte d’un employé supprimé',
+ 'احتياطي الأجور المحرر':'Réserve salariale libérée',
+ 'رقم تسوية المخزون':'N° de correction de stock',
+ 'المرجع الأصلي':'Référence d’origine',
+ 'بداية الحركات الفعلية':'Début des mouvements réels',
+ 'استحقاق أعيد احتسابه':'Salaire acquis recalculé',
+ 'إثبات سداد الدين التاريخي':'Justificatif de remboursement de la dette antérieure',
+ 'تغير احتياطي الأجور = الاستحقاق − الأجر المعترف به − الاحتياطي المحرر عند الإقفال.':'Variation de la réserve salariale = salaire acquis − salaire reconnu − réserve libérée à la clôture.',
+ 'تحرير الاحتياطي عند إقفال حساب العامل لا ينشئ حركة نقدية.':'La libération de la réserve à la clôture du compte de l’employé ne crée aucun mouvement de trésorerie.',
+ 'عدادات المستندات غير صالحة':'Les compteurs de documents sont invalides.',
+ 'تعذر تخصيص معرّف مستند صالح':'Impossible d’attribuer un identifiant de document valide.',
+ 'تعذر تصفير المخزون لأن أحد المخازن المرتبطة بالمنتج غير موجود':'Impossible de remettre le stock à zéro : un dépôt lié au produit est introuvable.'
+});
 
 Object.assign(translations,{'دفعة جزئية محفوظة من المصدر':'Paiement partiel conservé de la source','مدفوعة جزئيًا':'Partiellement réglée','المتبقي':'Reste à payer','لا يمكن تصحيح هذا المنتج في المخزن قبل دخوله برصيد بداية أو شراء أو تحويل':'Impossible de corriger ce produit avant son entrée dans le dépôt par un stock initial, un achat ou un transfert.','لا يمكن زيادة المخزون بالتصحيح دون مصدر تكلفة موثّق':'Impossible d’augmenter le stock par correction sans source de coût justifiée.','لا يوجد تغيير في المخزون لاعتماده':'Aucune variation du stock à valider.'});
 

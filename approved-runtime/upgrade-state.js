@@ -1,9 +1,10 @@
+import {normalizeStockSettlementSequences,isStockSettlementDocument,validSettlementSequence,STOCK_SETTLEMENT_COUNTER_ID} from './stock-settlement.js';
 import {ensurePayrollState,validatePayrollState} from './payroll-domain.js';
 import {ensurePartyOpeningState,validatePartyOpeningState,partyOpeningNetDelta} from './party-opening-domain.js';
 import {ensureExpenseCategoryState,validateExpenseCategoryState} from './expense-category-domain.js';
 import {invoiceAmountFields,invoiceAmountNumber,sumInvoiceLineTotals} from './invoice-amount.js';
 // Additive approved-runtime state, following the desktop settings and sequence contracts.
-export const FEATURE_SCHEMA=3;
+export const FEATURE_SCHEMA=4;
 export const roundMoney=value=>Math.round((Number(value)+Number.EPSILON)*100)/100;
 export function currencyCode(state){return /^[A-Z]{3}$/.test(state?.currency?.code||'')?state.currency.code:'MRU'}
 export function validateCurrency(value){
@@ -13,24 +14,52 @@ export function validateCurrency(value){
  if(availableCodes.some(v=>!/^[A-Z]{3}$/.test(v))||availableCodes.length>30)throw Error('قائمة العملات غير صالحة');
  return {code,availableCodes};
 }
+const sharedCounterIds=['documentSequence:sale','documentSequence:purchase','documentSequence:expense',STOCK_SETTLEMENT_COUNTER_ID];
+const validCounter=value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
+/** Counter rows are canonical source metadata. Unrelated counters stay opaque. */
+export function validateSharedCounters(state){
+ if(state.counters!==undefined&&(!Array.isArray(state.counters)||state.counters.length>1000000))throw Error('عدادات المستندات غير صالحة');
+ const seen=new Set();for(const row of state.counters||[]){if(!row||!sharedCounterIds.includes(row._id))continue;if(seen.has(row._id)||!validCounter(row.value))throw Error('عدادات المستندات غير صالحة');seen.add(row._id);}
+ if(state.sequences!==undefined&&(!state.sequences||typeof state.sequences!=='object'||Array.isArray(state.sequences)))throw Error('عدادات المستندات غير صالحة');
+ for(const key of ['sale','purchase','expense','stock-settlement'])if(state.sequences?.[key]!==undefined&&!validCounter(state.sequences[key]))throw Error('عدادات المستندات غير صالحة');
+ return true;
+}
+function retainedSourceCounters(state){
+ const sources=[state.desktopOriginal,...(state.desktopImportSources||[]).map(row=>row.backup)],rows=[],byId=new Map();
+ for(const source of sources){
+  const retained=source?.collections?.counters;if(retained===undefined)continue;
+  if(!Array.isArray(retained))throw Error('عدادات النسخة الأصلية غير صالحة');
+  const batch=structuredClone(retained);
+  for(const row of batch){if(!row||!sharedCounterIds.includes(row._id))continue;const value=row.value;if(value&&typeof value==='object'&&Object.keys(value).length===1){for(const tag of ['$numberInt','$numberLong','$numberDouble','$numberDecimal'])if(Object.hasOwn(value,tag))row.value=Number(value[tag]);}}
+  validateSharedCounters({counters:batch});
+  for(const row of batch){const id=row?._id??row?.id,old=id==null?null:byId.get(String(id));if(old){if(sharedCounterIds.includes(row._id))old.value=Math.max(old.value,row.value);continue;}rows.push(row);if(id!=null)byId.set(String(id),row);}
+ }
+ return rows;
+}
 export function upgradeState(state){
  const before=JSON.stringify(state);
  ensurePayrollState(state);ensurePartyOpeningState(state);ensureExpenseCategoryState(state);
  state.currency=validateCurrency(state.currency||{code:'MRU',availableCodes:['MRU']});state.categories??=[];
  state.warehouseMeta??={};for(const name of state.warehouses)state.warehouseMeta[name]??={archived:false};
- state.salesWarehouse??=state.warehouse;state.sequences??={};state.brandInfo??={};
+ state.salesWarehouse??=state.warehouse;state.sequences??={};if(state.counters===undefined)state.counters=retainedSourceCounters(state);state.brandInfo??={};validateSharedCounters(state);
  for(const a of state.accounts)if(a.active===undefined)a.active=!a.archived;
  for(const kind of ['sale','purchase','expense']){
   const records=state.records.filter(r=>r.kind===kind).slice().sort((a,b)=>a.id-b.id),used=new Set(records.map(r=>r.sequence).filter(Number.isSafeInteger));let next=0;
   for(const r of records){if(!r.sequence){while(used.has(++next)){}r.sequence=next;used.add(next)}r.number??=r.kind.toUpperCase()+'-'+r.id;}
-  state.sequences[kind]=Math.max(state.sequences[kind]||0,0,...used);
+  state.sequences[kind]=Math.max(state.sequences[kind]||0,state.counters.find(row=>row?._id==='documentSequence:'+kind)?.value||0,0,...used);
  }
- state.originId??=crypto.randomUUID();state.featureSchema=FEATURE_SCHEMA;
+ normalizeStockSettlementSequences(state,{orderedRecords:state.records.slice().sort((a,b)=>a.id-b.id)});state.originId??=crypto.randomUUID();state.featureSchema=FEATURE_SCHEMA;
  return before!==JSON.stringify(state);
 }
 export function nextDocumentNumber(state,kind){return Math.max(state.sequences?.[kind]||0,0,...state.records.filter(r=>r.kind===kind).map(r=>Number(r.sequence)||0))+1}
 export function validateFeatureState(state){
- validatePayrollState(state);validatePartyOpeningState(state);validateExpenseCategoryState(state);
+ validatePayrollState(state);validatePartyOpeningState(state);validateExpenseCategoryState(state);validateSharedCounters(state);
+ if(state.featureSchema>=4){
+  if(!Array.isArray(state.counters))throw Error('بيانات عدادات المستندات غير مكتملة');
+  const used=new Set();let maximum=0;for(const row of state.records.filter(isStockSettlementDocument)){if(!validSettlementSequence(row.settlementSequence)||used.has(row.settlementSequence))throw Error('ترقيم تسويات المخزون غير صالح');used.add(row.settlementSequence);maximum=Math.max(maximum,row.settlementSequence);}
+  const counter=state.counters.find(row=>row?._id===STOCK_SETTLEMENT_COUNTER_ID),mirror=state.sequences?.['stock-settlement'],hasReservation=used.size||counter||(mirror??0)>0;
+  if(hasReservation&&(!counter||mirror===undefined||counter.value!==mirror)||Math.max(counter?.value??0,mirror??0)<maximum)throw Error('عداد تسويات المخزون لا يطابق المستندات');
+ }
  for(const r of state.records){
   let hasExact=false;
   for(const line of r.lines||[]){
@@ -76,7 +105,7 @@ export function partyNetDelta(record){
 }
 export function moneyAccountDelta(record,id){
  if(record.kind==='return')return record.account===id?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
- if(record.kind==='party-opening'||record.kind==='employee-accrual')return 0;
+ if(record.kind==='party-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure')return 0;
  if(record.kind==='employee-payment')return record.account===id?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  let value=record.account===id?(['sale','receive','deposit'].includes(record.kind)?Number(record.paid||0):-Number(record.paid||0)):0;
  if(record.kind==='transfer'&&record.to===id)value+=Number(record.total);return value;

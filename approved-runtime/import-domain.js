@@ -1,4 +1,5 @@
-import {upgradeState,partyNetDelta} from './upgrade-state.js';
+import {upgradeState,partyNetDelta,validateSharedCounters} from './upgrade-state.js';
+import {normalizeStockSettlementSequences,isStockSettlementDocument,validSettlementSequence} from './stock-settlement.js';
 import {seedStockEvents} from './stock-domain.js';
 import {stockBalanceAfter} from './accounting-numbers.js';
 import {expenseCategoryName,expenseCategoryKind} from './expense-category-domain.js';
@@ -7,7 +8,7 @@ import {validateState} from './database.js';
 import {sha256Hex} from './accounting-hash.js';
 import {executeLegacyImportPhase,preflightLegacyDatabase,inspectLegacyDatabase,LEGACY_IMPORT_PHASES} from './legacy-import.js';
 const normalize=v=>String(v||'').normalize('NFKD').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').trim().toLocaleLowerCase().replace(/\s+/g,' ');
-const keyOf=(state,kind,row)=>row.importKey||row.desktopId&&'desktop:'+kind+':'+row.desktopId||'mobile:'+(state.originId||state.branding)+':'+kind+':'+row.id;
+const keyOf=(state,kind,row)=>row.importKey||row.desktopId&&'desktop:'+kind+':'+row.desktopId||row.canonicalId&&'canonical:'+kind+':'+row.canonicalId||'mobile:'+(state.originId||state.branding)+':'+kind+':'+row.id;
 const num=v=>Number(v)||0;
 export function reconcileImportOpening(state){
  state.opening={accounts:Object.fromEntries(state.accounts.map(a=>[a.id,a.balance])),parties:Object.fromEntries(state.parties.map(p=>[p.id,p.balance])),stocks:Object.fromEntries(state.products.map(p=>[p.id,{...p.stocks}]))};
@@ -16,7 +17,7 @@ export function reconcileImportOpening(state){
   const parent=documents.get(String(r.parentDocumentId)),supplierReturn=r.returnParentKind==='purchase'||parent?.kind==='purchase';
   // Desktop expenses/account balances may contain sub-cent values. Reconciliation
   // derives a baseline; it is not a new payment and must not round the customer's data.
-  let delta=r.kind==='party-opening'||r.kind==='employee-accrual'?0:r.kind==='employee-payment'?(r.employeePaymentDirection==='deposit'?1:-1)*r.total:r.kind==='return'?(supplierReturn?1:-1)*r.paid:['sale','receive','deposit'].includes(r.kind)?r.paid:-r.paid;
+  let delta=r.kind==='party-opening'||r.kind==='employee-accrual'||r.kind==='employee-closure'?0:r.kind==='employee-payment'?(r.employeePaymentDirection==='deposit'?1:-1)*r.total:r.kind==='return'?(supplierReturn?1:-1)*r.paid:['sale','receive','deposit'].includes(r.kind)?r.paid:-r.paid;
   if(r.account)state.opening.accounts[r.account]-=delta||0;
   if(r.kind==='transfer'&&r.to)state.opening.accounts[r.to]-=r.total;
   if(r.party){const p=parties.get(r.party);if(!p)throw Error('طرف المستند غير موجود');const net=Number.isFinite(r.partyBalanceDelta)?r.partyBalanceDelta:r.kind==='return'?(supplierReturn?1:-1)*Math.max(0,r.total-r.paid):partyNetDelta(r);state.opening.parties[p.id]-=net*(p.type==='supplier'?-1:1);}
@@ -26,11 +27,19 @@ export function reconcileImportOpening(state){
  if(!state.stockEvents)seedStockEvents(state);return state;
 }
 const stable=value=>JSON.stringify((function order(input){return Array.isArray(input)?input.map(order):input&&typeof input==='object'?Object.fromEntries(Object.keys(input).sort().map(k=>[k,order(input[k])])):input})(value));
-const payrollRecord=row=>['employee-accrual','employee-payment'].includes(row.kind);
-const payrollFingerprint=value=>{const row={...value,paymentMethod:value.paymentMethod??null,note:value.note??null};return stable(Object.fromEntries(['kind','payrollDocumentId','status','voided','revision','employeeId','employeeName','total','amount','paid','due','paymentMethod','businessDate','occurredAt','periodStart','periodEnd','dueDate','agreementSnapshot','allocations','employeePaymentVersion','employeePaymentDirection','employeeAccountOrder','note','balanceDelta'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]])))};
+const payrollRecord=row=>['employee-accrual','employee-payment','employee-closure'].includes(row.kind);
+const payrollFingerprint=value=>{const row={...value,paymentMethod:value.paymentMethod??null,note:value.note??null};return stable(Object.fromEntries(['kind','payrollDocumentId','status','voided','revision','employeeId','employeeName','total','amount','paid','due','paymentMethod','businessDate','occurredAt','periodStart','periodEnd','dueDate','agreementSnapshot','allocations','employeePaymentVersion','employeePaymentDirection','employeeAccountOrder','note','balanceDelta','salaryReserveReleased','cashAmount','employeeScheduleRecomputed','voidReason'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]])))};
 const financialBody=row=>{const value={...row};for(const key of ['importKey','desktop','importRevisions'])delete value[key];return stable(value)};
+function mergeSharedCounters(next,source){
+ validateSharedCounters(next);validateSharedCounters(source);
+ const canonical=row=>typeof row?._id==='string'&&/^documentSequence:(sale|purchase|expense|stock-settlement)$/.test(row._id),identity=row=>row?._id??row?.id;
+ const byId=new Map((next.counters||[]).filter(row=>identity(row)!=null).map(row=>[String(identity(row)),row])),bodies=new Set((next.counters||[]).map(stable));
+ for(const row of source.counters||[]){const id=identity(row),old=id==null?null:byId.get(String(id));if(old){if(canonical(row)){old.value=Math.max(old.value,row.value);}continue;}if(id==null&&bodies.has(stable(row)))continue;const copy=structuredClone(row);next.counters.push(copy);if(id!=null)byId.set(String(id),copy);bodies.add(stable(copy));}
+ for(const kind of ['sale','purchase','expense','stock-settlement']){const counter=next.counters.find(row=>row?._id==='documentSequence:'+kind);if(next.sequences[kind]!==undefined||source.sequences[kind]!==undefined||counter)next.sequences[kind]=Math.max(next.sequences[kind]??0,source.sequences[kind]??0,counter?.value??0);}
+ validateSharedCounters(next);
+}
 export function mergeImport(current,incoming,options={}){
- const next=structuredClone(current),source=structuredClone(incoming);upgradeState(next);upgradeState(source);
+ const next=structuredClone(current),source=structuredClone(incoming);upgradeState(next);upgradeState(source);mergeSharedCounters(next,source);
  const result={state:next,counts:{products:0,parties:0,accounts:0,warehouses:0,categories:0,expenseCategories:0,employees:0,records:0,existing:0},conflicts:[],warnings:[]},maps=Object.fromEntries(['products','parties','accounts','categories','expenseCategories','warehouses','records'].map(name=>[name,new Map()]));
  const clone=value=>structuredClone(value),choices=options.matches||{},policy=name=>options[name]||'current',affectedProducts=new Set(),existingProducts=new Set(next.products.map(row=>row.id));
  const lastIds=Object.fromEntries(['categories','products','parties','accounts','records'].map(name=>[name,next[name].reduce((max,row)=>Math.max(max,row.id),name==='records'?100:0)]));
@@ -97,6 +106,9 @@ export function mergeImport(current,incoming,options={}){
  for(const row of stagedRecords){
   const old=existingRecords.get(row.importKey);if(old&&policy('records')!=='imported'){result.counts.existing++;continue;}
   for(const line of [...(old?.lines||[]),...row.lines])affectedProducts.add(line.product);
+  // A source import cannot renumber an already accepted local settlement identity.
+  if(old&&isStockSettlementDocument(old)&&isStockSettlementDocument(row)&&validSettlementSequence(old.settlementSequence))row.settlementSequence=old.settlementSequence;
+  if(old?.canonicalId)row.canonicalId=old.canonicalId;
   if(old)next.records[next.records.indexOf(old)]=row;else next.records.push(row);existingRecords.set(row.importKey,row);result.counts.records++;
  }
  // Native references are already remapped by desktopToMobileState. An old
@@ -133,7 +145,7 @@ export function mergeImport(current,incoming,options={}){
  mergeRows('desktopAccountTransfers',source.desktopAccountTransfers,row=>movement(row));
  if(source.desktopOriginal){next.desktopImportSources??=[];const fingerprint=sha256Hex(stable(source.desktopOriginal));if(!next.desktopImportSources.some(row=>row.fingerprint===fingerprint))next.desktopImportSources.push({fingerprint,backup:clone(source.desktopOriginal),sourceMappings:clone(source.desktopMappings||{})});}
  for(const prior of source.desktopImportSources||[]){next.desktopImportSources??=[];if(!next.desktopImportSources.some(row=>row.fingerprint===prior.fingerprint))next.desktopImportSources.push(clone(prior));}
- next.records.sort((a,b)=>b.id-a.id);reconcileImportOpening(next);
+ normalizeStockSettlementSequences(next);next.records.sort((a,b)=>b.id-a.id);reconcileImportOpening(next);
  for(const product of next.products)if(existingProducts.has(product.id)&&affectedProducts.has(product.id))product.openingHistoryLocked=true;
  if([...affectedProducts].some(id=>existingProducts.has(id)))result.warnings.push('المنتجات المتطابقة ذات التاريخ المدمج تُراجع من سجل المخزون؛ لا يعاد تقدير رصيد بدايتها تلقائيًا.');
  upgradeState(next);validatePayrollState(next);validateState(next);return result;
@@ -149,7 +161,7 @@ export async function sqliteBackup(bytes,onProgress=()=>{}){
  const SQL=await globalThis.initSqlJs(),db=new SQL.Database(bytes);
  try{
   const names=db.exec("SELECT name FROM sqlite_master WHERE type='table'")[0]?.values.flat().map(String)||[],collections={};
-  const tables={products:'products',productCategories:'product_categories',parties:'parties',warehouses:'warehouses',documents:'documents',paymentAccounts:'payment_accounts',financialMovements:'financial_movements',stockMovements:'stock_movements',appSettings:'app_settings',employees:'employees',expenseCategories:'expense_categories',auditEvents:'audit_events'};
+  const tables={products:'products',productCategories:'product_categories',parties:'parties',warehouses:'warehouses',documents:'documents',paymentAccounts:'payment_accounts',financialMovements:'financial_movements',stockMovements:'stock_movements',appSettings:'app_settings',employees:'employees',expenseCategories:'expense_categories',auditEvents:'audit_events',counters:'counters',accountTransfers:'account_transfers',recurringExpenses:'recurring_expenses',importMappings:'import_mappings',users:'users'};
   if(names.includes('products')&&names.includes('documents')){
    for(const [key,table]of Object.entries(tables)){if(!names.includes(table)){collections[key]=[];continue}const rows=db.exec('SELECT data_json FROM "'+table+'"')[0]?.values||[];if(rows.length>100000)throw Error('عدد السجلات يتجاوز الحد المدعوم');collections[key]=rows.map(([json])=>JSON.parse(json));onProgress(key,collections[key].length);await new Promise(r=>setTimeout(r,0))}
    return {format:'conta-backup',schemaVersion:1,createdAt:new Date().toISOString(),collections,warnings:[]};
