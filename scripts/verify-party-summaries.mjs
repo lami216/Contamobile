@@ -1,10 +1,11 @@
+import {desktopToMobileState} from '../approved-runtime/desktop-state-862.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {validateState} from '../approved-runtime/database.js';
 import {partyFinancialSummary,partyMetricContributions,partyNetBalance,historicalPartyProfit} from '../approved-runtime/party-metrics.js';
 const parties=[{id:1,type:'customer',balance:600},{id:2,type:'customer',balance:-75},{id:3,type:'supplier',balance:400},{id:4,type:'supplier',balance:-60},{id:5,type:'customer',balance:999,archived:true}];
-const record=(kind,party,total,extra={})=>({id:Math.random(),kind,party,total,paid:0,lines:[],date:'2020-01-01',...extra});
+const record=(kind,party,total,extra={})=>({id:Math.random(),kind,party,total,paid:0,lines:['sale','return'].includes(kind)&&Number.isFinite(extra.profit)?[{product:1,name:'زيت',qty:1,price:total,costAtSale:total-extra.profit}]:[],date:'2020-01-01',...extra});
 const state={parties,products:[{cost:99999}],records:[record('sale',1,1000,{paid:1000,profit:300}),record('sale',1,800,{profit:200}),record('receive',1,400),record('pay',1,75),record('purchase',3,1000,{paid:1000}),record('purchase',3,500),record('pay',3,400),record('receive',3,60),record('sale',1,900,{paid:900,profit:400,voided:true}),record('sale',1,900,{paid:900,profit:400,status:'reversed'}),record('receive',1,900,{isReversal:true}),record('sale',1,900,{paid:900,profit:400,status:'draft'}),record('receive',null,500),record('sale',5,99,{profit:9})]};
 const before=JSON.stringify(state),customers=partyFinancialSummary(state,'customer'),suppliers=partyFinancialSummary(state,'supplier');
 assert.deepEqual(customers.values,{trade:1800,profit:500,cashIn:1400,cashOut:75,invoiceCount:0,receivable:600,payable:75});
@@ -18,7 +19,7 @@ assert.equal(JSON.stringify(state),before,'Summary must never write balances, re
 assert.equal(historicalPartyProfit({lines:[{grossProfit:10},{grossProfit:null},{costAtSale:20,price:100,qty:3}]}),10,'Do not invent profit from current or missing costs');
 assert.equal(historicalPartyProfit({profit:0,lines:[{grossProfit:20}]}),0);
 const legacy={parties:[parties[0]],records:[record('sale',1,1000,{lines:[{grossProfit:300}]}),record('return',1,250,{lines:[{grossProfit:80}]}),record('sale',1,10)]};
-assert.equal(partyFinancialSummary(legacy,'customer').values.trade,760);assert.equal(partyFinancialSummary(legacy,'customer').values.profit,220);
+assert.equal(partyFinancialSummary(legacy,'customer').values.trade,760);assert.equal(partyFinancialSummary(legacy,'customer').values.profit,null,'An unknown line prevents an unqualified profit total; it is not silently zero');
 const decimals={parties:[parties[0]],records:[record('sale',1,.1,{paid:.1,profit:-.1}),record('sale',1,.2,{paid:.2,profit:-.2})]};
 assert.equal(partyFinancialSummary(decimals,'customer').values.trade,.3);assert.equal(partyFinancialSummary(decimals,'customer').values.profit,-.3);
 assert.deepEqual(partyFinancialSummary({parties:[],records:[]},'supplier').values,{trade:0,profit:0,cashIn:0,cashOut:0,invoiceCount:0,receivable:0,payable:0});
@@ -27,8 +28,8 @@ const start=performance.now();const summary=partyFinancialSummary(large,'custome
 console.log('PASS desktop party totals: cash/credit, both party directions, historic profit, returns, void/reversal exclusions, active/archive scope, independent debt directions, cent rounding, immutable state and source reconciliation');
 console.log('CHECK 10,000 party records summarized in '+Math.round(performance.now()-start)+' ms');
 const converter=fs.readFileSync(new URL('../approved-runtime/app.js',import.meta.url),'utf8').match(/^function desktopToState.*$/m)?.[0];assert(converter);
-const convert=vm.runInNewContext(converter+';desktopToState',{validateState});
-const imported=convert({collections:{products:[],paymentAccounts:[],warehouses:[{id:'w',name:'الرئيسي'}],documents:[],financialMovements:[],parties:[{id:'a',name:'عميل مدين',partyType:'customer',receivable:100,payable:0},{id:'b',name:'عميل دائن',partyType:'customer',receivable:0,payable:50},{id:'c',name:'مورد دائن',partyType:'supplier',receivable:0,payable:200},{id:'d',name:'مورد مدين',type:'supplier',receivable:60,payable:0}]}});
+const convert=vm.runInNewContext(converter+';desktopToState',{validateState,desktopToMobileState});
+const imported=convert({format:'conta-backup',schemaVersion:1,createdAt:'2026-11-16T12:00:00.000Z',collections:{products:[],paymentAccounts:[],warehouses:[{id:'w',name:'الرئيسي'}],documents:[],financialMovements:[],parties:[{id:'a',name:'عميل مدين',partyType:'customer',receivable:100,payable:0},{id:'b',name:'عميل دائن',partyType:'customer',receivable:0,payable:50},{id:'c',name:'مورد دائن',partyType:'supplier',receivable:0,payable:200},{id:'d',name:'مورد مدين',type:'supplier',receivable:60,payable:0}]}});
 assert.deepEqual(Array.from(imported.parties,p=>p.balance),[100,-50,200,-60]);
 assert.equal(partyFinancialSummary(imported,'customer').values.payable,50);assert.equal(partyFinancialSummary(imported,'supplier').values.receivable,60);
 console.log('PASS official desktop import preserves both customer/supplier debt directions');

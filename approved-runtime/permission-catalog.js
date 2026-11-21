@@ -1,6 +1,8 @@
 // Ported unchanged domain logic from offline-conta@1b4951947a82ca9da21337c757fe7afdd2329403/app/user-permissions.ts
 import { expandPermissionDependencies, removePermissionAndDependents } from "./permission-dependencies.js";
 export const permissionRows = [
+    { name: "الموظفون", actions: { view: "employees.view", edit: "employees.manage", create: "employees.pay" } },
+    { name: "أرصدة بداية الأطراف", actions: { edit: "party.opening.manage" } },
     { name: "نقطة البيع", actions: { view: "pos.view", create: "pos.create", edit: "pos.edit", delete: "pos.delete" } },
     { name: "فواتير الشراء", actions: { view: "purchases.view", create: "purchases.create", edit: "purchases.edit", delete: "purchases.delete" } },
     { name: "سجل الفواتير", actions: { view: "records.view" } },

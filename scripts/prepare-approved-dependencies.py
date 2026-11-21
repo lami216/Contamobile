@@ -1,4 +1,4 @@
-"""Fetch one pinned build dependency; the installed application has no network permission."""
+"""Fetch one pinned build dependency for the offline accounting runtime."""
 from pathlib import Path
 import base64,hashlib,io,tarfile,urllib.request
 

@@ -27,7 +27,7 @@ async function fixture(language,width,role='pending'){
      globalThis.__license={...globalThis.__license,valid:true,code:'',entitlement:{status:'active',endsAt:Date.now()+86400000},license:{licenseId:'device-bound-license',customerName:'اسم صاحب المحل '.repeat(5),storeName:'اسم المحل '.repeat(7),type:'temporary',remainingSeconds:86390}};
      respond(id,{stage:'activated',entitlement:globalThis.__license.entitlement,ackPending:false});
     },80);
-   }else respond(id,structuredClone(globalThis.__server));}
+   }else respond(id,{...structuredClone(globalThis.__server),remoteEnabled:true});}
   };
  },{language,role});
  await page.goto(origin+'/activation.html');await page.waitForFunction(()=>!document.querySelector('#online-connect').disabled);

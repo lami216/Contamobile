@@ -2,9 +2,39 @@ set -euo pipefail
 app=mr.alkarna.mobile.approved
 runner=$app.test/androidx.test.runner.AndroidJUnitRunner
 
-test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 proof_dir=candidate-proof
 mkdir -p "$proof_dir"
+# Host-only bounded diagnostics: never print environment, process arguments or
+# signing material. Preserve the test's original exit status if collection fails.
+host_diagnostics() {
+ local label=$1
+ {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+  timeout 5s free -m
+  timeout 5s df -h . /tmp
+  timeout 5s ps -eo pid,comm,rss --sort=-rss | sed -n '1,31p'
+  if [ -r /sys/fs/cgroup/memory.events ]; then timeout 5s cat /sys/fs/cgroup/memory.events; fi
+ } > "$proof_dir/host-$label.txt" 2>&1 || true
+ {
+  (timeout 5s dmesg --color=never --time-format iso 2>/dev/null || timeout 5s sudo -n dmesg --color=never --time-format iso 2>/dev/null) |
+   grep -Ei '(qemu|emulator).*(oom|out of memory|killed process|segfault)|(oom|out of memory|killed process|segfault).*(qemu|emulator)' | tail -n 80
+ } > "$proof_dir/host-$label-kernel.txt" 2>/dev/null || true
+}
+finish_candidate() {
+ local status=$?
+ trap - EXIT
+ host_diagnostics after
+ if [ "$status" -ne 0 ]; then
+  printf 'Original test exit status: %s\n' "$status" > "$proof_dir/host-failure.txt"
+  cat "$proof_dir/host-after.txt" >> "$proof_dir/host-failure.txt" 2>/dev/null || true
+ fi
+ exit "$status"
+}
+test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
+
+preservation_progress() {
+ printf 'PRESERVATION %s baseline=v%s activation=%s phase=%s candidate=v%s\n' "$1" "$baseline" "$type" "$2" "$CANDIDATE_VERSION_CODE" | tee -a "$proof_dir/preservation-progress.txt"
+}
 # Keep every synthetic fixture offline even if a guest service re-enables a link.
 # This root/firewall setup is allowed only after proving this is an emulator.
 # adbd restarts when root is requested; recent emulator images can close that
@@ -43,6 +73,8 @@ done
 if [ "$root_ready" != true ]; then cat "$proof_dir/root-readiness.txt" >&2;exit 1;fi
 cat "$proof_dir/root-readiness.txt"
 : > "$proof_dir/network-egress-block.txt"
+trap finish_candidate EXIT
+host_diagnostics before
 for firewall in iptables ip6tables; do
  if ! adb shell "$firewall" -w 5 -n -L ALKARNA_SYNTHETIC_OFFLINE >/dev/null 2>&1; then
   adb shell "$firewall" -w 5 -N ALKARNA_SYNTHETIC_OFFLINE
@@ -83,7 +115,7 @@ assert_offline() {
 : "${CANDIDATE_APK:?Set the exact signed candidate APK path}"
 : "${BASELINE_VERSION_CODES:?Set the verified published baseline versionCodes}"
 [[ "$CANDIDATE_VERSION_CODE" =~ ^[0-9]+$ ]]
-test "$CANDIDATE_VERSION_CODE" = 27
+test "$CANDIDATE_VERSION_CODE" = 34
 candidate=$CANDIDATE_APK
 test_apk=approved-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
 test -s "$candidate"
@@ -91,19 +123,55 @@ test -s "$test_apk"
 sha256sum --check candidate-output/SHA256SUMS.txt
 read -r -a baselines <<< "$BASELINE_VERSION_CODES"
 test "${#baselines[@]}" -gt 0
-# All fourteen originally distributed versions are mandatory for this candidate.
+# All twenty-one originally distributed versions are mandatory for this candidate.
 # A shortened matrix must fail rather than silently drop preservation checks.
-test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26'
+test "${baselines[*]}" = '13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33'
 for baseline in "${baselines[@]}"; do
  [[ "$baseline" =~ ^[0-9]+$ ]]
  test "$baseline" -lt "$CANDIDATE_VERSION_CODE"
  test -s "baseline-v$baseline/alkarna-approved.apk"
 done
-# Fail fast on the isolated backup fixture before the full preservation matrix.
-# This fixture is removed completely before the first original-version scenario.
+# A child runs one fixed required partition; no scenario is split across VMs.
+candidate_mode=${CANDIDATE_TEST_MODE:-full}
+case "$candidate_mode" in
+ full)
+  test -z "${UPGRADE_BASELINE_GROUP:-}"
+  candidate_group=full
+  selected_baselines=("${baselines[@]}") ;;
+ native)
+  test -z "${UPGRADE_BASELINE_GROUP:-}"
+  candidate_group=native
+  selected_baselines=() ;;
+ upgrades)
+  case "${UPGRADE_BASELINE_GROUP:-}" in
+   '13 14 15') candidate_group=upgrade-13-15 ;;
+   '16 17 18') candidate_group=upgrade-16-18 ;;
+   '19 20 21') candidate_group=upgrade-19-21 ;;
+   '22 23 24') candidate_group=upgrade-22-24 ;;
+   '25 26 27') candidate_group=upgrade-25-27 ;;
+   '28 29 30 31 32 33') candidate_group=upgrade-28-33 ;;
+   *) echo 'Unknown or incomplete preservation group' >&2; exit 1 ;;
+  esac
+  read -r -a selected_baselines <<< "$UPGRADE_BASELINE_GROUP" ;;
+ *) echo 'Unknown candidate test mode' >&2; exit 1 ;;
+esac
+if [ "$candidate_mode" != full ]; then
+ : "${CANDIDATE_INPUT_ROOT:?Set the immutable build input directory}"
+ : "${GITHUB_SHA:?Set the exact source head}"
+ : "${GITHUB_RUN_ID:?Set the exact workflow run}"
+ python3 -B scripts/candidate-inputs.py verify --inputs "$CANDIDATE_INPUT_ROOT" --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --check-workspace .
+fi
+export CANDIDATE_TEST_MODE="$candidate_mode"
+export SELECTED_BASELINE_VERSION_CODES="${selected_baselines[*]}"
 adb install -r "$candidate" | tee "$proof_dir/cloud-backup-install.txt"
 grep -q Success "$proof_dir/cloud-backup-install.txt"
 adb install -r "$test_apk"
+adb shell pm clear "$app"
+assert_offline group-network-before true
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = native ]; then
+assert_offline standalone-control-network-before true
+adb shell am instrument -w -e class mr.alkarna.mobile.approved.StandaloneControlTest -e standaloneControlIsolation true "$runner" | tee "$proof_dir/StandaloneControlTest.txt"
+assert_offline standalone-control-network-after
 adb shell pm clear "$app"
 assert_offline cloud-backup-network-before true
 adb shell am instrument -w -e class mr.alkarna.mobile.approved.CloudBackupTest -e cloudBackupIsolation true "$runner" | tee "$proof_dir/CloudBackupTest.txt"
@@ -137,7 +205,7 @@ import json,re
 from pathlib import Path
 sources=Path('approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved')
 proof=Path('candidate-proof');suites=[]
-for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS'),('OwnerUsernameRecoveryTest','OWNER USERNAME RECOVERY CASE PASS'),('AccountingParityTest','ACCOUNTING PARITY CASE PASS'),('DeviceCloudLifecycleTest','DEVICE CLOUD LIFECYCLE CASE PASS'),('BootstrapSupportOutcomeTest','BOOTSTRAP SUPPORT OUTCOME CASE PASS'),('PhoneReplacementTest','PHONE REPLACEMENT CASE PASS')]:
+for suite,prefix in [('StandaloneControlTest','STANDALONE CONTROL CASE PASS'),('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingResetTest','ACCOUNTING RESET CASE PASS'),('OwnerUsernameRecoveryTest','OWNER USERNAME RECOVERY CASE PASS'),('AccountingParityTest','ACCOUNTING PARITY CASE PASS'),('DeviceCloudLifecycleTest','DEVICE CLOUD LIFECYCLE CASE PASS'),('BootstrapSupportOutcomeTest','BOOTSTRAP SUPPORT OUTCOME CASE PASS'),('PhoneReplacementTest','PHONE REPLACEMENT CASE PASS')]:
  source=(sources/f'{suite}.java').read_text(encoding='utf-8')
  expected=re.findall(r'@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(',source)
  assert len(expected)>=(1 if suite=='AccountingParityTest' else 6) and len(expected)==len(set(expected)),f'Incomplete source scenario manifest: {suite}'
@@ -153,6 +221,8 @@ for suite,prefix in [('CloudBackupTest','CLOUD BACKUP CASE PASS'),('AccountingRe
  suites.append({'suite':suite,'executed':len(executed),'cases':sorted(executed),'passed':True})
 (proof/'native-scenario-summary.json').write_text(json.dumps({'suites':suites},indent=2)+'\n',encoding='utf-8')
 PY
+fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = upgrades ]; then
 adb shell am force-stop "$app"
 adb uninstall "$app"
 # Each independent synthetic scenario keeps one installation throughout the first
@@ -160,7 +230,7 @@ adb uninstall "$app"
 # Reset only BETWEEN scenarios, never between these preservation checks.
 first=true
 network_teardown_pending=true
-for baseline in "${baselines[@]}"; do
+for baseline in "${selected_baselines[@]}"; do
  previous=baseline-v$baseline/alkarna-approved.apk
  for type in temporary perpetual; do
   if [ "$first" = false ]; then adb uninstall "$app"; fi
@@ -170,26 +240,36 @@ for baseline in "${baselines[@]}"; do
   adb install -r "$test_apk"
   assert_offline "$label-network" "$network_teardown_pending"
   network_teardown_pending=false
+  preservation_progress BEGIN seed-before
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#seedPreviousVersion -e expectedVersionCode "$baseline" -e upgradeLicenseType "$type" "$runner" | tee "candidate-proof/$label-before.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-before.txt"
+  preservation_progress PASS seed-before
   adb shell am force-stop "$app"
   # An observable offline interval must be charged to temporary activation.
   sleep 2
   adb install -r "$candidate" | tee "candidate-proof/$label-install-r.txt"
   grep -q Success "candidate-proof/$label-install-r.txt"
+  preservation_progress BEGIN after
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterInPlaceUpdate -e expectedVersionCode "$CANDIDATE_VERSION_CODE" -e requireOfflineElapsed true "$runner" | tee "candidate-proof/$label-after.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-after.txt"
+  preservation_progress PASS after
   adb shell am force-stop "$app"
+  preservation_progress BEGIN cold-restart
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterOfflineColdRestart -e expectedVersionCode "$CANDIDATE_VERSION_CODE" "$runner" | tee "candidate-proof/$label-cold-restart.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-cold-restart.txt"
+  preservation_progress PASS cold-restart
   adb shell am force-stop "$app"
   adb install -r "$candidate" | tee "candidate-proof/$label-repeat-install-r.txt"
   grep -q Success "candidate-proof/$label-repeat-install-r.txt"
+  preservation_progress BEGIN repeat-after
   adb shell am instrument -w -e class mr.alkarna.mobile.approved.UpgradePersistenceTest#verifyAfterRepeatedInPlaceUpdate -e expectedVersionCode "$CANDIDATE_VERSION_CODE" "$runner" | tee "candidate-proof/$label-repeat-after.txt"
   grep -Eq '^OK \(1 test\)' "candidate-proof/$label-repeat-after.txt"
+  preservation_progress PASS repeat-after
   assert_offline "$label-network-after"
  done
 done
+fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = native ]; then
 # Fresh synthetic data for the independent accounting/activation/support-entry suite.
 for group in ActivationConcurrencyTest BusyBackNavigationTest; do
  adb shell pm clear "$app"
@@ -209,20 +289,36 @@ adb shell am instrument -w -e class mr.alkarna.mobile.approved.RecoveryCaptureDe
 grep -Eq '^OK \(1 test\)' candidate-proof/real-capture-device.txt
 adb shell pm clear "$app"
 assert_offline offline-suites-network-before
-adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+adb shell am instrument -w -e notClass mr.alkarna.mobile.approved.StandaloneControlTest,mr.alkarna.mobile.approved.UpgradePersistenceTest,mr.alkarna.mobile.approved.ContatoolsRecoveryTest,mr.alkarna.mobile.approved.AccountingParityTest,mr.alkarna.mobile.approved.DeviceCloudLifecycleTest,mr.alkarna.mobile.approved.BootstrapSupportOutcomeTest,mr.alkarna.mobile.approved.PhoneReplacementTest,mr.alkarna.mobile.approved.OwnerUsernameRecoveryTest,mr.alkarna.mobile.approved.ActivationConcurrencyTest,mr.alkarna.mobile.approved.BusyBackNavigationTest,mr.alkarna.mobile.approved.CloudBackupTest,mr.alkarna.mobile.approved.AccountingResetTest,mr.alkarna.mobile.approved.RecoverySupportEntryTest,mr.alkarna.mobile.approved.RecoveryCaptureDeviceTest "$runner" | tee candidate-proof/offline-suites.txt
+# Preserve bounded diagnostics from this synthetic emulator before the strict
+# success gate exits. Collection never retries a test or changes its outcome.
+if ! grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt; then
+ mkdir -p "$proof_dir/native-failure-diagnostics"
+ for diagnostic in qa-failure-export.json qa-failure-ui.xml qa-failure-screen.png; do
+  timeout 10s adb pull "/sdcard/Android/data/$app/files/$diagnostic" "$proof_dir/native-failure-diagnostics/$diagnostic" >> "$proof_dir/native-failure-diagnostics/collection.txt" 2>&1 || true
+ done
+ timeout 10s adb logcat -d -t 250 -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > "$proof_dir/native-failure-diagnostics/logcat.txt" 2>&1 || true
+fi
 grep -Eq '^OK \([0-9]+ tests?\)' candidate-proof/offline-suites.txt
 assert_offline offline-suites-network-after
+fi
+assert_offline group-network-after
 adb logcat -d -s AlKarna:E AlKarnaJS:E AndroidRuntime:E > candidate-proof/runtime-errors.txt
 if grep -q 'FATAL EXCEPTION' candidate-proof/runtime-errors.txt; then
  cat candidate-proof/runtime-errors.txt
  exit 1
 fi
+if [ "$candidate_mode" = full ] || [ "$candidate_mode" = upgrades ]; then
 python3 - <<'PY'
-import json,re
+import json,os,re
 from pathlib import Path
 root=Path('candidate-proof')
+selected=[int(v) for v in os.environ['SELECTED_BASELINE_VERSION_CODES'].split()]
+groups=[[13,14,15],[16,17,18],[19,20,21],[22,23,24],[25,26,27],[28,29,30,31,32,33]]
+mode=os.environ['CANDIDATE_TEST_MODE']
+assert (mode=='full' and selected==list(range(13,34))) or (mode=='upgrades' and selected in groups)
 checks=[]
-for baseline in range(13,27):
+for baseline in selected:
  for activation in ('temporary','perpetual'):
   for phase in ('after','cold-restart','repeat-after'):
    filename=root/f'v{baseline}-{activation}-{phase}.txt'
@@ -230,8 +326,13 @@ for baseline in range(13,27):
    assert re.search(r'^OK \(1 test\)',text,re.M),f'Missing executed preservation check: {filename}'
    assert not re.search(r'AssumptionFailed|SKIPPED|INSTRUMENTATION_FAILED|FAILURES!!!',text,re.I),f'Incomplete preservation check: {filename}'
    checks.append({'baseline':baseline,'activation':activation,'phase':phase,'passed':True})
-assert len(checks)==84
-(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':27,'upgradeScenarios':28,'preservationChecks':84,'checks':checks},indent=2)+'\n',encoding='utf-8')
+assert len(checks)==len(selected)*6
+if mode=='full':assert len(checks)==126
+(root/'preservation-summary.json').write_text(json.dumps({'candidateVersionCode':34,'selectedBaselines':selected,'upgradeScenarios':len(selected)*2,'preservationChecks':len(checks),'checks':checks},indent=2)+'\n',encoding='utf-8')
 PY
+fi
 sha256sum --check candidate-output/SHA256SUMS.txt
 sha256sum "$candidate" > candidate-proof/after-test-sha256.txt
+if [ "$candidate_mode" != full ]; then
+ python3 -B scripts/candidate-inputs.py complete --inputs "$CANDIDATE_INPUT_ROOT" --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --check-workspace . --group "$candidate_group" --proof "$proof_dir"
+fi

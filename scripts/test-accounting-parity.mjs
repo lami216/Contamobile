@@ -19,7 +19,7 @@ try{
   for(const [key,value]of Object.entries({name:'مالك التدقيق',shop:'تدقيق محاسبي',username:'audit',password:'1234'}))await page.locator('#site-auth-form [name='+key+']').fill(value);
   await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();
   await page.evaluate(async kind=>{
-   const {ShopDatabase}=await import('/database.js'),db=await new ShopDatabase().open(),state=await db.load(),w=state.warehouse,date=new Date().toISOString().slice(0,10);
+   const {ShopDatabase}=await import('/database.js'),{upgradeState}=await import('/upgrade-state.js'),db=await new ShopDatabase().open(),state=await db.load(),w=state.warehouse,date=new Date().toISOString().slice(0,10);
    state.products=[{id:1,name:'أرز',sku:'P1',price:10,cost:5,qty:0,stocks:{[w]:0}}];
    state.parties=[{id:1,name:'عميل',type:'customer',balance:0,archived:true},{id:2,name:'مورد',type:'supplier',balance:0,archived:true},{id:3,name:'غير مختار',type:'customer',balance:0,archived:true}];
    state.accounts=[{id:1,name:'نقدي',balance:0,active:true},{id:2,name:'مصرف',balance:0,archived:true,active:false},{id:3,name:'مصرف مؤرشف آخر',balance:0,archived:true,active:false}];
@@ -34,6 +34,9 @@ try{
    }
    if(kind==='migration'){state.accounts[1].balance=-45;state.parties[0].balance=80;state.parties[1].balance=-20;state.records=[];}
    delete state.stockEvents;delete state.stockEventSequence;
+   // Seed legacy fixtures through the same additive schema migration as a real
+   // restored shop before the current-schema database validates the snapshot.
+   upgradeState(state);
    await db.save(state);db.db.close();
   },kind);
   await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');await page.locator('.nav').waitFor();return {context,page};

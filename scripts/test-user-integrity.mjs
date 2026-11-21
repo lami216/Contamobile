@@ -14,7 +14,7 @@ const server=createServer(async(req,res)=>{try{
  let bytes=await readFile(file);
  // These hooks exist only in the HTTP test response, never in the packaged application.
  if(file.endsWith('features.js'))bytes=Buffer.from(bytes.toString().replace('async afterSave(){','async afterSave(){if(globalThis.__userAfterSaveFailure)throw Error("Synthetic user follow-up failure");'));
- if(file.endsWith('app.js'))bytes=Buffer.from(bytes.toString().replace('const ownerRecovery=installOwnerRecovery(', 'globalThis.__userAuditPersistUser=persistUser;globalThis.__userAuditRevoked=id=>revokedOwnerSessions.has(id);\nconst ownerRecovery=installOwnerRecovery(').replace('const accountingReset=installAccountingReset(', 'globalThis.__userAuditRecovery=ownerRecovery;\nconst accountingReset=installAccountingReset(').replace('if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))','if(pendingUserChanges.length&&globalThis.__beforeUserCommit)await globalThis.__beforeUserCommit();if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))'));
+ if(file.endsWith('app.js'))bytes=Buffer.from(bytes.toString().replace('const ownerRecovery=installOwnerRecovery(', 'globalThis.__userAuditPersistUser=persistUser;globalThis.__userAuditRevoked=id=>revokedOwnerSessions.has(id);\nconst ownerRecovery=installOwnerRecovery(').replace('const accountingReset=installAccountingReset(', 'globalThis.__userAuditRecovery=ownerRecovery;\nconst accountingReset=installAccountingReset(').replace('async function reloadAfterOwnerRecovery(){', 'async function reloadAfterOwnerRecovery(){globalThis.__stagedRecoveryEvents?.push({event:"reload-start",busy});').replace('if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))','if(pendingUserChanges.length&&globalThis.__beforeUserCommit)await globalThis.__beforeUserCommit();if(pendingUserChanges.length||actor&&beforeJSON!==JSON.stringify(stateForSave()))'));
  const ext=path.extname(file);res.setHeader('content-type',ext==='.js'?'text/javascript':ext==='.css'?'text/css':ext==='.html'?'text/html':'application/octet-stream');res.end(bytes);
  }catch{res.writeHead(404).end()}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
@@ -33,7 +33,8 @@ try{
   }}});
   await page.goto(origin+'/?lang='+language);await page.waitForFunction(()=>document.documentElement.dataset.runtimeState==='ready');
   for(const [key,value]of Object.entries({name:'Original owner',shop:'Synthetic audit shop',username:'owner',password:'owner-old123'}))await page.locator('#site-auth-form [name='+key+']').fill(value);
-  await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();return {context,page};
+  await page.locator('[data-action="site:setup"]').click();await page.locator('.nav').waitFor();await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());
+  const initial=await read(page),owner=initial.users.find(user=>user.role==='owner');assert(owner&&owner.username==='owner'&&owner.password,'Fixture owner credentials are durable before the first action');assert(initial.shop.state.users.some(user=>user.id===owner.id&&user.username==='owner'),'Fixture public owner is durable with its credentials');return {context,page};
  }
  async function read(page){return page.evaluate(async()=>{const {ShopDatabase}=await import('/database.js'),db=await new ShopDatabase().open(),shop=await db.get('snapshots','shop'),users=await db.all('users'),meta=await db.all('meta');db.db.close();const business=structuredClone(shop.state);delete business.users;delete business.auditEvents;return {shop,users,meta,business,actorCount:document.querySelectorAll('.nav').length,status:document.querySelector('.app-head .sub')?.textContent||'',error:document.querySelector('#form-error')?.textContent||'',toast:[...document.querySelectorAll('.toast')].map(n=>n.textContent).join(' '),session:sessionStorage.getItem('alkarna-local-session')};});}
  async function edit(page,{existing=false,existingUsername='owner',name,username,password}){
@@ -66,11 +67,18 @@ try{
   const result=await page.evaluate(()=>{const task=globalThis.__userSaveTask;delete globalThis.__userSaveTask;return {state:task.state,error:task.error}});
   assert.equal(result.state,'complete',result.error);
  }
+ async function retainedBrowserTask(page,key){
+  // Observe an explicitly rooted browser task, not a weak CDP awaitPromise result.
+  // A real pending/rejected operation still fails; this never repeats its action.
+  await page.waitForFunction(key=>globalThis[key]?.state!=='pending',key);
+  const task=await page.evaluate(key=>({state:globalThis[key]?.state,error:globalThis[key]?.error}),key);
+  assert.equal(task.state,'complete',task.error);
+ }
  async function laterProduct(page){await page.evaluate(async()=>{await act('go:inventory');await act('open:product');for(const [key,value]of Object.entries({name:'Later product',price:'50',cost:'20',qty:'2',openingWarehouse:S.warehouse})){const input=document.querySelector('#sheet-form [name='+key+']');if(input)input.value=value}await act('save-product')});}
  async function selectRole(page,role){await page.locator('#sheet-form [name=role]').selectOption(role);await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());}
  async function loginManager(page){
   await edit(page,{name:'Manager',username:'manager',password:'manager-pass123'});await selectRole(page,'manager');await page.evaluate(()=>act('site:feature:user-save'));await page.evaluate(()=>act('site:logout'));
-  await page.locator('#site-auth-form [name=username]').fill('manager');await page.locator('#site-auth-form [name=password]').fill('manager-pass123');await page.evaluate(()=>act('site:login'));await page.locator('.nav').waitFor();
+  await page.locator('#site-auth-form [name=username]').fill('manager');await page.locator('#site-auth-form [name=password]').fill('manager-pass123');await page.evaluate(()=>act('site:login'));await page.locator('.nav').waitFor();await page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());
  }
  async function login(page,value,username='owner'){await page.locator('#site-auth-form [name=username]').fill(username);await page.locator('#site-auth-form [name=password]').fill(value);await page.evaluate(()=>act('site:login'));}
  async function recover(page,value,username){
@@ -109,12 +117,29 @@ try{
   }finally{await context.close()}
  });
  await check('username recovery defers its reload until an in-flight other-user save rejects its stale revision',async()=>{
-  const {context,page}=await fixture('ar',true);try{
-   await loginManager(page);const before=await read(page);
-   await page.evaluate(async()=>{await act('go:inventory');await act('open:product');for(const [key,value]of Object.entries({name:'Stale staged product',price:'50',cost:'20',qty:'0'})){const input=document.querySelector('#sheet-form [name='+key+']');if(input)input.value=value}const {ShopDatabase}=await import('/database.js');const original=ShopDatabase.prototype.save;let first=true;globalThis.__restoreStagedSave=()=>{ShopDatabase.prototype.save=original};ShopDatabase.prototype.save=async function(...args){if(first){first=false;await new Promise(resolve=>{globalThis.__stagedSaveWaiting=true;globalThis.__releaseStagedSave=resolve})}return original.apply(this,args)};globalThis.__stagedSave=act('save-product')});await page.waitForFunction(()=>globalThis.__stagedSaveWaiting);
-   await prepareResumedRecovery(page,'4321');await page.evaluate(()=>{globalThis.__recoveryPrepared.username='renamed-owner';return globalThis.__userAuditRecovery.resume()});assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),true);
-   await page.evaluate(async()=>{globalThis.__releaseStagedSave();await globalThis.__stagedSave;globalThis.__restoreStagedSave()});assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),false);const after=await read(page);assert.equal(after.shop.state.products.length,before.shop.state.products.length);assert.equal(after.users.find(user=>user.role==='owner').username,'renamed-owner');assert.equal(after.shop.state.users.find(user=>user.role==='owner').username,'renamed-owner');assert.equal(after.actorCount,1);await laterProduct(page);const later=await read(page);assert.equal(later.shop.state.products.length,before.shop.state.products.length+1);assert.equal(later.shop.state.users.find(user=>user.role==='owner').username,'renamed-owner');
-  }finally{await context.close()}
+  const {context,page}=await fixture('ar',true);let phase='create and log in the manager';try{
+   await loginManager(page);const before=await read(page);phase='pause the stale save';
+   await page.evaluate(()=>{
+    globalThis.__keepUserIntegrityTask=(key,work)=>{const task=globalThis[key]={state:'pending'};task.promise=work();task.promise.then(()=>{task.state='complete'},error=>{task.state='failed';task.error=String(error?.stack||error)})};
+    globalThis.__stagedRecoveryEvents=[];
+    globalThis.__keepUserIntegrityTask('__stagedPrepareTask',async()=>{
+     await act('go:inventory');await act('open:product');for(const [key,value]of Object.entries({name:'Stale staged product',price:'50',cost:'20',qty:'0'})){const input=document.querySelector('#sheet-form [name='+key+']');if(input)input.value=value}
+     const {ShopDatabase}=await import('/database.js'),original=ShopDatabase.prototype.save;let first=true;
+     globalThis.__restoreStagedSave=()=>{ShopDatabase.prototype.save=original};
+     ShopDatabase.prototype.save=async function(...args){const staged=first;if(staged){first=false;globalThis.__stagedRecoveryEvents.push({event:'save-paused'});await new Promise(resolve=>{globalThis.__stagedSaveWaiting=true;globalThis.__releaseStagedSave=resolve})}try{return await original.apply(this,args)}catch(error){if(staged)globalThis.__stagedRecoveryEvents.push({event:'stale-save-rejected',message:error.message});throw error}};
+     globalThis.__stagedSave=act('save-product');
+    });
+   });await retainedBrowserTask(page,'__stagedPrepareTask');await page.waitForFunction(()=>globalThis.__stagedSaveWaiting);
+   phase='commit the approved recovery while the save is paused';await prepareResumedRecovery(page,'4321');
+   await page.evaluate(()=>{globalThis.__recoveryPrepared.username='renamed-owner';globalThis.__keepUserIntegrityTask('__stagedRecoveryTask',()=>globalThis.__userAuditRecovery.resume())});await retainedBrowserTask(page,'__stagedRecoveryTask');
+   assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),true);
+   assert.equal(await page.evaluate(()=>globalThis.__stagedRecoveryEvents.some(row=>row.event==='reload-start')),false,'Recovery must not reload while the earlier save is paused');
+   phase='release exactly one stale save and await rehydration';await page.evaluate(()=>{globalThis.__keepUserIntegrityTask('__stagedReleaseTask',async()=>{globalThis.__releaseStagedSave();await globalThis.__stagedSave;globalThis.__restoreStagedSave()})});await retainedBrowserTask(page,'__stagedReleaseTask');
+   assert.equal(await page.evaluate(()=>globalThis.karnaPersistenceBusy()),false);
+   const events=await page.evaluate(()=>globalThis.__stagedRecoveryEvents),rejected=events.findIndex(row=>row.event==='stale-save-rejected'),reloaded=events.findIndex(row=>row.event==='reload-start');
+   assert(rejected>=0&&reloaded>rejected,'The stale save must reject before recovery rehydrates the accounting state');assert.match(events[rejected].message,/تغيّرت البيانات/);assert.equal(events[reloaded].busy,false);
+   phase='verify unchanged products and renamed owner';const after=await read(page);assert.equal(after.shop.state.products.length,before.shop.state.products.length);assert.equal(after.users.find(user=>user.role==='owner').username,'renamed-owner');assert.equal(after.shop.state.users.find(user=>user.role==='owner').username,'renamed-owner');assert.equal(after.actorCount,1);phase='post one new product after recovery';await laterProduct(page);const later=await read(page);assert.equal(later.shop.state.products.length,before.shop.state.products.length+1);assert.equal(later.shop.state.users.find(user=>user.role==='owner').username,'renamed-owner');
+  }catch(error){const screen=await page.evaluate(()=>({busy:karnaPersistenceBusy(),modal,view,status:document.querySelector('.app-head .sub')?.textContent,hasName:!!document.querySelector('#sheet-form [name=name]')})).catch(()=>({unavailable:true}));throw new Error(phase+': '+error.message+'; '+JSON.stringify(screen),{cause:error})}finally{await context.close()}
  });
  await check('failed fresh session write cannot clear recovered-owner revocation',async()=>{const {context,page}=await fixture('ar',true);try{await recover(page,'recovered-owner456');const before=await read(page);await page.evaluate(()=>{const native=IDBObjectStore.prototype.put;globalThis.__realUserPut=native;IDBObjectStore.prototype.put=function(row,...args){if(this.name==='meta'&&String(row?.id).startsWith('session:'))throw new DOMException('Synthetic session write rejection','QuotaExceededError');return native.call(this,row,...args)}});await login(page,'recovered-owner456');await removeInjection(page);const after=await read(page);assert.equal(await revoked(page),true);assert.equal(await page.locator('.nav').count(),0);assert.equal(after.session,null);assert.deepEqual(after.meta,before.meta);assert.deepEqual(after.users,before.users);assert.deepEqual(after.shop,before.shop);await login(page,'recovered-owner456');await page.locator('.nav').waitFor();assert.equal(await revoked(page),false);}finally{await context.close()}});
  for(const pausedAt of ['password-digest','session-create'])await check('pre-recovery login paused at '+pausedAt+' cannot create a valid session or clear newer revocation',async()=>{const {context,page}=await fixture('ar',true);try{await page.evaluate(()=>act('site:logout'));await prepareResumedRecovery(page,'recovered-owner456');const before=await read(page);await page.evaluate(async pausedAt=>{

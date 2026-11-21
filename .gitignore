@@ -31,3 +31,27 @@ approved-runtime/assets/sql-asm.js
 # Disposable release verification evidence is attached to CI, not application source.
 candidate-proof/
 test-results/
+
+# Local browser evidence and materialized copies of existing pinned fonts.
+outputs/desktop862-qa/
+approved-runtime/assets/StitchArabic*.ttf
+parity-browser/
+desktop-862-source/
+desktop-870-source/
+outputs/desktop870-qa/
+build-870/
+
+__pycache__/
+*.pyc
+
+# Isolated main879 comparison/check outputs.
+desktop-879-source/
+outputs/desktop879-qa/
+build-879/
+android879-proof/
+
+# Main882 candidate proof and isolated source inputs.
+desktop-882-source/
+outputs/desktop882-qa/
+build-882/
+android882-proof/

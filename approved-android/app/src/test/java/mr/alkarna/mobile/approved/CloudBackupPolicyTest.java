@@ -16,6 +16,13 @@ public class CloudBackupPolicyTest {
   assertEquals(Instant.parse("2026-11-01T21:00:00Z").toEpochMilli(),CloudBackupPolicy.nextPreferred(daily,Instant.parse("2026-11-01T20:00:00Z").toEpochMilli(),utc));
   assertEquals(Instant.parse("2026-11-02T21:00:00Z").toEpochMilli(),CloudBackupPolicy.nextPreferred(daily,Instant.parse("2026-11-01T21:00:00Z").toEpochMilli(),utc));
  }
+ @Test public void snapshotWindowAndStartSpreadAreExplicitAndLegacyDefaultsStayUnchanged() throws Exception {
+  JSONObject old=CloudBackupPolicy.settings(new JSONObject().put("consent",true).put("schedule","daily"));assertEquals(1500,old.getLong("snapshotWindowMs"));assertEquals(0,old.getLong("startSpreadMs"));
+  JSONObject grouped=CloudBackupPolicy.settings(new JSONObject().put("snapshotWindowMs",60000).put("startSpreadMs",30000));assertEquals(60000,grouped.getLong("snapshotWindowMs"));
+  assertEquals(1000,CloudBackupPolicy.spreadAt(1000,30000,0));assertEquals(31000,CloudBackupPolicy.spreadAt(1000,30000,1));assertEquals(1000,CloudBackupPolicy.spreadAt(1000,0,1));
+  for(JSONObject invalid:new JSONObject[]{new JSONObject().put("snapshotWindowMs",1499),new JSONObject().put("snapshotWindowMs",3600000),new JSONObject().put("startSpreadMs",30001)})try{CloudBackupPolicy.settings(invalid);fail("Invalid backup timing accepted");}catch(Exception expected){}
+  int writes=0;for(int i=1;i<=171;i++)if(CloudBackupPolicy.checkpointProgress(i,171,0))writes++;assertEquals(23,writes);assertTrue(CloudBackupPolicy.checkpointProgress(2,171,1000));assertFalse(CloudBackupPolicy.checkpointProgress(2,171,999));
+ }
  @Test public void weeklyAndDstRemainCalendarBased() throws Exception {
   JSONObject weekly=CloudBackupPolicy.settings(new JSONObject().put("schedule","weekly").put("weekday",1).put("time","09:00"));
   assertEquals(Instant.parse("2026-11-02T09:00:00Z").toEpochMilli(),CloudBackupPolicy.nextPreferred(weekly,Instant.parse("2026-11-01T20:00:00Z").toEpochMilli(),ZoneOffset.UTC));

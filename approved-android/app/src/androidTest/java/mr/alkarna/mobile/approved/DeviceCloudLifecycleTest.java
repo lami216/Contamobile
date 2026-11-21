@@ -792,6 +792,7 @@ public class DeviceCloudLifecycleTest {
         return status();
       }
       if (operation.equals("status")) return status();
+      if(operation.equals("control.status")||operation.equals("control.admit"))return StandaloneControlFixture.allow(p,device,ProtocolJson.fingerprint(enrollment.getJSONObject("publicJwk")),this::sign);
       if (operation.equals("license.accept")) {
         String id = p.getString("issuanceId");
         if (accepted.add(id)) accepts++;

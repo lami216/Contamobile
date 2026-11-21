@@ -167,11 +167,14 @@ try{
       await page.addInitScript(language=>{
         localStorage.setItem('alkarna-site-language',language);globalThis.__activationCalls=[];let active=false;
         const license=()=>({valid:active,code:active?'LICENSE_VALID':'LICENSE_REQUIRED',deviceId:'TEST-DEVICE-CODE',license:active?{customerName:'صاحب الترخيص',storeName:'محل التفعيل',remainingSeconds:86400}:null});
-        globalThis.NativeHost={language(){},copyDeviceCode(){},activationContinue(){},activationStatus(id){queueMicrotask(()=>__nativeResult(id,license()))},deviceLifecycle(id,command,payload){globalThis.__activationCalls.push({command,payload:JSON.parse(payload)});queueMicrotask(()=>{if(command==='activate'){active=true;__nativeResult(id,{stage:'activated',license:license()})}else __nativeResult(id,{status:'pending',activationAvailable:command==='status'})})}};
+        globalThis.NativeHost={language(){},copyDeviceCode(){},activationContinue(){},activationStatus(id){queueMicrotask(()=>__nativeResult(id,license()))},deviceLifecycle(id,command,payload){globalThis.__activationCalls.push({command,payload:JSON.parse(payload)});queueMicrotask(()=>{if(command==='activate'){active=true;__nativeResult(id,{stage:'activated',license:license()})}else __nativeResult(id,{status:'pending',remoteEnabled:command!=='local-status',activationAvailable:command==='status'})})}};
       },language);
       await page.goto(origin+'/activation.html');await page.locator('#device-code').filter({hasText:'TEST-DEVICE-CODE'}).waitFor();
-      assert.equal(await page.evaluate(()=>globalThis.__activationCalls.length),0);
+      assert.deepEqual(await page.evaluate(()=>globalThis.__activationCalls.map(call=>call.command)),['local-status']);
+      assert.equal(await page.locator('#online-connect').isDisabled(),true);
+      await page.locator('#remote-consent').check();
       await page.locator('#online-connect').click();await page.waitForFunction(()=>globalThis.__activationCalls.some(call=>call.command==='enroll'));
+      assert.equal(await page.evaluate(()=>globalThis.__activationCalls.find(call=>call.command==='enroll').payload.consent),true);
       assert.equal(await page.locator('#online-accept').isVisible(),false);
       await page.locator('#online-connect').click();await page.locator('#online-accept').waitFor({state:'visible'});
       assert.equal(await page.evaluate(()=>globalThis.__activationCalls.filter(call=>call.command==='activate').length),0);

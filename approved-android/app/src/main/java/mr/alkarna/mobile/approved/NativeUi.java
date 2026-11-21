@@ -39,5 +39,8 @@ final class NativeUi {
  case "تعذّر إكمال طلب التهيئة. تحقّق من النتيجة قبل إعادة المحاولة؛ التفعيل لم يتغير.":return "Réinitialisation non confirmée. Vérifiez le résultat avant de réessayer ; l’activation reste inchangée.";
  case "هناك طلب جارٍ. أعد المحاولة بعد قليل.":return "Une demande est en cours. Réessayez dans un instant.";
  case "تعذّر التحقق من التفعيل المحلي":return "Impossible de vérifier l’activation locale.";
+ case "حُظر تفعيل هذا الهاتف. بيانات المحل محفوظة":return "L’activation de ce téléphone est interdite. Les données restent conservées.";
+ case "أُبطل هذا التفعيل. بيانات المحل محفوظة":return "Cette activation est révoquée. Les données restent conservées.";
+ case "يلزم الاتصال بالإنترنت للتحقق من التفعيل. لم يُثبّت ملف جديد.":return "Une connexion est nécessaire pour vérifier l’activation. Aucune nouvelle licence n’a été installée.";
  default:return source;}}
 }

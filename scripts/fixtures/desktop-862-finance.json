@@ -1,0 +1,134 @@
+{
+  "sourceHashes": {
+    "app/invoice-line-amount.ts": "27fdce1669225620a674a3e178798e6a76911ed4cb47aeb95287186d18a3e72e",
+    "lib/stock-numbers.ts": "30b944a9b453785a629921133c983db68d59e72e1f62857191c3b771ad9cd02e",
+    "lib/report-commerce.ts": "4fbbe6841ba2a147ebfad8e2c7b9de04353d1f4fe4e39244a3415bf83b91d6a9",
+    "lib/product-cost.ts": "59d10ec86523567c94b02c8da5f366f58d700ad08f84852ecd7917a3626c9f75",
+    "lib/adjustment-stock-cost.ts": "f0d8b9d8dcd19f55315ab2a0b43b1399a719ddf65134378e9b5cfa3aa8475b10"
+  },
+  "sourceCommit": "bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0",
+  "sourceSha256": "27fdce1669225620a674a3e178798e6a76911ed4cb47aeb95287186d18a3e72e",
+  "values": {
+    "amounts": [
+      {
+        "name": "amount-old-round",
+        "result": 0
+      },
+      {
+        "name": "amount-exact",
+        "result": 100
+      },
+      {
+        "name": "amount-disagreement",
+        "result": {
+          "error": "مجموع السطر لا يطابق الكمية وسعر الوحدة",
+          "status": 400
+        }
+      },
+      {
+        "name": "amount-micro",
+        "result": 1e-20
+      },
+      {
+        "name": "amount-total-zero",
+        "result": {
+          "error": "مجموع السطر غير صالح",
+          "status": 400
+        }
+      },
+      {
+        "name": "amount-sum",
+        "result": 0.3
+      },
+      {
+        "name": "amount-overflow",
+        "result": {
+          "error": "إجمالي الفاتورة غير صالح",
+          "status": 400
+        }
+      },
+      {
+        "name": "decimal-text",
+        "result": "0.00000000000000000001"
+      }
+    ],
+    "stock": [
+      0.19999999999999998,
+      0,
+      1e-20,
+      -0.000001000000000001,
+      0,
+      9e-21
+    ],
+    "cost": [
+      {
+        "name": "editable-card-not-evidence",
+        "result": {
+          "cost": null,
+          "source": null,
+          "at": null
+        }
+      },
+      {
+        "name": "latest-purchase-owns-cost",
+        "result": {
+          "cost": 40,
+          "source": "purchase",
+          "at": "2026-01-01T10:00:00.000Z"
+        }
+      },
+      {
+        "name": "latest-unknown-blocks-opening",
+        "result": {
+          "cost": null,
+          "source": null,
+          "at": null
+        }
+      },
+      {
+        "name": "void-current-falls-to-prior",
+        "result": {
+          "cost": 20,
+          "source": "purchase",
+          "at": "2026-01-01T10:00:00.000Z"
+        }
+      },
+      {
+        "name": "opening-legacy",
+        "result": {
+          "cost": 13,
+          "source": "legacy-opening",
+          "at": null
+        }
+      },
+      {
+        "name": "opening-saved-zero-blocks-fallback",
+        "result": {
+          "cost": null,
+          "source": null,
+          "at": null
+        }
+      }
+    ],
+    "discounts": [
+      {
+        "id": "a",
+        "lineTotal": 75
+      },
+      {
+        "id": "b",
+        "lineTotal": 75
+      }
+    ],
+    "latest": [
+      {
+        "present": true,
+        "cost": null
+      },
+      {
+        "present": true,
+        "cost": null
+      }
+    ]
+  }
+}

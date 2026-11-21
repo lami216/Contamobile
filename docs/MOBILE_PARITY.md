@@ -147,3 +147,31 @@ Suggested priority: correct report output scope and complete party-ledger report
 ## Approved runtime feature release 1.0.12
 
 The 2026-10-19 gap audit is now implemented in the approved runtime. See [APPROVED_FEATURES.md](APPROVED_FEATURES.md) for contracts, deliberate exclusions, import limitations and preservation gates. Production delivery requires the signed Android workflow to pass; the old React Native checklist is not release evidence.
+
+## Main879 compatibility — 2026-11-21
+
+Reference: merged Desktop main `8a6cb072c411ee698f3ca5a0f1943be80ccd2955` / 0.1.25 / build879. Phone baseline: delivered36 `c625c2e`.
+
+| Capability | Status | Verification boundary |
+| --- | --- | --- |
+| Audited noncash employee opening, edit/void and account dates | Implemented; source/browser checks passed | Exact879 payroll/ledger/backup and phone interaction tests |
+| Worker cash movement signed balances and historical reversal policy | Implemented; source/browser checks passed | Exact879 payment policy, rollback and permission tests |
+| Actual expense recording time and preserved edit time | Implemented; source/browser checks passed | Exact879 helper/API contracts plus genuine native legacy adaptation |
+| Reports, source access, import and exports for new worker opening | Implemented; source/browser checks passed | Canonical proof rejection, no fake cash/expense, scoped source read |
+| Existing phone style, removals, activation, backups and draft fences | Preserve | Regression suites, frozen styles and real27/36→37 upgrade gate |
+
+See [DESKTOP_879_MIGRATION_STUDY.md](DESKTOP_879_MIGRATION_STUDY.md). Shared storage/synchronization remains a separate, unimplemented capability.
+
+
+## Main882 movement statements — 2026-11-21
+
+Reference: Desktop main `f1cd62bf6fbd8cbaef49a479aff440027afba37b`, 0.1.26/build882. Phone baseline: delivered37 `f79c458ea28fa7204a7a9ad01b628bf2fa089686`.
+
+| Capability | Status | Verification |
+| --- | --- | --- |
+| Omitted note retention, explicit null/blank clearing, historical journal fallback | Implemented; local source/UI passed | Exact lifecycle source and real post/update/void, failed-save/retry/cold cases |
+| Literal statements in customer/supplier/worker/bank ledgers, full PDF/XLSX and sorting | Implemented; local source/UI passed | Arabic/French, indexed20k journal, full65-row export, per-leg50-row boundary |
+| Proven journal-only manual cash edits | Implemented; local source/UI passed | Exact original amount/account/source, unique active journal,14 malformed proofs rejected |
+| Existing financial meaning, activation, backups and phone appearance | Retained; final CI required | Same schema4, frozen CSS, original27/37→38 signed update gates |
+
+User authorizes merge to phone main only after successful integration checks. Shared database/synchronization remains separate. See [DESKTOP_882_MIGRATION_STUDY.md](DESKTOP_882_MIGRATION_STUDY.md).

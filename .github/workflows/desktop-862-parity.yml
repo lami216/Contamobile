@@ -1,0 +1,56 @@
+name: Desktop 862 business parity
+on:
+  pull_request:
+  push:
+    branches: ['feat/desktop-862-parity-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  business-parity:
+    # Avoid evaluating a later business contract against this archived source pin.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'feat/desktop-862-parity-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_MODULE: ${{ github.workspace }}/parity-browser/node_modules/playwright
+      PLAYWRIGHT_USE_BUNDLED: '1'
+      DESKTOP_862_ROOT: ${{ github.workspace }}/desktop-862-source
+      DESKTOP_862_SOURCE: ${{ github.workspace }}/desktop-862-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lami216/offline-conta
+          ref: bdcdf2dba16d09489da9d7ee7942a7eb5ab7f2a0
+          path: desktop-862-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned browser and runtime dependencies
+        run: |
+          npm install --prefix parity-browser --ignore-scripts --no-audit --no-fund playwright@1.62.1
+          parity-browser/node_modules/.bin/playwright install --with-deps chromium --only-shell
+          python scripts/prepare-approved-android.py
+          cp assets/fonts/StitchArabic*.ttf approved-runtime/assets/
+      - name: Desktop source comparisons and existing domain regressions
+        run: node scripts/test-862-regressions.mjs
+      - name: Existing mobile workflows, storage, activation and recovery
+        run: node scripts/test-862-regressions.mjs --browser
+      - name: New workspaces and finance integration
+        run: |
+          node scripts/test-business-workspaces-862.mjs
+          node scripts/test-mobile-finance-862-ux.mjs
+          node scripts/test-862-historical-edges-ux.mjs
+          node scripts/test-862-final-parity-ux.mjs
+          node scripts/test-business-identity-ux-862.mjs
+          node scripts/test-pos-draft-lifecycle-862.mjs
+          node scripts/verify-862-package.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-862-parity-evidence
+          path: outputs/desktop862-qa/

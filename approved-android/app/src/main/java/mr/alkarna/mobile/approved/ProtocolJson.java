@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 
 /** Independent Contatools wire domain. Never substitutes a web permit for a local license. */
 final class ProtocolJson {
@@ -12,11 +14,36 @@ final class ProtocolJson {
   if(value==null||value==JSONObject.NULL)return "null";
   if(value instanceof String)return LicenseVerifier.quote((String)value);
   if(value instanceof Boolean)return value.toString();
-  if(value instanceof Number){double n=((Number)value).doubleValue();if(!Double.isFinite(n)||Math.abs(n)>9007199254740991d)throw new Exception("Unsupported protocol number");return BigDecimal.valueOf(n).stripTrailingZeros().toPlainString();}
+  if(value instanceof Number)return canonicalNumber((Number)value);
   StringBuilder out=new StringBuilder();
   if(value instanceof JSONArray){out.append('[');JSONArray a=(JSONArray)value;for(int i=0;i<a.length();i++){if(i>0)out.append(',');out.append(canonical(a.get(i)));}return out.append(']').toString();}
   if(value instanceof JSONObject){out.append('{');JSONObject o=(JSONObject)value;TreeSet<String> names=new TreeSet<>();Iterator<String> it=o.keys();while(it.hasNext())names.add(it.next());for(String name:names){if(out.length()>1)out.append(',');out.append(LicenseVerifier.quote(name)).append(':').append(canonical(o.get(name)));}return out.append('}').toString();}
   throw new Exception("Unsupported protocol value");
+ }
+ /** JSON.stringify uses scientific notation below 1e-6. Integer bounds and
+  * ordinary decimal formatting remain the same as the existing protocol. */
+ static String canonicalNumber(Number value) throws Exception {
+  double n=value.doubleValue();
+  if(!Double.isFinite(n)||Math.abs(n)>9007199254740991d)throw new Exception("Unsupported protocol number");
+  if(n==0)return "0";
+  if(Math.abs(n)>=1e-6)return BigDecimal.valueOf(n).stripTrailingZeros().toPlainString();
+  // Find the shortest nearest decimal that round-trips to this binary double.
+  // Double.toString alone differs from ECMAScript for subnormals (MIN_VALUE
+  // is 4.9E-324 in some JDKs, whereas JSON.stringify emits 5e-324).
+  BigDecimal exact=new BigDecimal(n);
+  int exponent=exact.precision()-exact.scale()-1;
+  for(int precision=1;precision<=17;precision++){
+   BigDecimal rounded=exact.round(new MathContext(precision,RoundingMode.HALF_EVEN));
+   BigDecimal unit=BigDecimal.ONE.scaleByPowerOfTen(exponent-precision+1),best=null,distance=null;
+   for(int offset=-1;offset<=1;offset++){
+    BigDecimal candidate=rounded.add(unit.multiply(BigDecimal.valueOf(offset)));
+    if(Double.doubleToLongBits(candidate.doubleValue())!=Double.doubleToLongBits(n))continue;
+    BigDecimal gap=candidate.subtract(exact).abs();
+    if(best==null||gap.compareTo(distance)<0||(gap.compareTo(distance)==0&&!candidate.unscaledValue().testBit(0))){best=candidate;distance=gap;}
+   }
+   if(best!=null)return best.stripTrailingZeros().toString().replace('E','e');
+  }
+  throw new Exception("Unsupported protocol number");
  }
  static String base64(byte[] value){return Base64.getUrlEncoder().withoutPadding().encodeToString(value);}
  static byte[] decode(String value) throws Exception {if(value==null||!value.matches("[A-Za-z0-9_-]+")||value.length()%4==1)throw new Exception("Invalid protocol encoding");byte[] bytes=Base64.getUrlDecoder().decode(value);if(!base64(bytes).equals(value))throw new Exception("Noncanonical protocol encoding");return bytes;}

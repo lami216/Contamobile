@@ -1,32 +1,67 @@
 import {activeWarehouses} from './upgrade-state.js';
 import {openingState,planOpeningRecord,stockOperationRecord,adjustmentLineCount} from './stock-domain.js';
+import {archiveProductStock,zeroArchivedProductStock,restoreArchivedProduct,restoreArchiveStockClearance,isArchiveStockClearance,productStockEntries} from './archive-stock-clearance.js';
+import {expenseBusinessDate} from './expense-date-time.js';
+
+export const stockFrench={
+ 'استعادة المنتج':'Restaurer le produit','تصفير المخزون':'Mettre le stock à zéro','أرشفة المنتج':'Archiver le produit',
+ 'ستُستعاد جميع كميات التصفير المرتبطة بالأرشفة مرة واحدة، مع بقاء الفواتير والحسابات كما هي.':'Toutes les quantités remises à zéro lors de l’archivage seront rétablies une seule fois, sans modifier les factures ni les comptes.',
+ 'سيعاد إظهار المنتج مع الاحتفاظ بتاريخه.':'Le produit sera réaffiché en conservant son historique.',
+ 'سيُصفّر المخزون بتصحيح موثّق، وسيبقى المنتج مؤرشفًا.':'Le stock sera mis à zéro par une correction enregistrée ; le produit restera archivé.',
+ 'سيُصفّر المخزون بتصحيحات موثّقة ثم يؤرشف المنتج، مع الاحتفاظ بتاريخه.':'Le stock sera mis à zéro par des corrections enregistrées, puis le produit sera archivé en conservant son historique.',
+ 'سيؤرشف المنتج مع الاحتفاظ بتاريخه.':'Le produit sera archivé en conservant son historique.',
+ 'مستندات تصفير مرتبطة بالأرشفة':'documents de remise à zéro liés à l’archivage',
+ 'تصحيح المخزون المرتبط بأرشفة المنتج سجل نهائي وغير قابل للتعديل':'La correction de stock liée à l’archivage est définitive et ne peut pas être modifiée.',
+ 'مخزون المنتج يحتوي قيمة غير صالحة':'Le stock du produit contient une valeur invalide.',
+ 'تصفير المخزون بهذه العملية متاح للمنتج المؤرشف فقط':'Cette remise à zéro est réservée aux produits archivés.',
+ 'المنتج مؤرشف بالفعل':'Le produit est déjà archivé.',
+ 'المنتج يحتوي مخزونًا. أكد تصفير المخزون قبل الأرشفة.':'Ce produit contient du stock. Confirmez sa remise à zéro avant de l’archiver.',
+ 'المنتج المحذوف غير موجود':'Le produit archivé est introuvable.',
+ 'تصحيح تصفير مخزون الأرشفة غير موجود أو ملغى':'La correction de remise à zéro est introuvable ou déjà annulée.',
+ 'تعذر تخصيص رقم تسوية صالح':'Impossible d’attribuer un numéro de correction valide.',
+ 'عداد التسويات غير صالح':'Le compteur des corrections de stock est invalide.'
+};
 
 export function installStockFeatures(api){
- let draft=null,signature='',lineId=null,opening=null,openingProduct=0,pendingNavigation=null,passNavigation=false,expenseDraft=null,removeAfterSave=null;
- const key=kind=>'alkarna-workflow-draft:'+api.actor?.id+':'+kind;
- const read=kind=>{try{return JSON.parse(localStorage.getItem(key(kind))||'null')}catch{return null}};
- const store=kind=>{if(editingId)return;try{localStorage.setItem(key(kind),JSON.stringify(kind==='expense'?expenseDraft:draft))}catch{throw Error('تعذّر حفظ المسودة. أبقِ الصفحة مفتوحة حتى إتمام العملية.')}};
- const remove=kind=>{try{localStorage.removeItem(key(kind))}catch{}};
+ let draft=null,signature='',lineId=null,opening=null,openingProduct=0,pendingNavigation=null,passNavigation=false,expenseDraft=null,removeAfterSave=null,clearanceAction=null,clearanceAfterSave=false;
+ const draftPrefix='alkarna-workflow-draft:',draftKinds=['transfer','adjustment','expense'];
+ const key=(kind,userId=api.actor?.id)=>draftPrefix+userId+':'+kind;
+ const savedEpochs=userId=>S.workflowDraftEpochs&&Object.hasOwn(S.workflowDraftEpochs,userId)?S.workflowDraftEpochs[userId]:undefined;
+ function epoch(kind,userId=api.actor?.id){const values=savedEpochs(userId),value=values&&Object.hasOwn(values,kind)?values[kind]:undefined;if(value===undefined)return 0;if(!Number.isSafeInteger(value)||value<0)throw Error('بيانات حفظ المسودة غير صالحة');return value}
+ function current(value,kind,userId=api.actor?.id){if(!value||typeof value!=='object'||Array.isArray(value))return false;const version=Object.hasOwn(value,'epoch')?value.epoch:0;return Number.isSafeInteger(version)&&version>=0&&version===epoch(kind,userId)}
+ const remove=(kind,userId=api.actor?.id)=>{try{localStorage.removeItem(key(kind,userId))}catch{}};
+ const read=kind=>{try{const value=JSON.parse(localStorage.getItem(key(kind))||'null');if(!current(value,kind)){remove(kind);return null}return {...value,epoch:value.epoch??0}}catch{return null}};
+ // A completed accounting commit fences any older WebView localStorage disk
+ // image. Its epoch is durable in the SAME transaction as the posted document.
+ function completed(kind,wasEditing){if(removeAfterSave)return;const userId=api.actor?.id,consume=!wasEditing;if(consume){const version=epoch(kind,userId);if(version===Number.MAX_SAFE_INTEGER)throw Error('تعذّر إنهاء المسودة بأمان');S.workflowDraftEpochs={...S.workflowDraftEpochs,[userId]:{...savedEpochs(userId),[kind]:version+1}};}removeAfterSave={kind,userId,consume};}
+ function pruneStaleDrafts(){try{for(const name of Object.keys(localStorage)){if(!name.startsWith(draftPrefix))continue;const split=name.lastIndexOf(':'),kind=name.slice(split+1),userId=name.slice(draftPrefix.length,split);if(!draftKinds.includes(kind)||!userId)continue;let value;try{value=JSON.parse(localStorage.getItem(name))}catch{}if(!current(value,kind,userId))remove(kind,userId)}}catch{}}
+ const store=kind=>{if(editingId||!api.actor?.id)return;const value=kind==='expense'?expenseDraft:draft;if(!current(value,kind))return;try{localStorage.setItem(key(kind),JSON.stringify(value))}catch{throw Error('تعذّر حفظ المسودة. أبقِ الصفحة مفتوحة حتى إتمام العملية.')}};
  const counted=(record,line)=>{try{return adjustmentLineCount(S,record,line).after}catch{return ''}};
  const fixedCorrection=()=>view==='adjustment'&&Boolean(editingId);
  function init(){
   const mode=view==='transfer'?'transfer':'adjustment',next=api.actor?.id+':'+mode+':'+(editingId||'new');if(signature===next&&draft)return draft;
   const record=S.records.find(r=>r.id===editingId),saved=record?null:read(mode),warehouses=activeWarehouses(S);
-  draft=record?{from:record.from||record.warehouse,to:record.toWarehouse||'',note:record.note||'',lines:record.lines.map(l=>({product:l.product,quantity:mode==='transfer'?l.qty:counted(record,l)}))}:saved||{from:warehouses.includes(S.warehouse)?S.warehouse:warehouses[0],to:warehouses.find(w=>w!==S.warehouse)||'',note:'',lines:[]};
+  draft=record?{from:record.from||record.warehouse,to:record.toWarehouse||'',note:record.note||'',lines:record.lines.map(l=>({product:l.product,quantity:mode==='transfer'?l.qty:counted(record,l)})),epoch:epoch(mode)}:saved||{from:warehouses.includes(S.warehouse)?S.warehouse:warehouses[0],to:warehouses.find(w=>w!==S.warehouse)||'',note:'',lines:[],epoch:epoch(mode)};
   if(!record)draft.lines=draft.lines.filter(l=>S.products.some(p=>p.id===l.product&&!p.archived));signature=next;return draft;
  }
  const select=(name,value,list,disabled=false)=>`<select name="${name}" data-feature-stock-field${disabled?' disabled':''}>${list.map(x=>`<option value="${esc(x)}" ${x===value?'selected':''}>${esc(x)}</option>`).join('')}</select>`;
  const oldStock=stockEditor;stockEditor=function(){
-  const d=init(),warehouses=activeWarehouses(S),mode=view==='transfer'?'transfer':'adjustment';
+  const d=init(),old=S.records.find(r=>r.id===editingId),warehouses=[...new Set([...activeWarehouses(S),...(old?[old.warehouse,old.from,old.toWarehouse].filter(w=>S.warehouses.includes(w)):[])])],mode=view==='transfer'?'transfer':'adjustment';
   return `<div class="feature-stock-editor">${editingId?`<p class="notice">تعديل العملية · ${esc(S.records.find(r=>r.id===editingId)?.number||editingId)}</p>`:''}<form id="utility-form"><div class="pair">${field(mode==='transfer'?'من مخزن':'المخزن',select('from',d.from,warehouses,fixedCorrection()))}${mode==='transfer'?field('إلى مخزن',select('to',d.to,warehouses.filter(w=>w!==d.from))):''}</div>${fixedCorrection()?'':`<div class="feature-stock-add">${field('المنتج',`<select name="product"><option value="">اختر المنتج</option>${S.products.filter(p=>!p.archived).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>`)}<button type="button" class="feature-button" data-action="site:feature:stock-add">${icon('plus')}إضافة</button></div>`}${api.boundedTableHtml(`<div class="register-table-shell"><div class="register-scroll"><table class="register-table feature-stock-lines"><thead><tr><th>المنتج</th><th>المتوفر</th><th>${mode==='transfer'?'الكمية':'العدد الفعلي'}</th><th></th></tr></thead><tbody>${d.lines.map(l=>{const p=S.products.find(p=>p.id===l.product);return `<tr><td><button class="feature-row-name" type="button" data-action="site:feature:stock-line:${l.product}">${esc(p.name)}</button></td><td>${p.stocks[d.from]||0}</td><td><button class="feature-row-number" type="button" data-action="site:feature:stock-line:${l.product}">${l.quantity===''?'غير متاح':l.quantity}</button></td><td>${fixedCorrection()?'':`<button class="icon-btn negative" type="button" data-action="site:feature:stock-remove:${l.product}" aria-label="إزالة ${esc(p.name)}">${icon('close')}</button>`}</td></tr>`}).join('')||'<tr><td colspan="4">أضف منتجات إلى العملية</td></tr>'}</tbody></table></div></div>`)}${field(mode==='transfer'?'ملاحظة':'سبب التصحيح',`<input name="note" maxlength="300" data-feature-stock-field value="${esc(d.note)}">`)}</form>${!editingId&&d.lines.length?`<p class="feature-draft-note">المسودة محفوظة على هذا الجهاز</p>`:''}${section('سجل هذه العمليات')}${rows(liveRecords().filter(r=>r.kind===(mode==='transfer'?'stocktransfer':'adjustment')))}</div>`;
  };
- document.addEventListener('input',event=>{if(event.target.matches('[data-feature-stock-field]')){const d=init();d[event.target.name]=event.target.value;store(view==='transfer'?'transfer':'adjustment')}if(modal==='expense'&&event.target.closest('#sheet-form')){expenseDraft={...expenseDraft,...api.form()};store('expense')}});
- document.addEventListener('change',event=>{if(event.target.matches('select[data-feature-stock-field]')){const d=init();d[event.target.name]=event.target.value;if(d.from===d.to)d.to=activeWarehouses(S).find(w=>w!==d.from)||'';store(view==='transfer'?'transfer':'adjustment');render()}});
+ const stockField=target=>api.actor?.id&&['transfer','adjustment'].includes(view)&&target.isConnected&&document.querySelector('#utility-form')&&target.closest('#utility-form')===document.querySelector('#utility-form')&&target.matches('[data-feature-stock-field]');
+ document.addEventListener('input',event=>{if(stockField(event.target)){const d=init();d[event.target.name]=event.target.value;store(view)}if(api.actor?.id&&modal==='expense'&&event.target.isConnected&&document.querySelector('#sheet-form')&&event.target.closest('#sheet-form')===document.querySelector('#sheet-form')){expenseDraft={...expenseDraft,...api.form()};store('expense')}});
+ document.addEventListener('change',event=>{if(stockField(event.target)&&event.target.matches('select')){const d=init();d[event.target.name]=event.target.value;if(d.from===d.to)d.to=activeWarehouses(S).find(w=>w!==d.from)||'';store(view);render()}});
  return {
-  afterSave(){if(removeAfterSave){remove(removeAfterSave);removeAfterSave=null;}},
+  pruneStaleDrafts,
+  afterSave(){if(removeAfterSave){const finished=removeAfterSave;if(finished.consume)remove(finished.kind,finished.userId);removeAfterSave=null;if(finished.kind==='expense')expenseDraft=null;else{draft=null;signature='';}}if(clearanceAfterSave){clearanceAction=null;clearanceAfterSave=false;}},
+  afterFailure(){removeAfterSave=null;clearanceAfterSave=false;},
+  productActions(product){if(!product)return '';const isArchived=product.archived===true;return `<div class="management-actions">${isArchived?`${api.can('products.edit')?`<button class="feature-button" data-action="site:feature:stock-restore:${product.id}">استعادة المنتج</button>`:''}${api.can('products.delete')&&productStockEntries(product).length?`<button class="feature-button negative" data-action="site:feature:stock-zero:${product.id}">تصفير المخزون</button>`:''}`:api.can('products.delete')?`<button class="feature-button negative" data-action="site:feature:stock-archive:${product.id}">أرشفة المنتج</button>`:''}</div>`;},
   async before(action){
-   if(action==='open:expense'){expenseDraft=read('expense')||{date:api.today()};}
-   if(action==='post-cash'&&modal==='expense'){expenseDraft={...expenseDraft,...api.form()};const date=expenseDraft.date;let valid=false;try{valid=/^\d{4}-\d{2}-\d{2}$/.test(date)&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date}catch{}if(!valid)throw Error('التاريخ غير صالح');}
+   const source=action.startsWith('source:')?S.records.find(row=>row.id===Number(action.split(':')[1])):null;if(isArchiveStockClearance(source))throw Error('تصحيح المخزون المرتبط بأرشفة المنتج سجل نهائي وغير قابل للتعديل');
+   if(action==='confirm-void'||action.startsWith('confirm-void:')){const record=S.records.find(row=>row.id===Number(action.split(':')[1]||selected));if(isArchiveStockClearance(record)){const outcome=restoreArchiveStockClearance(S,{documentId:record.id},{actor:api.actor});api.replaceState(outcome.state);selected=record.id;view='invoice';editingId=null;modal=null;render();return true;}}
+   if(action==='open:expense'){expenseDraft=read('expense')||{date:api.today(),epoch:epoch('expense')};}
+   if(action==='post-cash'&&modal==='expense'){expenseDraft={...expenseDraft,...api.form()};expenseDraft.date=expenseBusinessDate(expenseDraft.date);}
    if(action==='review-utility'&&['transfer','adjustment'].includes(view)){
     const d=init(),f=api.form('utility-form');d.from=f.from||d.from;d.to=f.to||d.to;d.note=f.note||'';
     const old=S.records.find(r=>r.id===editingId),kind=view==='transfer'?'stocktransfer':'adjustment',base=newRecord(kind);
@@ -38,13 +73,14 @@ export function installStockFeatures(api){
    passNavigation=false;return false;
   },
   after(action,oldView,oldModal,oldEditing){
-   if(action==='post-cash'&&oldModal==='expense'&&view==='invoice'){removeAfterSave='expense';expenseDraft=null;}
-   if((action==='commit-pending'||action==='site:feature:stock-confirm')&&view==='invoice'&&['transfer','adjustment'].includes(oldView)){removeAfterSave=oldView;draft=null;signature='';}
-   if(action.startsWith('source:')){signature='';draft=null;const r=S.records.find(r=>r.id===Number(action.split(':')[1]));if(r?.kind==='expense')expenseDraft={name:r.title,account:String(r.account),amount:String(r.total),note:r.note||'',date:r.date};render();}
+   if(action==='post-cash'&&oldModal==='expense'&&view==='invoice')completed('expense',oldEditing);
+   if((action==='commit-pending'||action==='site:feature:stock-confirm')&&view==='invoice'&&['transfer','adjustment'].includes(oldView))completed(oldView,oldEditing);
+   if(action.startsWith('source:')){signature='';draft=null;const r=S.records.find(r=>r.id===Number(action.split(':')[1]));if(r?.kind==='expense')expenseDraft={name:r.title,account:String(r.account),amount:String(r.total),note:r.note||'',date:r.date,epoch:epoch('expense')};render();}
   },
   date(){return modal==='expense'?expenseDraft?.date:null;},
   restoreInputs(){if(modal==='expense'&&expenseDraft)for(const [name,value]of Object.entries(expenseDraft)){const input=document.querySelector('#sheet-form [name='+name+']');if(input&&document.activeElement!==input)input.value=value??'';}},
   sheet(){
+   if(modal==='feature-product-clearance-confirm'&&clearanceAction){const product=S.products.find(row=>row.id===clearanceAction.id);if(!product)throw Error('المنتج غير موجود');const entries=productStockEntries(product),pending=S.records.filter(row=>isArchiveStockClearance(row)&&!row.voided&&(row.status===undefined||row.status==='posted')&&row.lines.some(line=>line.product===product.id));const restoring=clearanceAction.kind==='stock-restore',zero=clearanceAction.kind==='stock-zero';return api.modalMarkup(restoring?'استعادة المنتج':zero?'تصفير المخزون':'أرشفة المنتج',`<h3 data-user-content>${esc(product.name)}</h3><p class="notice">${restoring?pending.length?'ستُستعاد جميع كميات التصفير المرتبطة بالأرشفة مرة واحدة، مع بقاء الفواتير والحسابات كما هي.':'سيعاد إظهار المنتج مع الاحتفاظ بتاريخه.':zero?'سيُصفّر المخزون بتصحيح موثّق، وسيبقى المنتج مؤرشفًا.':entries.length?'سيُصفّر المخزون بتصحيحات موثّقة ثم يؤرشف المنتج، مع الاحتفاظ بتاريخه.':'سيؤرشف المنتج مع الاحتفاظ بتاريخه.'}</p>${entries.length?`<div class="feature-admin-list">${entries.map(([warehouse,quantity])=>`<div class="feature-admin-row"><span data-user-content>${esc(warehouse)}</span><b>${quantity}</b></div>`).join('')}</div>`:''}${restoring&&pending.length?`<p class="muted">${pending.length} مستندات تصفير مرتبطة بالأرشفة</p>`:''}`,'site:feature:stock-clearance-confirm',restoring?'استعادة المنتج':zero?'تصفير المخزون':'أرشفة المنتج','feature-sheet');}
    if(modal==='feature-stock-line'){const p=S.products.find(p=>p.id===lineId),l=draft.lines.find(l=>l.product===lineId);return api.modalMarkup('تعديل الكمية',`<h3 data-user-content>${esc(p.name)}</h3>${field(view==='transfer'?'الكمية المنقولة':'العدد الفعلي',`<input name="quantity" type="text" inputmode="decimal" data-pos-select-all value="${esc(l.quantity)}">`)}`,'site:feature:stock-line-save','حفظ','feature-sheet');}
    if(modal==='feature-stock-review')return api.modalMarkup('مراجعة العملية',`<p class="notice">${esc(pendingRecord.from||pendingRecord.warehouse)}${pendingRecord.toWarehouse?' ← '+esc(pendingRecord.toWarehouse):''}</p><div class="feature-admin-list">${pendingRecord.lines.map(l=>`<div class="feature-admin-row"><strong data-user-content>${esc(l.name)}</strong><span>${pendingRecord.kind==='stocktransfer'?l.qty:l.actualQuantity}</span></div>`).join('')}</div>`,'site:feature:stock-confirm','تأكيد التسجيل','feature-sheet');
    if(modal==='feature-opening'&&(S.products.find(p=>p.id===openingProduct)?.openingHistoryLocked||!opening.hasNativeOpening&&opening.hasStockHistory))return api.modalMarkup('رصيد البداية',`<h3 data-user-content>${esc(S.products.find(p=>p.id===openingProduct)?.name)}</h3><p class="notice">رصيد البداية التاريخي غير قابل للتعديل؛ راجع سجل الحركات</p>${section('سجل رصيد البداية')}${rows(S.records.filter(r=>r.lines.some(l=>l.product===openingProduct)))}`,'','حفظ','feature-sheet');
@@ -53,18 +89,20 @@ export function installStockFeatures(api){
    return null;
   },
   async action(command,id){
+   if(['stock-archive','stock-zero','stock-restore'].includes(command)){const product=S.products.find(row=>row.id===Number(id));if(!product)throw Error('المنتج غير موجود');clearanceAction={kind:command,id:product.id,cap:command==='stock-restore'?'products.edit':'products.delete'};clearanceAfterSave=false;modal='feature-product-clearance-confirm';return render();}
+   if(command==='stock-clearance-confirm'){if(modal!=='feature-product-clearance-confirm'||!clearanceAction)throw Error('راجع العملية أولًا');const {kind,id}=clearanceAction,context={actor:api.actor};const outcome=kind==='stock-restore'?restoreArchivedProduct(S,id,context):kind==='stock-zero'?zeroArchivedProductStock(S,id,context):archiveProductStock(S,id,{...context,zeroStock:true});api.replaceState(outcome.state);modal=null;selected=id;view='product';editingId=null;if(outcome.changed)clearanceAfterSave=true;else clearanceAction=null;return render();}
    if(command==='stock-add'){if(fixedCorrection())throw Error('لا يمكن تغيير منتجات سند التصحيح بعد اعتماده؛ عدّل الكميات فقط أو ألغ السند وأنشئ سندًا جديدًا');const d=init(),product=Number(api.form('utility-form').product),p=S.products.find(p=>p.id===product);if(!p)throw Error('اختر المنتج');if(!d.lines.some(l=>l.product===product))d.lines.push({product,quantity:view==='transfer'?1:p.stocks[d.from]||0});lineId=product;modal='feature-stock-line';store(view);return render()}
    if(command==='stock-line'){lineId=Number(id);modal='feature-stock-line';return render()}
    if(command==='stock-remove'){if(fixedCorrection())throw Error('لا يمكن تغيير منتجات سند التصحيح بعد اعتماده؛ عدّل الكميات فقط أو ألغ السند وأنشئ سندًا جديدًا');init().lines=draft.lines.filter(l=>l.product!==Number(id));store(view);return render()}
    if(command==='stock-line-save'){const value=Number(api.form().quantity);if(!Number.isFinite(value)||value<0||view==='transfer'&&value===0)throw Error('أدخل كمية صحيحة');draft.lines.find(l=>l.product===lineId).quantity=value;modal=null;store(view);return render()}
-   if(command==='stock-confirm'){if(!pendingRecord)throw Error('راجع العملية أولًا');const kind=pendingRecord.kind;if(commitRecord(pendingRecord)){removeAfterSave=kind==='stocktransfer'?'transfer':'adjustment';draft=null;signature='';}return}
+   if(command==='stock-confirm'){if(!pendingRecord)throw Error('راجع العملية أولًا');const kind=pendingRecord.kind,wasEditing=editingId;if(commitRecord(pendingRecord))completed(kind==='stocktransfer'?'transfer':'adjustment',wasEditing);return}
    if(command==='opening'){openingProduct=Number(id);const p=S.products.find(p=>p.id===openingProduct);if(!p)throw Error('المنتج غير موجود');opening=await openingState(S,p);modal='feature-opening';return render()}
    if(command==='opening-save'){const p=S.products.find(p=>p.id===openingProduct),f=api.form(),base=newRecord('adjustment'),record=planOpeningRecord(S,p,await openingState(S,p),Number(f.openingTotal),Number(f.openingCost),f.openingWarehouse,f.relocate==='yes',base.id,base.date,base.time,f.reason);commitRecord(record);return}
    if(command==='draft-continue'){modal=null;return render()}
    if(command==='draft-leave'||command==='draft-discard'){const next=pendingNavigation;if(command==='draft-discard'){remove(view);draft=null;signature='';}else store(view);pendingNavigation=null;modal=null;passNavigation=true;return api.engineDispatch(next)}
   },
   handles:command=>/^(stock-|opening|draft-)/.test(command),
-  permission(command){return command.startsWith('opening')?'warehouses.adjust':(view==='transfer'?'warehouses.transfer':'warehouses.adjust')+(editingId?'.edit':'');},
+  permission(command){if(command==='stock-clearance-confirm')return clearanceAction?.cap||'products.delete';if(['stock-archive','stock-zero'].includes(command))return 'products.delete';if(command==='stock-restore')return 'products.edit';return command.startsWith('opening')?'warehouses.adjust':(view==='transfer'?'warehouses.transfer':'warehouses.adjust')+(editingId?'.edit':'');},
   expenseHtml(html){return modal==='expense'?html.replace('<div class="cash-form">','<div class="cash-form">'+field('تاريخ المصروف',input('date','date',expenseDraft?.date||api.today()))):html;}
  };
 }

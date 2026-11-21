@@ -4,14 +4,15 @@ import sys,zipfile
 apk=Path(sys.argv[1])
 with zipfile.ZipFile(apk) as package:
     names=package.namelist()
-    for name in ['activation.html','activation.css','activation.js']:
+    for name in ['activation.html','activation.css','activation.js','privacy.html','privacy.css']:
         assert 'assets/approved/'+name in names, 'Missing activation UI: '+name
     assert not any('license-contract.json' in name for name in names), 'Test fixture included in APK'
     dex=b''.join(package.read(name) for name in names if name.endswith('.dex'))
-    for name in [b'LicenseVerifier;',b'DeviceLicense;',b'LicenseClock;']:
+    for name in [b'LicenseVerifier;',b'DeviceLicense;',b'LicenseClock;',b'StandaloneControl;',b'PrivacyActivity;']:
         assert name in dex, 'Native gate missing: '+name.decode()
-    for name in [b'TestLicenseIssuer;',b'LicenseCompatibilityTest;',b'ALKARNA_TEST_LICENSE_BYPASS']:
+    for name in [b'TestLicenseIssuer;',b'LicenseCompatibilityTest;',b'StandaloneControlTest;',b'ALKARNA_TEST_LICENSE_BYPASS',b'AccountAccessClient;',b'AccountAccessActivity;',b'AccountVault;']:
         assert name not in dex, 'Test-only activation code included: '+name.decode()
+    assert not any('/account-access' in name or '/online-' in name or '/reviewed-entry' in name for name in names), 'Institution runtime cannot enter the local-only APK'
     for key in [b'VafWOl9h-bF8auIQTUvS5AATeR8yyxJu49p-QSzk7-s',b'-kAStxv0yNuJ9GyzSNaiywfrZ5BziSWL5kJVMFOnRUY']:
         assert key in dex, 'Desktop production verification key missing'
 print('PASS customer APK includes native activation and desktop public keys; no test issuer, fixtures, or activation bypass')
