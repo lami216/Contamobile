@@ -161,3 +161,17 @@ Reference: merged Desktop main `8a6cb072c411ee698f3ca5a0f1943be80ccd2955` / 0.1.
 | Existing phone style, removals, activation, backups and draft fences | Preserve | Regression suites, frozen styles and real27/36→37 upgrade gate |
 
 See [DESKTOP_879_MIGRATION_STUDY.md](DESKTOP_879_MIGRATION_STUDY.md). Shared storage/synchronization remains a separate, unimplemented capability.
+
+
+## Main882 movement statements — 2026-11-21
+
+Reference: Desktop main `f1cd62bf6fbd8cbaef49a479aff440027afba37b`, 0.1.26/build882. Phone baseline: delivered37 `f79c458ea28fa7204a7a9ad01b628bf2fa089686`.
+
+| Capability | Status | Verification |
+| --- | --- | --- |
+| Omitted note retention, explicit null/blank clearing, historical journal fallback | Implemented; local source/UI passed | Exact lifecycle source and real post/update/void, failed-save/retry/cold cases |
+| Literal statements in customer/supplier/worker/bank ledgers, full PDF/XLSX and sorting | Implemented; local source/UI passed | Arabic/French, indexed20k journal, full65-row export, per-leg50-row boundary |
+| Proven journal-only manual cash edits | Implemented; local source/UI passed | Exact original amount/account/source, unique active journal,14 malformed proofs rejected |
+| Existing financial meaning, activation, backups and phone appearance | Retained; final CI required | Same schema4, frozen CSS, original27/37→38 signed update gates |
+
+User authorizes merge to phone main only after successful integration checks. Shared database/synchronization remains separate. See [DESKTOP_882_MIGRATION_STUDY.md](DESKTOP_882_MIGRATION_STUDY.md).

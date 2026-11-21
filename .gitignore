@@ -49,3 +49,9 @@ desktop-879-source/
 outputs/desktop879-qa/
 build-879/
 android879-proof/
+
+# Main882 candidate proof and isolated source inputs.
+desktop-882-source/
+outputs/desktop882-qa/
+build-882/
+android882-proof/

@@ -1,3 +1,4 @@
+import {movementStatement,statementNote} from './movement-statement.js';
 import {recordNumber,recordReference} from './document-presentation.js';
 import {mobileLineTotal} from './invoice-amount.js';
 import {currencyCode} from './upgrade-state.js';
@@ -10,12 +11,13 @@ export function invoicePdfModel(state,r,labels,{language='ar'}={}){
  const t=v=>translateText(v,language),currency=currencyCode(state),system=v=>['نقدي','بنكيلي','مصرفي','السداد','أمانتي','بيم','المخزن الرئيسي','مخزن الاحتياط'].includes(v)?t(v):v,account=id=>system(state.accounts.find(a=>a.id===id)?.name||'—'),party=state.parties.find(p=>p.id===r.party),kind=labels[r.kind]||r.kind;
  const blocks=[{kind:'heading',text:t(kind)},{kind:'text',text:recordNumber(r)+' · '+t(r.date)+' '+(r.time||'')}];
  const fields=[[t('الحالة'),t(r.voided?'ملغاة':r.due?'على الحساب':'مسجلة')],...(party?[[t(party.type==='supplier'?'المورد':'العميل'),party.name]]:[[t('البيان'),localizedRecordTitle(r,language,state)]]),...(r.account?[[t('وسيلة الدفع'),account(r.account)]]:[]),...(r.to?[[t('الحساب المستلم'),account(r.to)]]:[]),...(r.warehouse?[[t('المخزن'),system(r.warehouse)]]:[]),...(r.from?[[t('من مخزن'),system(r.from)],[t('إلى مخزن'),system(r.toWarehouse)]]:[])];
- if(recordNumber(r)!==recordReference(r))fields.push([t('المرجع الأصلي'),recordReference(r)]);
+ const movement=['receive','pay','deposit','withdraw','transfer'].includes(r.kind);if(movement){const fallback=r.kind==='receive'?t('استلام من الطرف'):r.kind==='pay'?t('دفع للطرف'):r.kind==='deposit'?t('إيداع'):r.kind==='withdraw'?t('سحب'):t('سند تحويل بين الحسابات'),value=movementStatement(r,fallback),existing=fields.find(row=>row[0]===t('البيان'));if(existing)existing[1]=value;else fields.push([t('البيان'),value]);}
+  if(recordNumber(r)!==recordReference(r))fields.push([t('المرجع الأصلي'),recordReference(r)]);
  if(r.kind==='employee-opening')fields.push([t('نوع الحركة'),t('عملية غير نقدية')],[t('الاتجاه'),t(r.employeeOpeningDirection==='payable'?'مستحق للعامل':'مستحق على العامل')]);
  if(r.kind==='employee-closure')fields.push([t('نوع الحركة'),t('عملية غير نقدية')],[t('احتياطي الأجور المحرر'),r.salaryReserveReleased]);
  blocks.push({kind:'table',rows:fields,header:false,widths:[.24,.76]});
  if(r.lines.length){const adjustment=r.kind==='adjustment';blocks.push({kind:'subheading',text:t(adjustment?'تفاصيل التصحيح':'بنود الفاتورة')},{kind:'table',widths:[.46,.12,.20,.22],rows:[[t('المنتج'),t(adjustment?'التغيير':'الكمية'),t('سعر الوحدة')+' '+currency,t('المجموع')+' '+currency],...r.lines.map(l=>[l.name+(l.warehouse?' · '+system(l.warehouse):''),adjustment?l.delta:l.qty,l.price,mobileLineTotal(l)])]});}
- blocks.push({kind:'table',rows:[[t('الإجمالي')+' '+currency,r.total],...(r.paid!=null?[[t('المدفوع')+' '+currency,r.paid]]:[]),...(r.due!=null?[[t('على الحساب')+' '+currency,r.due]]:[])],header:false,widths:[.60,.40]});if(r.note)blocks.push({kind:'subheading',text:t('الملاحظة')},{kind:'text',text:r.note});
+ blocks.push({kind:'table',rows:[[t('الإجمالي')+' '+currency,r.total],...(r.paid!=null?[[t('المدفوع')+' '+currency,r.paid]]:[]),...(r.due!=null?[[t('على الحساب')+' '+currency,r.due]]:[])],header:false,widths:[.60,.40]});if(!movement&&statementNote(r))blocks.push({kind:'subheading',text:t('الملاحظة')},{kind:'text',text:statementNote(r)});
  return {language,dir:language==='fr'?'ltr':'rtl',brand:state.branding||'AlKarna',created:new Date().toLocaleDateString(language==='fr'?'fr-MR':'en-GB'),logo:state.brandInfo?.logo||'',branding:state.brandInfo||{},includeFooter:['sale','purchase'].includes(r.kind),blocks};
 }
 const roundTotal=n=>Math.round((n+Number.EPSILON)*100)/100;

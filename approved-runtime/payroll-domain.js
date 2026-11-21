@@ -1,3 +1,4 @@
+import {statementNote,movementStatement} from './movement-statement.js';
 /** Offline main build 879 / 0.1.25, 8a6cb072c411ee698f3ca5a0f1943be80ccd2955.
  * Pure mobile adapter; no network, storage, UI or permission side effects.
  * Desktop payroll/calendar/validation code below is transpiled without semantic edits.
@@ -1503,6 +1504,7 @@ function employeeDelta(document) {
     if (document.kind === "employee-accrual") return amount;
     return employeePaymentDirection(document) === "deposit" ? amount : -amount;
 }
+// Ledger statement projection follows main882 /0.1.26; payroll accounting above remains main879.
 export function buildEmployeeLedger(employee, documents, period = {}) {
     const employeeId = String(employee.id);
     const posted = documents.filter((document)=>document.employeeId === employeeId && document.status === "posted" && (document.kind === "employee-opening" || document.kind === "employee-accrual" || document.kind === "employee-payment" || document.kind === "employee-closure"));
@@ -1532,7 +1534,7 @@ export function buildEmployeeLedger(employee, documents, period = {}) {
         else if (isAccrual) accrued += cents(document.total);
         else if (direction === "deposit") deposited += cents(document.total);
         else if (!isOpening) withdrawn += cents(document.total);
-        const note = typeof document.note === "string" ? document.note.trim() : "";
+        const note = statementNote(document);
         rows.push({
             id: String(document.id),
             documentId: String(document.id),
@@ -1543,7 +1545,8 @@ export function buildEmployeeLedger(employee, documents, period = {}) {
             movementType,
             movementCode,
             documentNumber: displayDocumentNumber(document),
-            description: movementType + (note ? ` — ${note}` : ""),
+            note,
+            description: movementStatement(document, movementType),
             descriptionCode: movementCode,
             debit: Math.max(delta, 0) / 100,
             credit: Math.max(-delta, 0) / 100,

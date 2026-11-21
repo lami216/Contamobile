@@ -1,5 +1,6 @@
 import {isStockSettlementDocument,nextStockSettlementSequence} from './stock-settlement.js';
 import {prepareExpenseRecordDateTime} from './expense-date-time.js';
+import {currentMovementNote,prepareMovementNote,isMovementNoteRecord} from './movement-note-update.js';
 import {installAccountingHealthFeatures} from './feature-health.js';
 import {installEmployeeFeatures} from './feature-employees.js';
 import {installPartyOpeningFeatures} from './feature-party-opening.js';
@@ -18,9 +19,11 @@ import {repairArchivedBalances,reconcileHistoricalArchives} from './accounting-l
 export function prepareFeatureState(state){const before=JSON.stringify(state);upgradeState(state);seedStockEvents(state);refreshCurrentProductCosts(state);validateFeatureState(state);repairArchivedBalances(state);return before!==JSON.stringify(state);}
 const stockSnapshot=state=>({products:state.products.map(p=>({id:p.id,stocks:{...p.stocks}}))});
 export function installFeatures(api){
+ let movementFormAttempt=null,movementFormRecovery=null;
  const health=installAccountingHealthFeatures(api),employees=installEmployeeFeatures(api),partyOpening=installPartyOpeningFeatures(api),categories=installExpenseCategoryFeatures(api);
  const report=installReportFeatures(api),admin=installAdminFeatures(api),stock=installStockFeatures(api),importer=installImportFeatures(api),system=installSystemFeatures(api);
  globalThis.karnaCurrency=()=>currencyCode(S);
+ globalThis.karnaMovementNote=record=>currentMovementNote(S,record);
  const groups=[health,employees,partyOpening,categories,report,admin,stock,importer,system];
  const commandOf=action=>{const parts=action.split(':');return {command:parts[2],id:parts[3],rest:parts[4]}};
  const groupFor=command=>groups.find(g=>g.handles(command));
@@ -54,6 +57,7 @@ export function installFeatures(api){
  };
  const originalCommit=commitRecord;commitRecord=function(r){
   const beforeState=stockSnapshot(S),old=S.records.find(x=>x.id===r.id),previous=old?structuredClone(old):null;
+  prepareMovementNote(S,r,old);
   if(old)for(const [key,value]of Object.entries(old))if(!Object.hasOwn(r,key))r[key]=structuredClone(value);
   const now=new Date().toISOString();if(r.kind==='expense'){const timed=prepareExpenseRecordDateTime(r,old,new Date(now));for(const key of ['occurredAt','createdAt','recordedAt'])if(!Object.hasOwn(timed,key))delete r[key];Object.assign(r,timed);if(!old)r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;else if(Object.hasOwn(old,'postingOrder'))r.postingOrder=old.postingOrder;else delete r.postingOrder;}else if(!old){r.occurredAt=now;r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;}else{for(const key of ['occurredAt','postingOrder']){if(Object.hasOwn(old,key))r[key]=old[key];else delete r[key];}}for(const line of r.lines||[])line.id??=crypto.randomUUID();
   if(old?.openingAccountCorrection){const latest=S.records.find(x=>!x.voided&&x.openingAccountCorrection&&x.account===old.account);if(latest?.id!==old.id)throw Error('يمكن تعديل آخر تصحيح فعال فقط');}
@@ -71,6 +75,8 @@ export function installFeatures(api){
   if(r.kind==='purchase'||r.openingCorrection||r.openingStock)currentCosts();render();return true;
  };
  const originalEngine=api.engineDispatch;api.engineDispatch=async function(action){
+  if(action==='post-party'||action==='post-cash'&&['deposit','withdraw','cashtransfer'].includes(modal))movementFormAttempt={actor:api.actor?.id,view,modal,editingId,values:{...api.form()}};
+  else{movementFormAttempt=null;movementFormRecovery=null;}
   const voidBeforeState=['confirm-void','save-product'].includes(action)?stockSnapshot(S):null;
   const oldView=view,oldModal=modal,oldEditing=editingId,oldSelected=selected,category=action==='save-product'?admin.category():null;
   const oldWarehouse=action==='save-warehouse'?warehouseEdit:null,oldRecord=action==='confirm-void'?structuredClone(S.records.find(r=>r.id===selected)):null,knownIds=new Set(S.records.map(r=>r.id));
@@ -89,6 +95,7 @@ export function installFeatures(api){
    const to=Number(api.form().to);if(to&&!S.accounts.some(a=>a.id===to&&((!a.archived&&a.active!==false)||old?.to===to)))throw Error('اختر وسيلة دفع فعالة');
   }
   if(action==='new:sale'&&!cart.length&&activeWarehouses(S).includes(S.salesWarehouse)){S.warehouse=S.salesWarehouse;syncStock();}
+  if(action==='confirm-void'&&oldRecord&&isMovementNoteRecord(oldRecord)){const current=S.records.find(r=>r.id===oldRecord.id);if(current)current.note=currentMovementNote(S,current);}
   const result=await originalEngine(action);
   if(action==='save-product'&&!['product','productedit'].includes(modal)){const p=oldModal==='productedit'?S.products.find(p=>p.id===oldSelected):S.products.at(-1);if(p)p.categoryId=category?Number(category):null;for(const r of S.records.filter(r=>r.openingStock&&!knownIds.has(r.id))){r.occurredAt=r.createdAt=r.updatedAt=new Date().toISOString();r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;for(const line of r.lines)line.id??=crypto.randomUUID();recordStockRevision(S,null,r,voidBeforeState);for(const l of r.lines){const product=S.products.find(p=>p.id===l.product);product.openingTotal=l.delta;product.openingCost=l.price;product.openingWarehouse=r.warehouse;}}currentCosts();render();}
   if(action==='save-account'){const a=S.accounts.at(-1);a.active=true;a.openingBalance=S.opening.accounts[a.id]||0;}
@@ -104,6 +111,7 @@ export function installFeatures(api){
  const oldProduct=productDetail;productDetail=function(){const p=S.products.find(p=>p.id===selected),html=oldProduct().replace(/<button[^>]*data-action="site:(?:archive-product:|unarchive:product:)[^"]*"[^>]*>[\s\S]*?<\/button>/g,'');return html+(p?`<div class="management-actions"><button class="feature-button" data-action="site:feature:opening:${p.id}">رصيد البداية وسجله</button></div>`+stock.productActions(p):'')};
  const oldInvoice=invoice;invoice=function(){return oldInvoice().replace(/<button class="document-print" data-action="site:print">[\s\S]*?<\/button>/,`<button class="document-print" data-action="site:feature:document-output">${icon('receipt')}تصدير الفاتورة</button>`)};
  const oldRender=render;render=function(){oldRender();stock.restoreInputs();
+  if(movementFormRecovery){const saved=movementFormRecovery;if(saved.actor!==api.actor?.id||saved.view!==view||saved.modal!==modal||saved.editingId!==editingId)movementFormRecovery=null;else{const form=document.querySelector('#sheet-form');for(const[name,value]of Object.entries(saved.values)){const input=form?.elements.namedItem(name);if(input&&'value' in input)input.value=String(value);}}}
   const root=document.querySelector('#phone');if(!api.actor||!root)return;
   if(view==='reports'){const b=root.querySelector('.data-toolbar [data-action="site:export"]');if(b)b.textContent='تصدير التقرير';}
   for(const option of root.querySelectorAll('#sheet-form select[name=account] option,#sheet-form select[name=to] option')){const a=S.accounts.find(a=>a.id===Number(option.value)),old=S.records.find(r=>r.id===editingId);if(a?.active===false&&a.id!==old?.account&&a.id!==old?.to)option.remove();}
@@ -118,5 +126,5 @@ export function installFeatures(api){
   const file=event.target.files[0],actorId=api.actor?.id;if(!api.can('settings.branding.manage'))return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('اختر صورة PNG أو JPG أو WebP أصغر من 5 ميغابايت');const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),scale=Math.min(1,512/Math.max(bitmap.width,bitmap.height));canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const logo=canvas.toDataURL('image/png');if(logo.length>700000)throw Error('صورة الشعار كبيرة جدًا');if(api.actor?.id!==actorId||view!=='branding'||!api.can('settings.branding.manage'))return;admin.setLogo(logo);
   }catch(e){api.fail(e.message)}});
  const business=installBusinessRuntime(api,{employees,partyOpening,categories,health});
- return {report,admin,stock,business,async afterSave(){for(const group of [health,employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){for(const group of [health,employees,partyOpening,categories,stock])group.afterFailure?.()}};
+ return {report,admin,stock,business,async afterSave(){movementFormAttempt=null;movementFormRecovery=null;for(const group of [health,employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){movementFormRecovery=movementFormAttempt;for(const group of [health,employees,partyOpening,categories,stock])group.afterFailure?.()}};
 }

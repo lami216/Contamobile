@@ -3,10 +3,11 @@ import {planStockChange,stockBalanceAfter,historicalInvoiceStockLines} from './a
 import {partyOpeningStoredDelta} from './party-opening-domain.js';
 import {mobileLineTotal,invoiceAmountFields,mobileInvoiceTotal} from './invoice-amount.js';
 import {saleLineCost,refreshCurrentProductCosts,suggestedPurchasePrice} from './cost-provenance.js';
+import {isEditableLegacyBankMovement} from './legacy-bank-movement.js';
 
 export function financialRecordReadOnly(state,record){
  if(record.kind==='employee-closure'||record.kind?.startsWith('employee-')&&(state.employees||[]).some(e=>e.id===record.employeeId&&e.isDeleted===true))return true;
- if(record.importReadOnly)return true;
+ if(record.importReadOnly&&!isEditableLegacyBankMovement(state,record))return true;
  if(['sale','purchase','expense'].includes(record.kind)&&record.legacyKey)return true;
  return record.kind==='sale'&&(state.records||[]).some(row=>row.kind==='return'&&!row.voided&&(!row.status||row.status==='posted')&&[record.id,record.desktopId].filter(v=>v!=null).some(id=>String(row.parentDocumentId??row.desktop?.parentDocumentId)===String(id)));
 }

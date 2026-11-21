@@ -1,3 +1,4 @@
+import {statementNote,movementStatement,financialStatementSource,financialStatementIndex} from './movement-statement.js';
 import {recordNumber,recordReference} from './document-presentation.js';
 import {displayStockMovementDocumentNumber} from './stock-settlement.js';
 import {currencyCode,partyNetDelta,moneyAccountDelta} from './upgrade-state.js';
@@ -25,6 +26,7 @@ export function normalizeReportFilters(state,filters={}){
  if(f.partyType&&!['customer','supplier','employee'].includes(f.partyType))throw Error('نوع الحساب غير صالح');
  if(f.expenseCategoryId&&f.expenseCategoryId!=='__uncategorized'&&!(state.expenseCategories||[]).some(c=>idEqual(c.id,f.expenseCategoryId)))throw Error('فئة المصروف غير موجودة');
  if(f.expenseCategoryKind&&!['recurring','nonrecurring'].includes(f.expenseCategoryKind))throw Error('نوع فئة المصروف غير صالح');
+ if(['financial','party-ledger'].includes(f.type)&&['asc','desc'].includes(f.statementOrder)){f.sortKey='description';f.sortDirection=f.statementOrder;}
  if(f.warehouse&&!state.warehouses.includes(f.warehouse))throw Error('المخزن غير موجود');return f;
 }
 export function reportDataset(state,filters={}){
@@ -42,7 +44,7 @@ export function reportDataset(state,filters={}){
  const costIndex=['overview','stock'].includes(f.type)?currentProductCosts(state):new Map();
  const purchaseLike=r=>r.kind==='purchase'||r.kind==='return'&&parent(r)?.kind==='purchase';
  const saleLike=r=>r.kind==='sale'||r.kind==='return'&&!purchaseLike(r);
- const documentBase=r=>({id:r.id,action:'invoice:'+r.id,number:recordNumber(r),documentReference:recordReference(r),date:r.date,party:partiesById.get(r.party)?.name||r.employeeName||r.title||'',kind:r.kind,total:n(r.total),paid:n(r.paid),due:n(r.due),account:accountsById.get(r.account)?.name||'—',note:r.note||'',employeeId:r.employeeId});
+ const documentBase=r=>({id:r.id,action:'invoice:'+r.id,number:recordNumber(r),documentReference:recordReference(r),date:r.date,party:partiesById.get(r.party)?.name||r.employeeName||r.title||'',kind:r.kind,total:n(r.total),paid:n(r.paid),due:n(r.due),account:accountsById.get(r.account)?.name||'—',note:statementNote(r),employeeId:r.employeeId});
  const commerceRow=r=>{
   const row=documentBase(r),selected=reportNetLines(r).filter(byProduct),portion=sum(selected,l=>l.lineTotal),sign=r.kind==='return'?-1:1;
   if(saleLike(r)){const summary=profitSummary(factGroups.get(r.id)||[]);Object.assign(row,{total:summary.revenue,cost:summary.costKnown?summary.cost:null,profit:summary.costKnown?summary.profit:null,costKnown:summary.costKnown,unknownRevenue:summary.unknownRevenue});}
@@ -79,7 +81,7 @@ export function reportDataset(state,filters={}){
   }
   if(['overview','sales','profit'].includes(f.type)&&!summary.costKnown)result.warnings.push(unknownWarning);
  }else if(f.type==='party-ledger'){
-  result.columns=columns(['date','التاريخ'],['number','رقم المستند'],['kind','النوع'],['change','الحركة','money'],['debit','لنا','money'],['credit','علينا','money'],['balance','الرصيد','money']);
+  result.columns=columns(['date','التاريخ'],['number','رقم المستند'],['kind','النوع'],['description','البيان'],['change','الحركة','money'],['debit','لنا','money'],['credit','علينا','money'],['balance','الرصيد','money']);
   if(f.partyType==='employee'){
    if(!f.partyId){result.needsParty=true;return result}const ledger=employeeLedger(state,String(f.partyId),period);result.party={id:f.partyId,name:ledger.employee.name,type:'employee'};result.payrollLedgerSummary=ledger.summary;result.opening=ledger.summary.openingBalance;result.closing=ledger.summary.closingBalance;result.rows=[{id:'opening',date:f.allTime?'—':f.from,number:'—',kind:'رصيد البداية',change:0,debit:0,credit:0,balance:result.opening},...ledger.rows.slice().reverse().map(row=>({...row,number:row.documentNumber,kind:row.movementCode,balance:row.runningBalance}))];result.records=ledger.rows.map(row=>state.records.find(r=>r.id===row.id)).filter(Boolean);
   }else{
@@ -87,7 +89,7 @@ export function reportDataset(state,filters={}){
    const history=all.filter(r=>r.party===party.id).sort((a,b)=>accountingTimestamp(a).localeCompare(accountingTimestamp(b))||a.id-b.id),delta=r=>r.kind==='party-opening'?partyOpeningNetDelta(r):partyNetDelta(r);
    let balance=n(state.opening.parties[party.id])*(party.type==='supplier'?-1:1);for(const r of history.filter(r=>!f.allTime&&r.date<f.from))balance+=delta(r);
    result.opening=balance;result.rows.push({id:'opening',date:f.allTime?'—':f.from,number:'—',kind:'رصيد البداية',change:0,debit:0,credit:0,balance});
-   for(const r of history.filter(inRange)){const change=delta(r);balance+=change;result.rows.push({...documentBase(r),change,debit:Math.max(0,change),credit:Math.max(0,-change),balance});result.records.push(r)}result.closing=balance;
+   for(const r of history.filter(inRange)){const change=delta(r);balance+=change;result.rows.push({...documentBase(r),description:movementStatement(r,String(r.desktop?.title??r.desktop?.partyName??r.title??'')),descriptionCode:r.kind==='receive'?'party-receipt':r.kind==='pay'?'party-payment':'',change,debit:Math.max(0,change),credit:Math.max(0,-change),balance});result.records.push(r)}result.closing=balance;
   }
   result.metrics=[metric('opening','رصيد البداية',result.opening),metric('debit','الحركات لنا',sum(result.rows,r=>r.debit)),metric('credit','الحركات علينا',sum(result.rows,r=>r.credit)),metric('closing','الرصيد النهائي',result.closing)];
   if(f.partyType==='employee')result.metrics.push(metric('workersReserveReleased','احتياطي الأجور المحرر',result.payrollLedgerSummary.workersReserveReleased));
@@ -112,20 +114,27 @@ export function reportDataset(state,filters={}){
   const products=state.products.filter(p=>byProduct({product:p.id})),quantity=p=>f.warehouse?n(p.stocks[f.warehouse]):sum(Object.values(p.stocks),q=>q),value=p=>quantity(p)*inventoryUnitCost({...p,lastPurchaseCost:costIndex.get(p.id)?.cost});
   result.metrics=[metric('inventory','قيمة المخزون',sum(products,value)),metric('quantity','الوحدات',sum(products,quantity),'count'),metric('count','عدد المنتجات',products.length,'count'),metric('incoming','الداخل',sum(result.rows,r=>Math.max(0,r.delta)),'count'),metric('outgoing','الخارج',sum(result.rows,r=>Math.max(0,-r.delta)),'count')];result.stockBalances=products.map(p=>({id:p.id,action:'explain:audit:product:'+p.id,product:p.name,quantity:quantity(p),value:value(p)}));
  }else if(f.type==='financial'){
-  result.columns=columns(['date','التاريخ'],['number','رقم المستند'],['account','الحساب'],['kind','النوع'],['incoming','الداخل','money'],['outgoing','الخارج','money'],['balance','الرصيد','money']);const balances={...state.opening.accounts};
-  for(const r of all.slice().sort((a,b)=>accountingTimestamp(a).localeCompare(accountingTimestamp(b))||a.id-b.id))for(const a of [...new Set([r.account,r.kind==='transfer'?r.to:null])].map(id=>accountsById.get(id)).filter(Boolean)){const delta=r.kind==='employee-payment'?(r.account===a.id?(r.employeePaymentDirection==='deposit'?1:-1)*n(r.total):0):r.kind==='employee-opening'||r.kind==='employee-accrual'||r.kind==='party-opening'?0:moneyAccountDelta(r,a.id);if(!delta)continue;balances[a.id]=n(balances[a.id])+delta;if(!inRange(r)||f.accountId&&!idEqual(a.id,f.accountId)||f.direction==='in'&&delta<0||f.direction==='out'&&delta>0||f.movementType&&r.kind!==f.movementType)continue;result.rows.push({id:r.id+'-'+a.id,action:'invoice:'+r.id,date:r.date,number:recordNumber(r),documentReference:recordReference(r),account:a.name,kind:r.kind,incoming:Math.max(delta,0),outgoing:Math.max(-delta,0),balance:balances[a.id]});}
+  result.columns=columns(['date','التاريخ'],['number','رقم المستند'],['account','الحساب'],['kind','النوع'],['description','البيان'],['incoming','الداخل','money'],['outgoing','الخارج','money'],['balance','الرصيد','money']);const balances={...state.opening.accounts},statementIndex=financialStatementIndex(state);
+  for(const r of all.slice().sort((a,b)=>accountingTimestamp(a).localeCompare(accountingTimestamp(b))||a.id-b.id))for(const a of [...new Set([r.account,r.kind==='transfer'?r.to:null])].map(id=>accountsById.get(id)).filter(Boolean)){const delta=r.kind==='employee-payment'?(r.account===a.id?(r.employeePaymentDirection==='deposit'?1:-1)*n(r.total):0):r.kind==='employee-opening'||r.kind==='employee-accrual'||r.kind==='party-opening'?0:moneyAccountDelta(r,a.id);if(!delta)continue;balances[a.id]=n(balances[a.id])+delta;if(!inRange(r)||f.accountId&&!idEqual(a.id,f.accountId)||f.direction==='in'&&delta<0||f.direction==='out'&&delta>0||f.movementType&&r.kind!==f.movementType)continue;result.rows.push({id:r.id+'-'+a.id,action:'invoice:'+r.id,date:r.date,number:recordNumber(r),documentReference:recordReference(r),account:a.name,kind:r.kind,note:statementNote(financialStatementSource(state,r,a.id,statementIndex)),description:movementStatement(financialStatementSource(state,r,a.id,statementIndex)),incoming:Math.max(delta,0),outgoing:Math.max(-delta,0),balance:balances[a.id]});}
   result.metrics=[metric('incoming','الداخل',sum(result.rows,r=>r.incoming)),metric('outgoing','الخارج',sum(result.rows,r=>r.outgoing)),metric('net','الصافي',sum(result.rows,r=>r.incoming-r.outgoing))];
  }
+ if(['financial','party-ledger'].includes(f.type)&&f.sortKey==='description'){const opening=result.rows.filter(r=>r.id==='opening'),direction=f.sortDirection==='desc'?-1:1;result.rows=[...opening,...result.rows.filter(r=>r.id!=='opening').sort((a,b)=>String(a.description??'').localeCompare(String(b.description??''),undefined,{numeric:true,sensitivity:'base'})*direction)];}
  result.warnings=[...new Set(result.warnings)];return result;
 }
+// Localize only semantic fallback codes. A saved statement remains literal user data.
+function outputStatement(row,t){const note=statementNote(row);if(note)return note;const code=row.descriptionCode;
+ if(code==='employee-opening')return t('رصيد بداية عامل')+' — '+t(row.credit>0?'مستحق للعامل':'مستحق على العامل');
+ if(code==='employee-closure')return t('إقفال حساب عامل محذوف');if(code==='party-receipt')return t('استلام من الطرف');if(code==='party-payment')return t('دفع للطرف');
+ return code?.startsWith('employee-')?t(row.description??''):row.description??'';
+}
 export function reportOutputModel(state,data,{language='ar',labels={}}={}){
- const t=v=>translateText(v,language),display=(value,column)=>value===null?t('غير مؤكد'):column.format==='money'?Number(value||0).toLocaleString(language==='fr'?'fr-FR':'en-US',{maximumFractionDigits:2})+' '+data.currency:column.key==='kind'?t(labels[value]||value):column.key==='expenseCategoryKind'?t(value==='nonrecurring'?'غير متكررة':'متكررة'):column.key==='type'?t(value==='employee'?'عامل':value==='supplier'?'مورد':'عميل'):column.key==='date'?t(value):value;
+ const t=v=>translateText(v,language),display=(value,column,row)=>column.key==='description'?outputStatement(row,t):value===null?t('غير مؤكد'):column.format==='money'?Number(value||0).toLocaleString(language==='fr'?'fr-FR':'en-US',{maximumFractionDigits:2})+' '+data.currency:column.key==='kind'?t(labels[value]||value):column.key==='expenseCategoryKind'?t(value==='nonrecurring'?'غير متكررة':'متكررة'):column.key==='type'?t(value==='employee'?'عامل':value==='supplier'?'مورد':'عميل'):column.key==='date'?t(value):value;
  const blocks=[{kind:'heading',text:t(data.title)},{kind:'text',text:data.filters.allTime?t('كل الفترة'):t(data.filters.from)+' — '+t(data.filters.to)}];
  if(data.party)blocks.push({kind:'text',text:data.party.name});
  for(const warning of data.warnings||[])blocks.push({kind:'text',text:t(warning)});
  const selections=[['productId',state.products,'المنتج'],['categoryId',state.categories||[],'الفئة'],['accountId',state.accounts,'وسيلة الدفع'],['expenseCategoryId',state.expenseCategories||[],'فئة المصروف']];for(const [key,list,label]of selections)if(data.filters[key])blocks.push({kind:'text',text:t(label)+': '+list.find(x=>idEqual(x.id,data.filters[key]))?.name});
  blocks.push({kind:'table',rows:[[t('البيان'),t('القيمة')],...data.metrics.map(m=>[t(m.label),m.value===null?t('غير مؤكد'):m.format==='money'?Number(m.value).toLocaleString(language==='fr'?'fr-FR':'en-US',{maximumFractionDigits:2})+' '+data.currency:m.value])]});
- blocks.push({kind:'table',rows:[data.columns.map(c=>t(c.label)+(c.format==='money'?' '+data.currency:'')),...data.rows.map(r=>data.columns.map(c=>display(r[c.key],c)))]});
+ blocks.push({kind:'table',rows:[data.columns.map(c=>t(c.label)+(c.format==='money'?' '+data.currency:'')),...data.rows.map(r=>data.columns.map(c=>display(r[c.key],c,r)))]});
  if(data.stockBalances)blocks.push({kind:'subheading',text:t('الرصيد الحالي')},{kind:'table',rows:[[t('المنتج'),t('الكمية'),t('القيمة')+' '+data.currency],...data.stockBalances.map(r=>[r.product,r.quantity,r.value])]});
  if(data.currentAccounts)blocks.push({kind:'subheading',text:t('الأرصدة الحالية')},{kind:'table',rows:[[t('الحساب'),t('الرصيد')+' '+data.currency],...data.currentAccounts.map(a=>[a.name,a.balance])]},{kind:'subheading',text:t('العملاء والموردون')},{kind:'table',rows:[[t('الحساب'),t('لنا')+' '+data.currency,t('علينا')+' '+data.currency],...data.currentParties.map(p=>[p.name,p.receivable,p.payable])]});
  return {language,dir:language==='fr'?'ltr':'rtl',brand:state.branding||'AlKarna',logo:state.brandInfo?.logo||'',branding:state.brandInfo||{},created:new Date().toLocaleDateString(language==='fr'?'fr-MR':'en-GB'),blocks};
@@ -133,7 +142,7 @@ export function reportOutputModel(state,data,{language='ar',labels={}}={}){
 export function reportWorkbookData(state,data,options={}){
  const language=options.language||'ar',t=v=>translateText(v,language),label=value=>t(options.labels?.[value]||value);
  const sheets=[{name:t('الملخص'),rows:[[t('البيان'),t('القيمة')],[t('المحل'),state.branding],[t('نوع التقرير'),t(data.title)],[t('العملة'),data.currency],[t('الفترة'),data.filters.allTime?t('كل الفترة'):data.filters.from+' — '+data.filters.to],...(data.party?[[t('الحساب'),data.party.name]]:[]),...(data.warnings||[]).map(w=>[t('ملاحظة'),t(w)]),...data.metrics.map(m=>[t(m.label)+(m.format==='money'?' '+data.currency:''),m.value===null?t('غير مؤكد'):m.value])]},
- {name:t('الحركات'),rows:[data.columns.map(c=>t(c.label)+(c.format==='money'?' '+data.currency:'')),...data.rows.map(row=>data.columns.map(c=>c.key==='kind'?label(row[c.key]):c.key==='expenseCategoryKind'?t(row[c.key]==='nonrecurring'?'غير متكررة':'متكررة'):c.key==='type'?t(row.type==='employee'?'عامل':row.type==='supplier'?'مورد':'عميل'):row[c.key]===null?t('غير مؤكد'):row[c.key]??''))]}];
+ {name:t('الحركات'),rows:[data.columns.map(c=>t(c.label)+(c.format==='money'?' '+data.currency:'')),...data.rows.map(row=>data.columns.map(c=>c.key==='description'?outputStatement(row,t):c.key==='kind'?label(row[c.key]):c.key==='expenseCategoryKind'?t(row[c.key]==='nonrecurring'?'غير متكررة':'متكررة'):c.key==='type'?t(row.type==='employee'?'عامل':row.type==='supplier'?'مورد':'عميل'):row[c.key]===null?t('غير مؤكد'):row[c.key]??''))]}];
  if(data.stockBalances)sheets.push({name:t('المخزون'),rows:[[t('المنتج'),t('الكمية'),t('القيمة')+' '+data.currency],...data.stockBalances.map(r=>[r.product,r.quantity,r.value])]});
  if(data.currentAccounts)sheets.push({name:t('الأرصدة'),rows:[[t('الحساب'),t('الرصيد')+' '+data.currency],...data.currentAccounts.map(a=>[a.name,a.balance])]},{name:t('الأطراف'),rows:[[t('الحساب'),t('لنا'),t('علينا')],...data.currentParties.map(p=>[p.name,p.receivable,p.payable])]});
  return sheets;

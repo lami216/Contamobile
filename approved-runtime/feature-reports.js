@@ -1,3 +1,4 @@
+import {statementNote} from './movement-statement.js';
 import {reportDataset,reportOutputModel,reportWorkbookData,reportTitles} from './report-data.js';
 import {canReadRecord,canReadReportSource} from './business-identity.js';
 import {currencyCode} from './upgrade-state.js';
@@ -16,7 +17,7 @@ export function installReportFeatures(api){
  function table(data,sourceRows=data.rows){
   const keys=data.currentStock?['product','quantity','value']:data.trace?['date','party','contribution']:data.type==='party-ledger'?['date','number','change','balance']:data.type==='stock'?['product','kind','number','delta','after']:data.type==='financial'?['account','date','incoming','outgoing','balance']:data.type==='product-sales'?['product','quantity','total','profit']:data.type==='debts'?['party','receivable','payable']:['date','party','total','due'];
   const cols=keys.map(k=>data.columns.find(c=>c.key===k)).filter(Boolean),cell=(row,c)=>row[c.key]===null?esc(translateText('غير مؤكد')):c.format==='money'?money(row[c.key],'xs',row[c.key]<0?'negative':''):c.key==='kind'?esc(documentLabels[row[c.key]]||row[c.key]):esc(row[c.key]??'—');
-  return reportSourceTable31(data.title,cols.map(c=>c.label),sourceRows,row=>({action:reportAction(row),cells:cols.map(c=>cell(row,c)+(c.key==='number'&&row.kind?`<small>${esc(documentLabels[row.kind]||row.kind)}</small>`:''))})).replace('report-source-table','report-source-table feature-report-table');
+  return reportSourceTable31(data.title,cols.map(c=>c.label),sourceRows,row=>({action:reportAction(row),cells:cols.map(c=>cell(row,c)+(c.key==='number'&&row.kind?`<small>${esc(documentLabels[row.kind]||row.kind)}</small>`:'')+((data.type==='financial'&&c.key==='account'||data.type==='party-ledger'&&c.key==='number')&&statementNote(row)?`<small data-movement-statement data-user-content dir="auto" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere">${esc(statementNote(row))}</small>`:''))})).replace('report-source-table','report-source-table feature-report-table');
  }
  const originalSourceInfo=sourceInfo;
  sourceInfo=function(key){
@@ -43,6 +44,7 @@ export function installReportFeatures(api){
    html+=field('نوع الحساب',`<select name="partyType" data-feature-change="report-party-type"><option value="customer" ${(!f.partyType||f.partyType==='customer')?'selected':''}>عميل</option><option value="supplier" ${f.partyType==='supplier'?'selected':''}>مورد</option><option value="employee" ${f.partyType==='employee'?'selected':''}>عامل</option>${reportType==='debts'?`<option value="" ${f.partyType===''?'selected':''}>الكل</option>`:''}</select>`);
    html+=opt('الحساب',f.partyType==='employee'?(S.employees||[]).filter(e=>e.isDeleted!==true||String(e.id)===String(f.partyId)):S.parties.filter(p=>!f.partyType||p.type===f.partyType),'partyId','اختر الحساب');
   }
+  if(['financial','party-ledger'].includes(reportType))html+=field('ترتيب البيان',`<select name="statementOrder"><option value="">الترتيب الزمني</option><option value="asc" ${f.statementOrder==='asc'?'selected':''}>البيان تصاعديًا</option><option value="desc" ${f.statementOrder==='desc'?'selected':''}>البيان تنازليًا</option></select>`);
   if(reportType==='financial')html+=field('الاتجاه',`<select name="direction"><option value="">داخل وخارج</option><option value="in" ${f.direction==='in'?'selected':''}>داخل</option><option value="out" ${f.direction==='out'?'selected':''}>خارج</option></select>`);
   if(reportType==='debts')html+=field('الرصيد',`<select name="debtSide">${[['','الكل'],['receivable','لنا عليه'],['payable','له علينا'],['clear','حساب خالص']].map(([v,t])=>`<option value="${v}" ${f.debtSide===v?'selected':''}>${t}</option>`).join('')}</select>`)+field('بحث بالاسم أو الهاتف',input('search','text',f.search||''));
   if(reportType==='stock')html+=field('نوع الحركة',`<select name="movementType">${[['','كل الحركات'],['sale','المبيعات'],['purchase','المشتريات'],['stocktransfer','تحويل مخزون'],['adjustment','تصحيح مخزون']].map(([v,t])=>`<option value="${v}" ${f.movementType===v?'selected':''}>${t}</option>`).join('')}</select>`);

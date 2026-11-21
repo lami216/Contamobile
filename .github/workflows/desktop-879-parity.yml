@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   business-parity:
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'feat/desktop-main-879-parity-')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:

@@ -14,11 +14,12 @@ concurrency:
 jobs:
   verified_bytes:
     # Main and every PR retain the unsigned native gate. Only this owner-approved
-    # release branch and main can enter artifact reuse or the job with signing secrets.
+    # historical v34 release branch can enter artifact reuse/signing. Main uses
+    # desktop-882-android-upgrade.yml for its current signed APK and upgrade proof.
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/local-remote-control-20261114')
+      github.ref == 'refs/heads/feat/local-remote-control-20261114'
     runs-on: ubuntu-24.04
     outputs:
       run_id: ${{ steps.prior.outputs.run_id }}
@@ -218,7 +219,7 @@ jobs:
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/local-remote-control-20261114') &&
+      github.ref == 'refs/heads/feat/local-remote-control-20261114' &&
       needs.verified_bytes.outputs.run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60

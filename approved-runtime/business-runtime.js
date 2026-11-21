@@ -1,4 +1,5 @@
 import {recordNumber} from './document-presentation.js';
+import {installMovementStatementViews} from './feature-movement-statements.js';
 import {canReadRecord,canReadReportSource,recordReadCapability,validatePartyIdentity,partyDisplayName} from './business-identity.js';
 import {cashAccount} from './upgrade-state.js';
 import {inventoryUnitCost} from './cost-provenance.js';
@@ -116,6 +117,7 @@ export function installBusinessRuntime(api,groups){
   if(field===total){total.dataset.amountEdited='true';if(Number(quantity.value)>0&&Number(total.value)>0)price.value=String(Number(total.value)/Number(quantity.value));}
   else{delete total.dataset.amountEdited;const q=Number(quantity.value),p=Number(price.value);if(Number.isFinite(q*p))total.value=String(q*p);}
  });
+ installMovementStatementViews();
  return {
   async materialize(){if(!S.employees?.length)return false;const result=await materializePayroll(S,{actor:api.actor,context:'mobile-read',now:new Date()});if(result.changed){api.replaceState(result.state);return true}return false},
   refreshCosts:()=>refreshCurrentProductCosts(S)
