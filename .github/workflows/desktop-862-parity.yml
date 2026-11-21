@@ -8,6 +8,8 @@ permissions:
   contents: read
 jobs:
   business-parity:
+    # Avoid evaluating a later business contract against this archived source pin.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'feat/desktop-862-parity-')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

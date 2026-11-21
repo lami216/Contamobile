@@ -147,3 +147,17 @@ Suggested priority: correct report output scope and complete party-ledger report
 ## Approved runtime feature release 1.0.12
 
 The 2026-10-19 gap audit is now implemented in the approved runtime. See [APPROVED_FEATURES.md](APPROVED_FEATURES.md) for contracts, deliberate exclusions, import limitations and preservation gates. Production delivery requires the signed Android workflow to pass; the old React Native checklist is not release evidence.
+
+## Main879 compatibility — 2026-11-21
+
+Reference: merged Desktop main `8a6cb072c411ee698f3ca5a0f1943be80ccd2955` / 0.1.25 / build879. Phone baseline: delivered36 `c625c2e`.
+
+| Capability | Status | Verification boundary |
+| --- | --- | --- |
+| Audited noncash employee opening, edit/void and account dates | Implemented; source/browser checks passed | Exact879 payroll/ledger/backup and phone interaction tests |
+| Worker cash movement signed balances and historical reversal policy | Implemented; source/browser checks passed | Exact879 payment policy, rollback and permission tests |
+| Actual expense recording time and preserved edit time | Implemented; source/browser checks passed | Exact879 helper/API contracts plus genuine native legacy adaptation |
+| Reports, source access, import and exports for new worker opening | Implemented; source/browser checks passed | Canonical proof rejection, no fake cash/expense, scoped source read |
+| Existing phone style, removals, activation, backups and draft fences | Preserve | Regression suites, frozen styles and real27/36→37 upgrade gate |
+
+See [DESKTOP_879_MIGRATION_STUDY.md](DESKTOP_879_MIGRATION_STUDY.md). Shared storage/synchronization remains a separate, unimplemented capability.

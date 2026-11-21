@@ -1,10 +1,10 @@
-// Functional identity adapter for official Conta backups, including Offline builds 862 and 870.
+// Functional identity adapter for official Conta backups, including Offline builds 862 through 879.
 // This never writes to storage, replays postings, imports login credentials or changes activation.
 import {sha256Hex} from './accounting-hash.js';
 import {stockBalanceAfter,reportCostNumber} from './accounting-numbers.js';
 import {resolveInvoiceLineTotal,sumInvoiceLineTotals} from './invoice-amount.js';
 import {refreshCurrentProductCosts} from './cost-provenance.js';
-import {ensurePayrollState,validatePayrollState} from './payroll-domain.js';
+import {ensurePayrollState,validatePayrollState,validatePayrollSnapshot} from './payroll-domain.js';
 import {validateExpenseCategoryState} from './expense-category-domain.js';
 import {validatePartyOpeningState} from './party-opening-domain.js';
 import {upgradeState,validateFeatureState} from './upgrade-state.js';
@@ -13,7 +13,7 @@ const clone=value=>structuredClone(value),own=(value,key)=>Object.hasOwn(value,k
 const fail=message=>{throw Error(message+'؛ لم تتغير بيانات الهاتف')};
 const key=value=>String(value??'');
 const active=row=>!row.voided&&row.status!=='voided';
-const payroll=row=>['employee-accrual','employee-payment','employee-closure'].includes(row.kind);
+const payroll=row=>['employee-opening','employee-accrual','employee-payment','employee-closure'].includes(row.kind);
 function numeric(value,label,{fallback,nonnegative=false}={}){
  if(value===undefined||value===null||value===''){if(fallback!==undefined)return fallback;fail(label+' غير صالح')}
  if(typeof value!=='number'&&(typeof value!=='string'||! /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())))fail(label+' غير صالح');
@@ -54,6 +54,9 @@ export function desktopToMobileState(raw){
  const c=plain(clone(raw.collections));
  for(const name of ['products','parties','warehouses','documents','paymentAccounts','financialMovements'])if(!Array.isArray(c[name])||c[name].length>100000)fail('جزء النسخة '+name+' ناقص أو غير صالح');
  for(const name of ['productCategories','expenseCategories','employees','stockMovements','auditEvents','accountTransfers','appSettings','counters','importMappings','recurringExpenses']){if(c[name]===undefined)c[name]=[];if(!Array.isArray(c[name])||c[name].length>1000000)fail('جزء النسخة '+name+' غير صالح')}
+ // Validate new audited openings against untouched canonical source fields before
+ // generic legacy defaults can fill missing revisions, numbers, dates or notes.
+ if(c.documents.some(row=>row.kind==='employee-opening'))validatePayrollSnapshot(c.employees,c.documents,c.financialMovements,c.auditEvents);
  const ids={products:index(c.products,'المنتج'),parties:index(c.parties,'الطرف'),accounts:index(c.paymentAccounts.slice().sort((a,b)=>Number(b.code==='cash')-Number(a.code==='cash')),'وسيلة الدفع'),categories:index(c.productCategories,'الفئة'),documents:index(c.documents,'المستند',101)},warehouseIds=new Map(),accountIds=new Map(ids.accounts);
  const names=new Set();
  for(const row of c.warehouses){
@@ -65,7 +68,7 @@ export function desktopToMobileState(raw){
  const defaultWarehouses=c.warehouses.filter(row=>row.isSalesDefault===true);if(defaultWarehouses.length>1)fail('أكثر من مخزن بيع افتراضي');
  const main=defaultWarehouses[0]||c.warehouses.find(row=>!row.isArchived)||c.warehouses[0],warehouse=reference(warehouseIds,main._id??main.id,'مخزن البيع');
  const branding=c.appSettings.find(row=>(row._id??row.id)==='invoice-branding')||c.appSettings.find(row=>row.storeName)||{},currency=c.appSettings.find(row=>row.currency?.code)?.currency||c.appSettings.find(row=>['currency','currency-settings'].includes(row._id??row.id))||{};
- const state={products:[],parties:[],accounts:[],records:[],users:[],warehouses:[...names],warehouse,salesWarehouse:warehouse,warehouseMeta:Object.fromEntries(c.warehouses.map(row=>[String(row.name).trim(),{...clone(row),canonicalId:key(row._id??row.id),archived:row.isArchived===true}])),categories:c.productCategories.map(row=>({...clone(row),id:reference(ids.categories,row.id,'الفئة'),canonicalId:key(row.id),desktopId:row.id})),expenseCategories:clone(c.expenseCategories),employees:clone(c.employees),payrollFinancialMovements:[],financialMovements:[],stockEvents:[],auditEvents:[],counters:clone(c.counters),branding:branding.storeName||'الكرنه',brandInfo:{phone:branding.storePhone||'',address:branding.storeAddress||'',logo:branding.storeLogoDataUrl||'',registrationNumber:branding.registrationNumber||'',taxNumber:branding.taxNumber||'',footer:branding.footerNote||'',nameFont:branding.nameFont||'tahoma',nameFontSize:branding.nameFontSize||24,nameFontWeight:branding.nameFontWeight||800},currency:{code:currency.code||'MRU',availableCodes:currency.availableCodes||['MRU',currency.code||'MRU']},opening:{accounts:{},parties:{},stocks:{}},originId:'desktop:'+sha256Hex(JSON.stringify(c)),desktopImportVersion:870,desktopOriginal:clone(raw),desktopImportWarnings:[]};
+ const state={products:[],parties:[],accounts:[],records:[],users:[],warehouses:[...names],warehouse,salesWarehouse:warehouse,warehouseMeta:Object.fromEntries(c.warehouses.map(row=>[String(row.name).trim(),{...clone(row),canonicalId:key(row._id??row.id),archived:row.isArchived===true}])),categories:c.productCategories.map(row=>({...clone(row),id:reference(ids.categories,row.id,'الفئة'),canonicalId:key(row.id),desktopId:row.id})),expenseCategories:clone(c.expenseCategories),employees:clone(c.employees),payrollFinancialMovements:[],financialMovements:[],stockEvents:[],auditEvents:[],counters:clone(c.counters),branding:branding.storeName||'الكرنه',brandInfo:{phone:branding.storePhone||'',address:branding.storeAddress||'',logo:branding.storeLogoDataUrl||'',registrationNumber:branding.registrationNumber||'',taxNumber:branding.taxNumber||'',footer:branding.footerNote||'',nameFont:branding.nameFont||'tahoma',nameFontSize:branding.nameFontSize||24,nameFontWeight:branding.nameFontWeight||800},currency:{code:currency.code||'MRU',availableCodes:currency.availableCodes||['MRU',currency.code||'MRU']},opening:{accounts:{},parties:{},stocks:{}},originId:'desktop:'+sha256Hex(JSON.stringify(c)),desktopImportVersion:879,desktopOriginal:clone(raw),desktopImportWarnings:[]};
  state.products=c.products.map(row=>{
   const stocks={};for(const [source,quantity]of Object.entries(row.stocks||{})){const name=reference(warehouseIds,source,'مخزن المنتج');if(own(stocks,name))fail('أكثر من رصيد لنفس المخزن');stocks[name]=numeric(quantity,'رصيد المنتج',{nonnegative:true})}
   for(const name of names)stocks[name]??=0;
@@ -86,10 +89,12 @@ export function desktopToMobileState(raw){
  state.accounts=c.paymentAccounts.map(row=>({...clone(row),id:reference(ids.accounts,row.id,'وسيلة الدفع'),canonicalId:key(row.id),desktopId:row.id,desktop:clone(row),name:row.name,balance:numeric(row.balance,'رصيد وسيلة الدفع',{fallback:0}),active:row.isActive!==false,archived:row.isArchived===true}));
  const sourceById=new Map(c.documents.map(row=>[key(row.id),row])),financialByDocument=new Map();
  for(const movement of c.financialMovements){const id=key(movement.documentId),rows=financialByDocument.get(id)||[];rows.push(movement);financialByDocument.set(id,rows)}
- const kinds={sale:'sale',purchase:'purchase',expense:'expense',payment:'receive',transfer:'stocktransfer','account-transfer':'transfer',adjustment:'adjustment','account-adjustment':'deposit','party-opening':'party-opening','employee-accrual':'employee-accrual','employee-payment':'employee-payment','employee-closure':'employee-closure',return:'return'};
+ const kinds={sale:'sale',purchase:'purchase',expense:'expense',payment:'receive',transfer:'stocktransfer','account-transfer':'transfer',adjustment:'adjustment','account-adjustment':'deposit','party-opening':'party-opening','employee-opening':'employee-opening','employee-accrual':'employee-accrual','employee-payment':'employee-payment','employee-closure':'employee-closure',return:'return'};
  function convertDocument(row,id){
   if(!own(kinds,row.kind))fail('نوع مستند يحتاج مراجعة قبل الاستيراد: '+row.kind);
   if(row.status!==undefined&&!['posted','voided'].includes(row.status))fail('حالة مستند غير مدعومة');
+  // Opening evidence must survive validation before aliases/defaults are projected.
+  if(row.kind==='employee-opening'&&(!['posted','voided'].includes(row.status)||!Number.isFinite(row.total)||row.total<=0||!['payable','receivable'].includes(row.employeeOpeningDirection)||row.paymentMethod!=null||row.cashAmount!==0||row.paidTotal!==0||row.dueTotal!==0||!Array.isArray(row.lines)||row.lines.length))fail('مستند رصيد بداية العامل غير صالح');
   // Closure evidence is noncash source data, not a zero-filled payment fallback.
   if(row.kind==='employee-closure'&&(row.status!=='posted'||row.revision!==0||!Number.isFinite(row.total)||row.total<=0||row.paymentMethod!=null||row.cashAmount!==0||row.paidTotal!==0||row.dueTotal!==0||!Array.isArray(row.lines)||row.lines.length))fail('مستند إقفال العامل غير صالح');
   const occurredAt=dateText(row.occurredAt,raw.createdAt),date=(row.businessDate||occurredAt).slice(0,10);dateText(date);

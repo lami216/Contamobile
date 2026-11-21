@@ -17,7 +17,7 @@ export function reconcileImportOpening(state){
   const parent=documents.get(String(r.parentDocumentId)),supplierReturn=r.returnParentKind==='purchase'||parent?.kind==='purchase';
   // Desktop expenses/account balances may contain sub-cent values. Reconciliation
   // derives a baseline; it is not a new payment and must not round the customer's data.
-  let delta=r.kind==='party-opening'||r.kind==='employee-accrual'||r.kind==='employee-closure'?0:r.kind==='employee-payment'?(r.employeePaymentDirection==='deposit'?1:-1)*r.total:r.kind==='return'?(supplierReturn?1:-1)*r.paid:['sale','receive','deposit'].includes(r.kind)?r.paid:-r.paid;
+  let delta=r.kind==='party-opening'||r.kind==='employee-opening'||r.kind==='employee-accrual'||r.kind==='employee-closure'?0:r.kind==='employee-payment'?(r.employeePaymentDirection==='deposit'?1:-1)*r.total:r.kind==='return'?(supplierReturn?1:-1)*r.paid:['sale','receive','deposit'].includes(r.kind)?r.paid:-r.paid;
   if(r.account)state.opening.accounts[r.account]-=delta||0;
   if(r.kind==='transfer'&&r.to)state.opening.accounts[r.to]-=r.total;
   if(r.party){const p=parties.get(r.party);if(!p)throw Error('طرف المستند غير موجود');const net=Number.isFinite(r.partyBalanceDelta)?r.partyBalanceDelta:r.kind==='return'?(supplierReturn?1:-1)*Math.max(0,r.total-r.paid):partyNetDelta(r);state.opening.parties[p.id]-=net*(p.type==='supplier'?-1:1);}
@@ -27,8 +27,8 @@ export function reconcileImportOpening(state){
  if(!state.stockEvents)seedStockEvents(state);return state;
 }
 const stable=value=>JSON.stringify((function order(input){return Array.isArray(input)?input.map(order):input&&typeof input==='object'?Object.fromEntries(Object.keys(input).sort().map(k=>[k,order(input[k])])):input})(value));
-const payrollRecord=row=>['employee-accrual','employee-payment','employee-closure'].includes(row.kind);
-const payrollFingerprint=value=>{const row={...value,paymentMethod:value.paymentMethod??null,note:value.note??null};return stable(Object.fromEntries(['kind','payrollDocumentId','status','voided','revision','employeeId','employeeName','total','amount','paid','due','paymentMethod','businessDate','occurredAt','periodStart','periodEnd','dueDate','agreementSnapshot','allocations','employeePaymentVersion','employeePaymentDirection','employeeAccountOrder','note','balanceDelta','salaryReserveReleased','cashAmount','employeeScheduleRecomputed','voidReason'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]])))};
+const payrollRecord=row=>['employee-opening','employee-accrual','employee-payment','employee-closure'].includes(row.kind);
+const payrollFingerprint=value=>{const row={...value,paymentMethod:value.paymentMethod??null,note:value.note??null};return stable(Object.fromEntries(['kind','payrollDocumentId','status','voided','revision','employeeId','employeeName','total','amount','paid','due','paymentMethod','businessDate','occurredAt','periodStart','periodEnd','dueDate','agreementSnapshot','allocations','employeeOpeningDirection','employeeOpeningAnchor','employeePaymentVersion','employeePaymentDirection','employeeAccountOrder','note','balanceDelta','salaryReserveReleased','cashAmount','employeeScheduleRecomputed','voidReason'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]])))};
 const financialBody=row=>{const value={...row};for(const key of ['importKey','desktop','importRevisions'])delete value[key];return stable(value)};
 function mergeSharedCounters(next,source){
  validateSharedCounters(next);validateSharedCounters(source);

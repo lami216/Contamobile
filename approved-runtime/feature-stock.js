@@ -1,6 +1,7 @@
 import {activeWarehouses} from './upgrade-state.js';
 import {openingState,planOpeningRecord,stockOperationRecord,adjustmentLineCount} from './stock-domain.js';
 import {archiveProductStock,zeroArchivedProductStock,restoreArchivedProduct,restoreArchiveStockClearance,isArchiveStockClearance,productStockEntries} from './archive-stock-clearance.js';
+import {expenseBusinessDate} from './expense-date-time.js';
 
 export const stockFrench={
  'استعادة المنتج':'Restaurer le produit','تصفير المخزون':'Mettre le stock à zéro','أرشفة المنتج':'Archiver le produit',
@@ -60,7 +61,7 @@ export function installStockFeatures(api){
    const source=action.startsWith('source:')?S.records.find(row=>row.id===Number(action.split(':')[1])):null;if(isArchiveStockClearance(source))throw Error('تصحيح المخزون المرتبط بأرشفة المنتج سجل نهائي وغير قابل للتعديل');
    if(action==='confirm-void'||action.startsWith('confirm-void:')){const record=S.records.find(row=>row.id===Number(action.split(':')[1]||selected));if(isArchiveStockClearance(record)){const outcome=restoreArchiveStockClearance(S,{documentId:record.id},{actor:api.actor});api.replaceState(outcome.state);selected=record.id;view='invoice';editingId=null;modal=null;render();return true;}}
    if(action==='open:expense'){expenseDraft=read('expense')||{date:api.today(),epoch:epoch('expense')};}
-   if(action==='post-cash'&&modal==='expense'){expenseDraft={...expenseDraft,...api.form()};const date=expenseDraft.date;let valid=false;try{valid=/^\d{4}-\d{2}-\d{2}$/.test(date)&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date}catch{}if(!valid)throw Error('التاريخ غير صالح');}
+   if(action==='post-cash'&&modal==='expense'){expenseDraft={...expenseDraft,...api.form()};expenseDraft.date=expenseBusinessDate(expenseDraft.date);}
    if(action==='review-utility'&&['transfer','adjustment'].includes(view)){
     const d=init(),f=api.form('utility-form');d.from=f.from||d.from;d.to=f.to||d.to;d.note=f.note||'';
     const old=S.records.find(r=>r.id===editingId),kind=view==='transfer'?'stocktransfer':'adjustment',base=newRecord(kind);

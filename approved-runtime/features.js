@@ -1,4 +1,5 @@
 import {isStockSettlementDocument,nextStockSettlementSequence} from './stock-settlement.js';
+import {prepareExpenseRecordDateTime} from './expense-date-time.js';
 import {installAccountingHealthFeatures} from './feature-health.js';
 import {installEmployeeFeatures} from './feature-employees.js';
 import {installPartyOpeningFeatures} from './feature-party-opening.js';
@@ -46,10 +47,15 @@ export function installFeatures(api){
  };
  const originalNewRecord=newRecord;newRecord=function(kind){const r=originalNewRecord(kind),old=S.records.find(x=>x.id===editingId);if(['sale','purchase','expense'].includes(kind)){r.sequence=old?.sequence||nextDocumentNumber(S,kind);r.number=old?.number||String(r.sequence);}if(kind==='expense'&&stock.date())r.date=stock.date();return r};
  function currentCosts(){refreshCurrentProductCosts(S)}
+ const originalStamp=stampRecordChange;stampRecordChange=function(record,previous){
+  const expense=record.kind==='expense',created=expense&&Object.hasOwn(record,'createdAt'),createdAt=record.createdAt,updatedAt=record.updatedAt;
+  originalStamp(record,previous);
+  if(expense){if(created)record.createdAt=createdAt;else delete record.createdAt;record.updatedAt=previous?updatedAt:record.recordedAt;}
+ };
  const originalCommit=commitRecord;commitRecord=function(r){
   const beforeState=stockSnapshot(S),old=S.records.find(x=>x.id===r.id),previous=old?structuredClone(old):null;
   if(old)for(const [key,value]of Object.entries(old))if(!Object.hasOwn(r,key))r[key]=structuredClone(value);
-  const now=new Date().toISOString();if(!old){r.occurredAt=now;r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;}else{for(const key of ['occurredAt','postingOrder']){if(Object.hasOwn(old,key))r[key]=old[key];else delete r[key];}}for(const line of r.lines||[])line.id??=crypto.randomUUID();
+  const now=new Date().toISOString();if(r.kind==='expense'){const timed=prepareExpenseRecordDateTime(r,old,new Date(now));for(const key of ['occurredAt','createdAt','recordedAt'])if(!Object.hasOwn(timed,key))delete r[key];Object.assign(r,timed);if(!old)r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;else if(Object.hasOwn(old,'postingOrder'))r.postingOrder=old.postingOrder;else delete r.postingOrder;}else if(!old){r.occurredAt=now;r.postingOrder=S.records.reduce((n,x)=>Math.max(n,x.postingOrder||0),0)+1;}else{for(const key of ['occurredAt','postingOrder']){if(Object.hasOwn(old,key))r[key]=old[key];else delete r[key];}}for(const line of r.lines||[])line.id??=crypto.randomUUID();
   if(old?.openingAccountCorrection){const latest=S.records.find(x=>!x.voided&&x.openingAccountCorrection&&x.account===old.account);if(latest?.id!==old.id)throw Error('يمكن تعديل آخر تصحيح فعال فقط');}
   if(!old&&['sale','purchase','expense'].includes(r.kind)){r.sequence=nextDocumentNumber(S,r.kind);r.number=String(r.sequence);}
   const numberingState=isStockSettlementDocument(r)?structuredClone(S):null;

@@ -84,6 +84,20 @@ Object.assign(translations,{
 Object.assign(translations,financeTranslations,partyOpeningFrench,expenseCategoryFrench,{'الموظفون':'Employés','حساب الموظف':'Compte de l’employé','استحقاق راتب':'Salaire acquis','حركة حساب موظف':'Mouvement employé','رصيد بداية طرف':'Solde initial de tiers','أرصدة بداية الأطراف':'Soldes initiaux des tiers','غير مؤكد':'Non confirmé','الحسابات والرواتب والحركات':'Comptes, salaires et mouvements'});
 
 Object.assign(translations,employeeFrench);
+Object.assign(translations,{
+ 'العنوان والتاريخ غير صالحين':'Le libellé et la date sont invalides.',
+ 'وقت تسجيل المصروف غير صالح':'L’heure d’enregistrement de la dépense est invalide.',
+ 'لا يمكن تعديل المصروف لأن وقت السند الأصلي غير صالح':'Impossible de modifier la dépense : l’heure du document d’origine est invalide.'
+});
+Object.assign(translations,{
+ 'رصيد بداية عامل':'Solde initial d’un employé',
+ 'مستحق للعامل':'Dû à l’employé',
+ 'مستحق على العامل':'Dû par l’employé',
+ 'اتجاه رصيد بداية العامل':'Sens du solde initial de l’employé',
+ 'مرجع رصيد بداية العامل':'Référence du solde initial de l’employé',
+ 'مستند رصيد بداية العامل غير صالح':'Le document du solde initial de l’employé est invalide.',
+ 'وقت التسجيل الفعلي':'Date et heure d’enregistrement'
+});
 Object.assign(translations,stockFrench,{
  'إقفال حساب عامل محذوف':'Clôture du compte d’un employé supprimé',
  'احتياطي الأجور المحرر':'Réserve salariale libérée',

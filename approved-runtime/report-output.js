@@ -11,6 +11,7 @@ export function invoicePdfModel(state,r,labels,{language='ar'}={}){
  const blocks=[{kind:'heading',text:t(kind)},{kind:'text',text:recordNumber(r)+' · '+t(r.date)+' '+(r.time||'')}];
  const fields=[[t('الحالة'),t(r.voided?'ملغاة':r.due?'على الحساب':'مسجلة')],...(party?[[t(party.type==='supplier'?'المورد':'العميل'),party.name]]:[[t('البيان'),localizedRecordTitle(r,language,state)]]),...(r.account?[[t('وسيلة الدفع'),account(r.account)]]:[]),...(r.to?[[t('الحساب المستلم'),account(r.to)]]:[]),...(r.warehouse?[[t('المخزن'),system(r.warehouse)]]:[]),...(r.from?[[t('من مخزن'),system(r.from)],[t('إلى مخزن'),system(r.toWarehouse)]]:[])];
  if(recordNumber(r)!==recordReference(r))fields.push([t('المرجع الأصلي'),recordReference(r)]);
+ if(r.kind==='employee-opening')fields.push([t('نوع الحركة'),t('عملية غير نقدية')],[t('الاتجاه'),t(r.employeeOpeningDirection==='payable'?'مستحق للعامل':'مستحق على العامل')]);
  if(r.kind==='employee-closure')fields.push([t('نوع الحركة'),t('عملية غير نقدية')],[t('احتياطي الأجور المحرر'),r.salaryReserveReleased]);
  blocks.push({kind:'table',rows:fields,header:false,widths:[.24,.76]});
  if(r.lines.length){const adjustment=r.kind==='adjustment';blocks.push({kind:'subheading',text:t(adjustment?'تفاصيل التصحيح':'بنود الفاتورة')},{kind:'table',widths:[.46,.12,.20,.22],rows:[[t('المنتج'),t(adjustment?'التغيير':'الكمية'),t('سعر الوحدة')+' '+currency,t('المجموع')+' '+currency],...r.lines.map(l=>[l.name+(l.warehouse?' · '+system(l.warehouse):''),adjustment?l.delta:l.qty,l.price,mobileLineTotal(l)])]});}

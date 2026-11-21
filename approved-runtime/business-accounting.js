@@ -22,7 +22,7 @@ export function storedPartyDelta(state,record,partyId){
 }
 export function cashDelta(record,accountId){
  if(record.kind==='return')return record.account===accountId?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
- if(record.kind==='employee-accrual'||record.kind==='employee-closure'||record.kind==='party-opening')return 0;
+ if(record.kind==='employee-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure'||record.kind==='party-opening')return 0;
  if(record.kind==='employee-payment')return record.account===accountId?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  return (record.account===accountId?(['sale','receive','deposit'].includes(record.kind)?1:-1)*Number(record.paid||0):0)+(record.kind==='transfer'&&record.to===accountId?record.total:0);
 }

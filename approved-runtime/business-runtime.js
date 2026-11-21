@@ -1,5 +1,5 @@
 import {recordNumber} from './document-presentation.js';
-import {canReadRecord,recordReadCapability,validatePartyIdentity,partyDisplayName} from './business-identity.js';
+import {canReadRecord,canReadReportSource,recordReadCapability,validatePartyIdentity,partyDisplayName} from './business-identity.js';
 import {cashAccount} from './upgrade-state.js';
 import {inventoryUnitCost} from './cost-provenance.js';
 import {saleFacts,profitSummary} from './commerce-facts.js';
@@ -58,16 +58,33 @@ export function installBusinessRuntime(api,groups){
  partyDelta=function(record,id){return ['party-opening','return'].includes(record.kind)?storedPartyDelta(S,record,id):originalEffect(record,id)};
  accountDelta=function(record,id){return record.kind.startsWith('employee-')||['party-opening','return'].includes(record.kind)?cashDelta(record,id):originalCash(record,id)};
  documentLabels.return='مرتجع';
- documentLabels['party-opening']='رصيد بداية طرف';documentLabels['employee-accrual']='استحقاق راتب';documentLabels['employee-payment']='حركة حساب موظف';documentLabels['employee-closure']='إقفال حساب عامل محذوف';
+ documentLabels['employee-opening']='رصيد بداية عامل';documentLabels['party-opening']='رصيد بداية طرف';documentLabels['employee-accrual']='استحقاق راتب';documentLabels['employee-payment']='حركة حساب موظف';documentLabels['employee-closure']='إقفال حساب عامل محذوف';
  titles.employees='الموظفون';titles['employee-ledger']='حساب الموظف';
  sectionThemes.employees=sectionThemes.parties;sectionThemes['employee-ledger']=sectionThemes.parties;
  const oldRows=rows;rows=function(list,description){return oldRows(list.filter(r=>canReadRecord(S,r,api.can)),description)};
  const oldLive=liveRecords;
  liveRecords=function(){return oldLive().filter(r=>canReadRecord(S,r,api.can))};
+ // A report grants a single linked document read, never its workspace or mutations.
+ let reportSource=null;
+ const clearReportSource=()=>{reportSource=null};
+ api.isReportSource=function(record){
+  if(!reportSource||view!=='invoice'||api.actor?.id!==reportSource.actor||selected!==reportSource.id){clearReportSource();return false}
+  return Boolean(record?.id===reportSource.id&&canReadReportSource(S,record,api.can));
+ };
+ api.openReportDocument=async function(id){
+  const record=S.records.find(r=>r.id===Number(id));
+  if(!api.actor||!canReadReportSource(S,record,api.can))throw Error('غير متاح بصلاحيات حسابك');
+  reportSource={id:record.id,actor:api.actor.id};
+  try{return await api.engineDispatch('invoice:'+record.id)}catch(error){clearReportSource();throw error}
+ };
+ const oldBusinessRender=render;
+ render=function(){if(reportSource&&(view!=='invoice'||api.actor?.id!==reportSource.actor||selected!==reportSource.id))clearReportSource();return oldBusinessRender()};
+ const oldBusinessInvoice=invoice;
+ invoice=function(){return oldBusinessInvoice().replace(/<button\b[^>]*data-action="((?:source-location|source|void):[^"]+)"[^>]*>[\s\S]*?<\/button>/g,(html,action)=>{const cap=api.permissionFor(action);return cap&&!api.can(cap)?'':html})};
  const oldPermission=api.permissionFor;
  api.permissionFor=function(action){
   if(action==='go:employees'||action==='go:employee-ledger')return 'employees.view';
-  const pieces=action.split(':');const reading=pieces[0]==='explain'&&pieces[1]==='document'?S.records.find(r=>r.id===Number(pieces[2])):pieces[0]==='invoice'||pieces[0]==='source-location'?S.records.find(r=>r.id===Number(pieces[1])):action.startsWith('site:feature:document-')?S.records.find(r=>r.id===selected):null;if(reading)return recordReadCapability(S,reading,api.can);if(pieces[0]==='explain'&&pieces[1]==='document'&&S.records.find(r=>r.id===Number(pieces[2]))?.kind.startsWith('employee-'))return 'employees.view';if(action.startsWith('site:feature:document-')&&S.records.find(r=>r.id===selected)?.kind.startsWith('employee-'))return 'employees.view';
+  const pieces=action.split(':');const reading=pieces[0]==='explain'&&pieces[1]==='document'?S.records.find(r=>r.id===Number(pieces[2])):pieces[0]==='invoice'||pieces[0]==='source-location'?S.records.find(r=>r.id===Number(pieces[1])):action.startsWith('site:feature:document-')?S.records.find(r=>r.id===selected):null;if(reading){if(pieces[0]!=='source-location'&&api.isReportSource(reading))return 'reports.view';if(pieces[0]==='source-location'&&canReadRecord(S,reading,api.can)&&!reading.kind.startsWith('employee-'))return oldPermission(action);return recordReadCapability(S,reading,api.can);}if(pieces[0]==='explain'&&pieces[1]==='document'&&S.records.find(r=>r.id===Number(pieces[2]))?.kind.startsWith('employee-'))return 'employees.view';if(action.startsWith('site:feature:document-')&&S.records.find(r=>r.id===selected)?.kind.startsWith('employee-'))return 'employees.view';
   const [command,id]=pieces,record=['invoice','source','source-location','void','confirm-void'].includes(command)?S.records.find(r=>r.id===Number(id||selected)):null;
   if(record?.kind.startsWith('employee-'))return ['invoice','source-location'].includes(command)?'employees.view':record.kind==='employee-payment'?'employees.pay':'employees.manage';
   if(record?.kind==='party-opening'&&['source','void','confirm-void'].includes(command))return 'party.opening.manage';
@@ -75,6 +92,8 @@ export function installBusinessRuntime(api,groups){
  };
  const dispatch=api.engineDispatch;
  api.engineDispatch=async function(action){
+  if(/^(go:|back$|accounts-tab:|resource:)/.test(action))clearReportSource();
+  if(action.startsWith('invoice:')&&reportSource?.id!==Number(action.split(':')[1]))clearReportSource();
   if(action==='save-party'||action==='pos:save-party'){const f=api.form(),editing=action==='save-party'&&modal==='partyedit';const identity=validatePartyIdentity(S,{...f,...(editing?{id:selected}:{}),type:action==='pos:save-party'?(saleType==='sale'?'customer':'supplier'):partyType});for(const key of ['name','phone']){const node=document.querySelector('#sheet-form [name='+key+']');if(node)node.value=identity[key];}}
   const [command,id]=action.split(':'),record=S.records.find(r=>r.id===Number(id||selected));
   if(command==='source-location'&&record?.kind.startsWith('employee-')){clearLocatedRecordFocus();return employees.openRecord(record,'source')}

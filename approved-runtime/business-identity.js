@@ -19,7 +19,7 @@ const accountAdjustment=['banks.view','banks.movements.view','banks.deposit_with
 function readScope(state,record){
  if(!record||typeof record!=='object')return {caps:[],fallback:'records.view'};
  const kind=record.kind,party=partyOf(state,record),related=party?(partyType(party)==='customer'?customer:supplier):[];
- if(kind==='employee-accrual'||kind==='employee-payment'||kind==='employee-closure')return {caps:['employees.view'],fallback:'employees.view',private:true};
+ if(kind==='employee-opening'||kind==='employee-accrual'||kind==='employee-payment'||kind==='employee-closure')return {caps:['employees.view'],fallback:'employees.view',private:true};
  if(kind==='sale')return {caps:[...sale,...(party&&partyType(party)==='customer'?customer:[])],fallback:'pos.view'};
  if(kind==='purchase')return {caps:[...purchase,...(party&&partyType(party)==='supplier'?supplier:[])],fallback:'purchases.view'};
  if(kind==='party-opening')return {caps:['party.opening.manage',...related],fallback:'party.opening.manage'};
@@ -65,3 +65,6 @@ export function partyDisplayName(state,record={}){
  if(Object.hasOwn(record,'party')&&(record.party===null||record.party===undefined||record.party===''))return text(record.title)||text(record.partyName)||text(record.partyNameOriginal)||text(record.desktop?.partyName);
  return current||text(record.partyName)||text(record.title)||text(record.partyNameOriginal)||text(record.desktop?.partyName);
 }
+
+/** Desktop history route: reports may open linked sources, while worker openings remain private. */
+export function canReadReportSource(state,record,can){return Boolean(record&&typeof can==='function'&&can('reports.view')&&(record.kind!=='employee-opening'||can('employees.view')));}

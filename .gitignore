@@ -43,3 +43,9 @@ build-870/
 
 __pycache__/
 *.pyc
+
+# Isolated main879 comparison/check outputs.
+desktop-879-source/
+outputs/desktop879-qa/
+build-879/
+android879-proof/

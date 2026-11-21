@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   business-parity:
+    # Newer business releases run these regressions through their current pinned gate.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'feat/desktop-870-parity-')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
