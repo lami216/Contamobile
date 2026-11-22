@@ -55,3 +55,4 @@ desktop-882-source/
 outputs/desktop882-qa/
 build-882/
 android882-proof/
+*.class

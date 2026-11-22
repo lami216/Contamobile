@@ -3,7 +3,7 @@
  const uncertainExport='لم يتأكد حفظ الملف. تحقّق من المكان الذي اخترته قبل إعادة المحاولة.';
  const bridgeFailure=(code,exporting=false)=>Object.assign(new Error(exporting?uncertainExport:'لم يصل تأكيد من التطبيق. تحقّق من النتيجة ثم أعد المحاولة.'),{code,permanent:false,status:0});
  function settle(id,error,result){const request=waiting.get(id);if(!request)return;waiting.delete(id);window.clearTimeout(request.timer);error?request.reject(error):request.resolve(result)}
- window.__nativeResult=(id,result)=>{if(!waiting.has(id))return;result?.error?settle(id,Object.assign(new Error(result.error),{code:result.code||'',retryAt:result.retryAt||0,permanent:result.permanent===true,status:result.status||0})):settle(id,null,result)};
+ window.__nativeResult=(id,result)=>{if(!waiting.has(id))return;result?.error?settle(id,Object.assign(new Error(result.error),{code:result.code||'',retryAt:result.retryAt||0,permanent:result.permanent===true,status:result.status||0,requestId:result.requestId||'',phase:result.phase||''})):settle(id,null,result)};
  function request(id,timeout,start,exporting=false){return new Promise((resolve,reject)=>{
   if(!pageActive){reject(bridgeFailure('NATIVE_PAGE_HIDDEN',exporting));return;}
   if(waiting.has(id)){reject(bridgeFailure('NATIVE_REQUEST_PENDING',exporting));return;}
