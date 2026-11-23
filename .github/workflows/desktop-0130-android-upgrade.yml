@@ -307,6 +307,7 @@ jobs:
           api-level: 36
           arch: x86_64
           profile: pixel_2
+          ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           script: bash scripts/test-parity0130-android-upgrade.sh

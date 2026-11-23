@@ -5,6 +5,39 @@ runner=$app.test/androidx.test.runner.AndroidJUnitRunner
 
 proof_dir=android-parity0130-proof
 mkdir -p "$proof_dir"
+guest_isolation_ready=false
+# Read-only evidence only: one command gets at most four seconds plus one
+# second to kill it, and no captured output file exceeds 64 KiB. Diagnostics
+# never alter a device setting, dismiss a dialog, rerun a case or fail a test.
+bounded_diagnostic() {
+ local label=$1 status
+ shift
+ if ! mkdir -p "$proof_dir/guest-diagnostics"; then return 0;fi
+ if timeout --kill-after=1s 4s "$@" 2>&1 | head -c 65536 > "$proof_dir/guest-diagnostics/$label.txt"; then status=0;else status=$?;fi
+ printf '%s exit=%s timeout=4s+1s maxBytes=65536\n' "$label" "$status" >> "$proof_dir/guest-diagnostics/index.txt" || true
+ return 0
+}
+guest_metadata() {
+ bounded_diagnostic before-build adb shell 'for key in ro.build.fingerprint ro.build.version.incremental ro.build.version.sdk ro.build.version.release ro.product.cpu.abi ro.kernel.qemu; do printf "%s=" "$key"; getprop "$key"; done'
+ bounded_diagnostic before-display adb shell 'wm size; wm density'
+ bounded_diagnostic before-launcher-version adb shell 'dumpsys package com.android.launcher3 | grep -E "versionCode=|versionName="'
+ bounded_diagnostic before-guest-cpu adb shell cat /sys/devices/system/cpu/online
+ bounded_diagnostic before-memory adb shell cat /proc/meminfo
+ bounded_diagnostic before-launcher-memory adb shell dumpsys meminfo com.android.launcher3
+ bounded_diagnostic before-host-cpu sh -c 'nproc; lscpu'
+ return 0
+}
+guest_failure_diagnostics() {
+ if [ "$guest_isolation_ready" != true ]; then return 0;fi
+ bounded_diagnostic failure-lastanr adb shell dumpsys activity lastanr
+ bounded_diagnostic failure-anr-events adb logcat -d -b events -v threadtime -t 300 -s am_anr am_kill am_crash
+ bounded_diagnostic failure-system-errors adb logcat -d -v threadtime -t 300 -s ActivityManager:E WindowManager:E AndroidRuntime:E
+ bounded_diagnostic failure-guest-cpu adb shell dumpsys cpuinfo
+ bounded_diagnostic failure-memory adb shell cat /proc/meminfo
+ bounded_diagnostic failure-launcher-memory adb shell dumpsys meminfo com.android.launcher3
+ bounded_diagnostic failure-host-cpu sh -c 'ps -eo pid,comm,pcpu,pmem,rss --sort=-pcpu | sed -n "1,31p"; vmstat 1 2'
+ return 0
+}
 # Host-only bounded diagnostics: never print environment, process arguments or
 # signing material. Preserve the test's original exit status if collection fails.
 host_diagnostics() {
@@ -28,6 +61,7 @@ finish_candidate() {
  if [ "$status" -ne 0 ]; then
   printf 'Original test exit status: %s\n' "$status" > "$proof_dir/host-failure.txt"
   cat "$proof_dir/host-after.txt" >> "$proof_dir/host-failure.txt" 2>/dev/null || true
+  guest_failure_diagnostics || true
  fi
  exit "$status"
 }
@@ -95,6 +129,8 @@ adb shell cmd connectivity airplane-mode enable
 adb shell svc wifi disable
 adb shell svc data disable
 adb shell ip -o link show > "$proof_dir/network-interfaces.txt"
+guest_isolation_ready=true
+guest_metadata
 assert_offline() {
  local label=$1 wait_for_teardown=${2:-false} attempts=1 required=1 passed=0 attempt
  if [ "$wait_for_teardown" = true ]; then attempts=20; required=2; fi
