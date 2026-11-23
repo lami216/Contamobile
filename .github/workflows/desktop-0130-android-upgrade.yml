@@ -1,7 +1,7 @@
 name: Desktop0.1.30 parity and signed Android40 update
 on:
   push:
-    branches: [feat/desktop-main-parity-20261123]
+    branches: [main, feat/desktop-main-parity-20261123]
   workflow_dispatch:
 permissions:
   contents: read
@@ -168,7 +168,7 @@ jobs:
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      github.ref == 'refs/heads/feat/desktop-main-parity-20261123'
+      (github.ref == 'refs/heads/feat/desktop-main-parity-20261123' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:

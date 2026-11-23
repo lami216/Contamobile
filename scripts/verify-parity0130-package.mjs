@@ -20,14 +20,28 @@ const retainedReleaseFiles={
  "approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved/Recovery39UpgradeTest.java": "6e7a107124b805144d0aa5f448e79c831e3b7e12558b2e28fd7a378fd4643872",
  "approved-android/signing-certificate.sha256": "2668794a925c5e083dd006d2a14af8e887750b366ebcf84c80bad5399d904c7a"
 };
-for(const[file,digest]of Object.entries(retainedReleaseFiles))assert.equal(hash(await text(file)),digest,'Earlier release proof changed: '+file);
+const historical38Workflow='.github/workflows/desktop-882-android-upgrade.yml';
+for(const[file,digest]of Object.entries(retainedReleaseFiles)){
+ let source=await text(file);
+ if(file===historical38Workflow){
+  // Only retire the two old main routes. Reconstruct their original bytes in
+  // memory so every other historical build/test/signing byte stays pinned.
+  const branch='branches: [feat/desktop-main-followup-20261121]',guard="      github.ref == 'refs/heads/feat/desktop-main-followup-20261121'";
+  assert.equal(source.split(branch).length,2,'Historical38 push is restricted to its original branch');
+  assert.equal(source.split(guard).length,2,'Historical38 dispatch cannot build on main');
+  assert(!source.includes("refs/heads/main"),'Historical38 cannot produce a main downgrade');
+  source=source.replace(branch,'branches: [main, feat/desktop-main-followup-20261121]').replace(guard,"      (github.ref == 'refs/heads/feat/desktop-main-followup-20261121' || github.ref == 'refs/heads/main')");
+ }
+ assert.equal(hash(source),digest,'Earlier release proof changed: '+file);
+}
 const original=JSON.parse(await text('scripts/original-v39-jvm-cases.json')),current=new Set();
 async function scan(directory){for(const entry of await readdir(directory,{withFileTypes:true})){const file=path.join(directory,entry.name);if(entry.isDirectory())await scan(file);else if(entry.name.endsWith('.java')){const source=await readFile(file,'utf8'),packageName=source.match(/^package\s+([\w.]+)\s*;/m)?.[1];for(const test of source.matchAll(/@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(/g))current.add(packageName+'.'+entry.name.slice(0,-5)+'#'+test[1]);}}}
 await scan(fileURLToPath(new URL('approved-android/app/src/test/java/',root)));
 assert.equal(original.sourceHead,previous39.sourceHead);assert.equal(original.sourceVersionCode,39);assert.equal(original.cases.length,54);assert.equal(new Set(original.cases).size,54);for(const name of original.cases)assert(current.has(name),'Original39 JVM case removed: '+name);
 assert.equal(FEATURE_SCHEMA,4);
 const workflow=await text('.github/workflows/desktop-0130-android-upgrade.yml'),script=await text('scripts/test-parity0130-android-upgrade.sh'),fixture=await text('approved-android/parity0130-androidTest/java/mr/alkarna/mobile/approved/Desktop0130UpgradeTest.java'),gradle=await text('approved-android/app/build.gradle');
-assert(workflow.includes('branches: [feat/desktop-main-parity-20261123]'));assert(!workflow.includes("github.ref == 'refs/heads/main'"));
+assert(workflow.includes('branches: [main, feat/desktop-main-parity-20261123]'));
+assert(workflow.includes("      (github.ref == 'refs/heads/feat/desktop-main-parity-20261123' || github.ref == 'refs/heads/main')"),'Only the verified40 release handles main or its approved branch');
 assert(workflow.includes('needs: [business, build, native, upgrade]'),'A distributable update requires all business, build, native and upgrade gates');
 assert(workflow.includes('ref: '+desktopSource));assert(workflow.includes(previous39.sourceHead)&&workflow.includes(String(previous39.runId))&&workflow.includes(String(previous39.artifactId))&&workflow.includes(previous39.sha256));
 assert(workflow.includes("ALKARNA_HIGHEST_DISTRIBUTED_CODE: '39'"));assert(workflow.includes('-PalkarnaVersionCode=40 -PalkarnaVersionName=1.0.39 -PalkarnaParity0130Tests=true'));assert(workflow.includes('baseline: [27, 39]'));
