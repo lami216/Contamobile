@@ -77,8 +77,9 @@ jobs:
       - name: Prepare pinned browser and runtime dependencies
         run: |
           npm install --prefix parity-browser --ignore-scripts --no-audit --no-fund playwright@1.62.1
+          timeout --kill-after=30s 600s parity-browser/node_modules/.bin/playwright install-deps chromium
           for attempt in 1 2 3; do
-            if timeout 240 parity-browser/node_modules/.bin/playwright install --with-deps chromium --only-shell; then break; fi
+            if timeout --kill-after=30s 240s parity-browser/node_modules/.bin/playwright install chromium --only-shell; then break; fi
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep 3
           done
