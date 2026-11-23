@@ -25,8 +25,9 @@ final class ContatoolsClient {
  private final SecureRandom random=new SecureRandom();
  private final RegistrationPolicy registration=new RegistrationPolicy();
  static final class ServiceFailure extends IOException {
-  final boolean permanent;final long retryAt;final int status;
-  ServiceFailure(int status,boolean permanent,long retryAt){super("Service channel unavailable");this.status=status;this.permanent=permanent;this.retryAt=retryAt;}
+  final boolean permanent;final long retryAt;final int status;final String code,requestId;
+  ServiceFailure(int status,boolean permanent,long retryAt){this(status,permanent,retryAt,"","");}
+  ServiceFailure(int status,boolean permanent,long retryAt,String code,String requestId){super("Service channel unavailable");this.status=status;this.permanent=permanent;this.retryAt=retryAt;this.code=RecoveryFailure.http(status,code);this.requestId=RecoveryFailure.requestId(requestId);}
  }
  ContatoolsClient(Context context,DeviceLicense license,String endpoint,JSONObject issuers) throws Exception {
   this(context,license,issuers,new HttpsTransport(endpoint));
@@ -40,7 +41,7 @@ final class ContatoolsClient {
   if(saved!=null&&saved.optInt("protocol")==RegistrationPolicy.VERSION){registration.successful=saved.optString("successful");registration.pending=saved.optString("pending");registration.lastSuccess=saved.optLong("lastSuccess");registration.lastAttempt=saved.optLong("lastAttempt");registration.nextAttempt=saved.optLong("nextAttempt");registration.failures=saved.optInt("failures");registration.blocked=saved.optBoolean("blocked");}
  }
  private JSONObject dispatch(String operation,JSONObject payload) throws Exception {
-  if(!online())throw new ServiceFailure(0,false,0);
+  if(!online())throw new ServiceFailure(0,false,0,"RECOVERY_OFFLINE","");
   long deadline=journal.state.optLong("networkNotBefore");if(deadline>System.currentTimeMillis())throw new ServiceFailure(429,false,deadline);
   try{return exchange(operation,payload);}catch(ServiceFailure failure){if(failure.retryAt>System.currentTimeMillis()){journal.state.put("networkNotBefore",failure.retryAt);journal.save();}throw failure;}
   catch(IOException failure){if(transport instanceof HttpsTransport){journal.state.put("networkNotBefore",System.currentTimeMillis()+15000);journal.save();}throw failure;}
@@ -48,7 +49,7 @@ final class ContatoolsClient {
  private JSONObject exchange(String operation,JSONObject payload) throws Exception {
   JSONObject challenge=transport.post("/api/android/challenge",new JSONObject().put("operation",operation).put("payload",payload));
   String message=challenge.getString("message");JSONObject proof=new JSONObject(message);
-  if(!"contatools-device-proof".equals(proof.optString("schema"))||proof.optInt("version")!=1||!operation.equals(proof.optString("operation"))||!identity.id().equals(proof.optString("installationId"))||!ProtocolJson.hash(payload).equals(proof.optString("payloadHash"))||!challenge.getString("id").equals(proof.optString("id"))||message.length()>4096)throw new ServiceFailure(0,true,0);
+  if(!"contatools-device-proof".equals(proof.optString("schema"))||proof.optInt("version")!=1||!operation.equals(proof.optString("operation"))||!identity.id().equals(proof.optString("installationId"))||!ProtocolJson.hash(payload).equals(proof.optString("payloadHash"))||!challenge.getString("id").equals(proof.optString("id"))||message.length()>4096)throw new ServiceFailure(0,true,0,"RECOVERY_INVALID_RESPONSE","");
   return transport.post("/api/android/dispatch",new JSONObject().put("operation",operation).put("payload",payload).put("challengeId",challenge.getString("id")).put("signature",identity.sign(message)));
  }
  synchronized JSONObject register(JSONObject context) throws Exception {return register(context,true);}
@@ -97,7 +98,8 @@ final class ContatoolsClient {
    boolean permanent=permanentRegistrationFailure(failure);
    long retry=failure instanceof ServiceFailure?((ServiceFailure)failure).retryAt:0;
    registration.failed(System.currentTimeMillis(),permanent,retry,random.nextDouble());saveRegistration();
-   return new JSONObject().put("stage",permanent?"blocked":"scheduled").put("retryAt",registration.nextAttempt).put("registered",false);
+   JSONObject response=new JSONObject().put("stage",permanent?"blocked":"scheduled").put("retryAt",registration.nextAttempt).put("registered",false).put("phase",force?"register-now":"register");
+   if(failure instanceof ServiceFailure){ServiceFailure service=(ServiceFailure)failure;response.put("code",service.code).put("status",service.status).put("requestId",service.requestId);}else response.put("code",RecoveryFailure.local(failure));return response;
   }
  }
  // A certificate/network incident can be repaired without changing this installation.
@@ -109,7 +111,7 @@ final class ContatoolsClient {
   JSONObject pending=journal.state.optJSONObject("pending");if(pending!=null)return resume();
   JSONObject context=journal.state.getJSONObject("context");JSONArray owners=context.getJSONArray("owners");boolean allowed=false;for(int i=0;i<owners.length();i++)if(ownerId.equals(owners.getJSONObject(i).getString("id")))allowed=true;if(!allowed)throw new IOException("Local owner unavailable");
   JSONObject request=journal.state.optJSONObject("request");if(request==null||!ownerId.equals(request.optString("ownerId"))||!context.getString("shopId").equals(request.optString("shopId"))){request=new JSONObject().put("shopId",context.getString("shopId")).put("ownerId",ownerId).put("requestId",UUID.randomUUID().toString());journal.state.put("request",request);journal.save();}
-  JSONObject response;try{response=dispatch("recovery.request",target(request));}catch(ServiceFailure failure){if(failure.status==403||failure.status==404){registration.successful="";saveRegistration();}throw failure;}request.put("requestId",response.getString("requestId"));journal.save();return remember(response);
+  JSONObject response;try{response=dispatch("recovery.request",target(request));}catch(ServiceFailure failure){if(RecoveryFailure.refreshRegistration(failure.code)){registration.successful="";saveRegistration();}throw failure;}request.put("requestId",response.getString("requestId"));journal.save();return remember(response);
  }
  synchronized JSONObject poll() throws Exception {recoveryAllowed();if(journal.state.has("pending"))return resumeLocal();return remember(dispatch("recovery.poll",target(journal.state.getJSONObject("request"))));}
  private JSONObject remember(JSONObject response) throws Exception {
@@ -218,7 +220,27 @@ final class ContatoolsClient {
   }
   public JSONObject post(String path,JSONObject body) throws Exception {
    HttpsURLConnection c=(HttpsURLConnection)new URL(base+path).openConnection();c.setConnectTimeout(12000);c.setReadTimeout(15000);c.setInstanceFollowRedirects(false);c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);int max=path.startsWith("/api/android/rescue/")?307200:131072;if(bytes.length>max)throw new IOException("Request too large");c.setFixedLengthStreamingMode(bytes.length);
-   try{try(OutputStream out=c.getOutputStream()){out.write(bytes);}int status=c.getResponseCode();if(status!=200){long retry=retryAfter(c.getHeaderField("Retry-After"),System.currentTimeMillis());throw new ServiceFailure(status,status>=400&&status<500&&status!=408&&status!=425&&status!=429,retry);}try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))!=-1){if(out.size()+n>262144)throw new IOException("Response too large");out.write(buffer,0,n);}return new JSONObject(out.toString("UTF-8"));}}finally{c.disconnect();}
+   try{
+    try(OutputStream out=c.getOutputStream()){out.write(bytes);}
+    int status=c.getResponseCode();
+    if(status!=200){
+     long retry=retryAfter(c.getHeaderField("Retry-After"),System.currentTimeMillis());String errorBody="";
+     try(InputStream in=c.getErrorStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+      if(in!=null){byte[] buffer=new byte[2048];int n;boolean oversized=false;while((n=in.read(buffer))!=-1){if(out.size()+n>16384){oversized=true;break;}out.write(buffer,0,n);}if(!oversized)errorBody=out.toString("UTF-8");}
+     }catch(IOException ignored){/* The HTTP status remains authoritative if its optional diagnostics cannot be read. */}
+     throw responseFailure(status,retry,errorBody);
+    }
+    try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+     byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))!=-1){if(out.size()+n>262144)throw new ServiceFailure(200,true,0,"RECOVERY_INVALID_RESPONSE","");out.write(buffer,0,n);}
+     try{return new JSONObject(out.toString("UTF-8"));}catch(JSONException invalid){throw new ServiceFailure(200,true,0,"RECOVERY_INVALID_RESPONSE","");}
+    }
+   }
+   catch(ServiceFailure failure){throw failure;}catch(javax.net.ssl.SSLException failure){throw new ServiceFailure(0,false,System.currentTimeMillis()+15000,"RECOVERY_SECURE_CONNECTION","");}catch(IOException failure){throw new ServiceFailure(0,false,System.currentTimeMillis()+15000,"RECOVERY_NETWORK","");}finally{c.disconnect();}
   }
+ }
+ static ServiceFailure responseFailure(int status,long retryAt,String body){
+  String code="",requestId="";
+  if(body!=null&&body.length()<=16384)try{JSONObject response=new JSONObject(body);Object c=response.opt("code"),r=response.opt("requestId");if(c instanceof String)code=(String)c;if(r instanceof String)requestId=(String)r;}catch(JSONException ignored){}
+  return new ServiceFailure(status,status>=400&&status<500&&status!=408&&status!=425&&status!=429,retryAt,code,requestId);
  }
 }

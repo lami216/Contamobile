@@ -22,6 +22,27 @@ let browser;
 const check=async(name,fn)=>{try{await fn();results.push({name,passed:true});console.log('PASS '+name)}catch(error){results.push({name,passed:false,error:error.stack||error.message});console.error('FAIL '+name+'\n'+error.stack)}};
 const idle=page=>page.waitForFunction(()=>!globalThis.karnaPersistenceBusy());
 async function command(page,action){await page.evaluate(action=>act(action),action);await idle(page)}
+async function legacyMergeFile(){
+ const SQL=await require('../approved-runtime/assets/sql-asm.js')(),db=new SQL.Database();
+ try{
+  // The DataAcc schema is also exercised by verify-import-features.mjs. Native
+  // JSON uses full restore; only an actual legacy database exercises merge resume.
+  for(const sql of [
+   'CREATE TABLE itemsTB(id INTEGER,title TEXT,barcode TEXT,priceUnit REAL,start_Cost REAL)',
+   "INSERT INTO itemsTB VALUES(1,'Legacy rice','9001',20,10)",
+   'CREATE TABLE storesTB(id INTEGER,title TEXT)',"INSERT INTO storesTB VALUES(1,'Legacy depot')",
+   'CREATE TABLE stores_itemsTB(id INTEGER,item_idFK INTEGER,store_idFK INTEGER,qty REAL)',
+   'INSERT INTO stores_itemsTB VALUES(1,1,1,25)',
+   'CREATE TABLE customerTB(id INTEGER,title TEXT,Debitor REAL,Creditor REAL)',
+   "INSERT INTO customerTB VALUES(1,'Legacy client',50,0)",
+   'CREATE TABLE buyBillTB(id INTEGER,Date TEXT)',
+   'CREATE TABLE items_BuyTB(id INTEGER,BuyFK INTEGER,item_idFK INTEGER,qty REAL)',
+   'CREATE TABLE purchBillTB(id INTEGER,Date TEXT)',
+   'CREATE TABLE items_purchTB(id INTEGER,purchFK INTEGER,item_idFK INTEGER,qty REAL)'
+  ])db.run(sql);
+  return Buffer.from(db.export());
+ }finally{db.close()}
+}
 async function fixture(lang='ar',width=393){
  const context=await browser.newContext({viewport:{width,height:851},serviceWorkers:'block'}),page=await context.newPage();
  await page.addInitScript(lang=>{
@@ -104,14 +125,15 @@ try{
   }finally{await context.close()}
  });
  await check('a saved merge is resumed from import without adding duplicate main-page controls',async()=>{
-  const {context,page}=await fixture();try{
+  const buffer=await legacyMergeFile();
+  for(const language of ['ar','fr']){const {context,page}=await fixture(language);try{
    await command(page,'site:feature:import');assert.equal(await page.locator('[data-action="site:feature:import-resume"]').count(),0);
-   const snapshot=await page.evaluate(()=>globalThis.__backupSnapshot);await page.locator('#feature-import-file').setInputFiles({name:'existing.json',mimeType:'application/json',buffer:Buffer.from(snapshot)});
+   await page.locator('#feature-import-file').setInputFiles({name:'legacy-dataacc.db',mimeType:'application/octet-stream',buffer});
    await command(page,'site:feature:import-review');assert.equal(await page.locator('[data-action="site:feature:import-commit"]').count(),1);
    await command(page,'close');assert.equal(await page.locator('#content [data-action="site:feature:import-resume"]').count(),0);
    await command(page,'site:feature:import');assert.equal(await page.locator('[data-action="site:feature:import-resume"]').count(),1);
    await command(page,'site:feature:import-resume');assert.equal(await page.locator('[data-action="site:feature:import-commit"]').count(),1);
-  }finally{await context.close()}
+  }finally{await context.close()}}
  });
  await check('unified restore enforces legacy permission while local backup management stays available',async()=>{
   const {context,page}=await fixture();try{

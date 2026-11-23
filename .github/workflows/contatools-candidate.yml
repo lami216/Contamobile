@@ -15,7 +15,7 @@ jobs:
   verified_bytes:
     # Main and every PR retain the unsigned native gate. Only this owner-approved
     # historical v34 release branch can enter artifact reuse/signing. Main uses
-    # desktop-882-android-upgrade.yml for its current signed APK and upgrade proof.
+    # desktop-0130-android-upgrade.yml for its current signed APK and upgrade proof.
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&

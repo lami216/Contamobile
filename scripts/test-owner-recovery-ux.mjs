@@ -47,6 +47,9 @@ async function fixture(lang='ar',width=393,height=851){
  await page.addInitScript(lang=>{
   localStorage.setItem('alkarna-site-language',lang);
   window.NativeFiles={ownerRecovery:async(command,value='')=>{
+   if(command==='request')globalThis.__recoveryRequestCalls=(globalThis.__recoveryRequestCalls||0)+1;
+   if(globalThis.__syntheticRecoveryFailure?.phase===command)throw Object.assign(new Error('untrusted-private-response'),globalThis.__syntheticRecoveryFailure);
+   if(command==='register-now'&&globalThis.__syntheticRegistrationResult)return structuredClone(globalThis.__syntheticRegistrationResult);
    if(command==='prepare'&&globalThis.__beforeRecoveryPrepare){const hook=globalThis.__beforeRecoveryPrepare;delete globalThis.__beforeRecoveryPrepare;await hook()}
    return globalThis.syntheticOwnerRecovery(command,value);
   }};
@@ -71,7 +74,10 @@ async function approve(f,ownerId){await open(f);if(ownerId)await panel(f.page).l
 async function credentials(f,username='new-login',password='4321',confirm=password){await input(f.page,'username').fill(username);await input(f.page,'password').fill(password);await input(f.page,'confirm').fill(confirm)}
 async function complete(f){await save(f.page).click();await input(f.page,'recoveredUsername').waitFor()}
 async function login(page,username,password){await panel(page).locator('header button').click();await page.locator('#site-auth-form [name=username]').fill(username);await page.locator('#site-auth-form [name=password]').fill(password);await page.locator('[data-action="site:login"]').click();}
-async function noOverflow(page){assert(await page.evaluate(()=>{const p=document.querySelector('.owner-recovery-panel'),r=p.getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth+1&&r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1}),'Recovery panel exceeds the viewport')}
+async function noOverflow(page){
+ assert(await page.evaluate(()=>{const p=document.querySelector('.owner-recovery-panel'),r=p.getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth+1&&r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1}),'Recovery panel exceeds the viewport');
+ assert(await page.evaluate(()=>{const r=document.querySelector('.owner-recovery-panel').getBoundingClientRect();return r.left>=15&&r.right<=innerWidth-15}),'Recovery panel must retain its 16px horizontal gutters');
+}
 try{
  browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:process.env.PLAYWRIGHT_USE_BUNDLED==='1'?{}:{channel:'chrome'})});
  for(const [lang,width]of [['ar',360],['ar',393],['fr',360],['fr',393]])await check(`approved username form preserves ${lang} layout at ${width}px without disclosure before approval`,async()=>{
@@ -129,7 +135,7 @@ try{
  });
  await check('lost finish response cannot rename or reset the account twice on retry',async()=>{
   const f=await fixture();try{
-   await approve(f);await credentials(f,'committed-login');f.native.failFinish=true;await save(f.page).click();await status(f.page).filter({hasText:'تعذّر الاتصال'}).waitFor();const committed=await stored(f.page);assert.equal(committed.users.find(u=>u.id===f.native.ownerId).username,'committed-login');
+   await approve(f);await credentials(f,'committed-login');f.native.failFinish=true;await save(f.page).click();await status(f.page).filter({hasText:'تعذّر إتمام طلب الاستعادة'}).waitFor();const committed=await stored(f.page);assert.equal(committed.users.find(u=>u.id===f.native.ownerId).username,'committed-login');
    await credentials(f,'must-not-replace','9876');await complete(f);const after=await stored(f.page);assert.deepEqual(after.users,committed.users);assert.deepEqual(after.shop,committed.shop);assert.equal(await input(f.page,'recoveredUsername').inputValue(),'committed-login');assert.equal(f.native.claims,1);
   }finally{await f.context.close()}
  });
@@ -173,6 +179,23 @@ try{
   const f=await fixture('fr',360,520);try{
    await approve(f);await credentials(f,'typed-before-keyboard');await f.page.setViewportSize({width:360,height:360});await input(f.page,'confirm').focus();await f.page.evaluate(()=>{dispatchEvent(new Event('offline'));dispatchEvent(new Event('online'))});assert.equal(await input(f.page,'username').inputValue(),'typed-before-keyboard');assert.equal(await input(f.page,'confirm').inputValue(),'4321');await noOverflow(f.page);
    await save(f.page).scrollIntoViewIfNeeded();const bounds=await save(f.page).boundingBox();assert(bounds.y>=0&&bounds.y+bounds.height<=360);await complete(f);assert.equal(await input(f.page,'recoveredUsername').inputValue(),'typed-before-keyboard');
+  }finally{await f.context.close()}
+ });
+ for(const [lang,width]of [['ar',360],['ar',393],['fr',360],['fr',393]])await check(`recovery failures remain actionable and private in ${lang} at ${width}px without retrying a write`,async()=>{
+  const f=await fixture(lang,width);try{
+   const before=await stored(f.page);await open(f);const requestId='12345678-1234-5678-9012-123456789abc';
+   for(const [code,http,expected]of [['RECOVERY_REGISTRATION_REQUIRED',403,'RECOVERY_REGISTRATION_REQUIRED'],['RECOVERY_OWNER_UNREGISTERED',403,'RECOVERY_OWNER_UNREGISTERED'],['RECOVERY_DEVICE_REVIEW_REQUIRED',403,'RECOVERY_DEVICE_REVIEW_REQUIRED'],['RECOVERY_PHONE_NOT_CURRENT',409,'RECOVERY_PHONE_NOT_CURRENT'],['RECOVERY_RESET_IN_PROGRESS',409,'RECOVERY_RESET_IN_PROGRESS'],['RECOVERY_PERMISSION_EXPIRED',403,'RECOVERY_PERMISSION_EXPIRED'],['RECOVERY_INVALID_PROOF',403,'RECOVERY_INVALID_PROOF'],['RECOVERY_RATE_LIMITED',429,'RECOVERY_RATE_LIMITED'],['RECOVERY_OFFLINE',0,'RECOVERY_OFFLINE'],['RECOVERY_LOCAL_STATE',0,'RECOVERY_LOCAL_STATE'],['RECOVERY_LOCAL_ACTIVATION',0,'RECOVERY_LOCAL_ACTIVATION'],['RECOVERY_INVALID_RESPONSE',200,'RECOVERY_INVALID_RESPONSE'],['unknown-private-code',409,'RECOVERY_REQUEST_CONFLICT'],['unknown-private-code',503,'RECOVERY_SERVICE_UNAVAILABLE']]){
+    await f.page.evaluate(error=>{globalThis.__syntheticRecoveryFailure=error},{code,status:http,phase:'request',requestId,permanent:http>=400&&http<500});
+    await panel(f.page).locator('.recovery-actions > button').click();await f.page.waitForFunction(code=>document.querySelector('.owner-recovery-panel [role=status]')?.dataset.recoveryCode===code,expected);
+    assert.equal(await status(f.page).getAttribute('data-recovery-request-id'),requestId);assert((await status(f.page).innerText()).includes(requestId),'The complete support reference must remain visible');assert.equal(await status(f.page).getAttribute('data-recovery-phase'),'request');const text=await panel(f.page).innerText();assert(!/private-login|second-private|untrusted-private-response|unknown-private-code/.test(text));assert.equal(await input(f.page,'username').count(),0);assert.equal(await input(f.page,'password').count(),0);assert.equal(await panel(f.page).locator('select').count(),1);if(lang==='fr')assert(!/[\u0600-\u06ff]/.test(text),'French error contains Arabic system text');await noOverflow(f.page);
+   }
+   const attempts=await f.page.evaluate(()=>__recoveryRequestCalls);await f.page.evaluate(()=>{for(let n=0;n<100;n++)dispatchEvent(new Event('online'))});await f.page.waitForTimeout(850);assert.equal(await f.page.evaluate(()=>__recoveryRequestCalls),attempts,'Network events retried a recovery write');assert.deepEqual((await stored(f.page)).users,before.users);assert.deepEqual((await stored(f.page)).business,before.business);assert.equal(f.native.prepares,0);
+   await f.page.evaluate(()=>{delete globalThis.__syntheticRecoveryFailure});f.native.response='waiting';await panel(f.page).locator('.recovery-actions > button').click();await status(f.page).filter({hasText:lang==='fr'?'attente':'ينتظر'}).waitFor();assert.equal(await f.page.evaluate(()=>__recoveryRequestCalls),attempts+1,'Retry needs exactly one explicit user action');assert.equal(await status(f.page).getAttribute('data-recovery-code'),null);
+  }finally{await f.context.close()}
+ });
+ await check('failed explicit registration shows the safe cause and never sends a recovery request',async()=>{
+  const f=await fixture('fr',360);try{
+   await open(f);await f.page.evaluate(()=>{globalThis.__syntheticRegistrationResult={registered:false,stage:'blocked',code:'RECOVERY_INVALID_PROOF',status:403,phase:'register-now',requestId:'not-a-safe-reference'}});await panel(f.page).locator('.recovery-actions > button').click();await f.page.waitForFunction(()=>document.querySelector('.owner-recovery-panel [role=status]')?.dataset.recoveryCode==='RECOVERY_INVALID_PROOF');assert.equal(await status(f.page).getAttribute('data-recovery-phase'),'register-now');assert.equal(await status(f.page).getAttribute('data-recovery-request-id'),null);assert(!/not-a-safe-reference/.test(await panel(f.page).innerText()));assert.equal(await f.page.evaluate(()=>globalThis.__recoveryRequestCalls||0),0);assert.equal(await input(f.page,'username').count(),0);
   }finally{await f.context.close()}
  });
 }finally{

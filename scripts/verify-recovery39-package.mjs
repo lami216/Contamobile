@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {readFile,readdir} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+await import('./verify-882-package.mjs');
+const root=new URL('../',import.meta.url),text=async name=>(await readFile(new URL(name,root),'utf8')).replaceAll('\r\n','\n');
+const properties=Object.fromEntries((await text('approved-android/recovery-release.properties')).trim().split('\n').map(row=>row.split('=')));
+assert.deepEqual(properties,{versionCode:'39',versionName:'1.0.38',highestDistributedCode:'38',previousApkSha256:'b2c04a13bcacb940068811a5340aba862da9b8c30d58981be3424f50604f60d3'});
+const original=JSON.parse(await text('scripts/original-v38-jvm-cases.json')),current=new Set();
+async function scan(directory){for(const entry of await readdir(directory,{withFileTypes:true})){const file=path.join(directory,entry.name);if(entry.isDirectory())await scan(file);else if(entry.name.endsWith('.java')){const source=await readFile(file,'utf8'),packageName=source.match(/^package\s+([\w.]+)\s*;/m)?.[1];for(const test of source.matchAll(/@Test\b(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(/g))current.add(packageName+'.'+entry.name.slice(0,-5)+'#'+test[1]);}}}
+await scan(fileURLToPath(new URL('approved-android/app/src/test/java/',root)));
+assert.equal(original.sourceHead,'a7cd951c08effe2f45ac997696a0eeea6dbe0041');assert.equal(original.sourceVersionCode,38);assert.equal(original.cases.length,51);assert.equal(new Set(original.cases).size,51);
+for(const name of original.cases)assert(current.has(name),'Original38 JVM case removed: '+name);
+assert([...current].filter(name=>name.includes('.RecoveryFailureTest#')).length>=3,'Actual native client error envelopes must execute in JVM tests');
+const workflow=await text('.github/workflows/owner-recovery39-android-upgrade.yml'),script=await text('scripts/test-recovery39-android-upgrade.sh');
+assert(workflow.includes('branches: [fix/owner-recovery-diagnostics-20261122]'));assert(!workflow.includes("github.ref == 'refs/heads/main'"));assert(!workflow.includes('baseline-v37'));
+assert(workflow.includes('14725472148')&&workflow.includes(properties.previousApkSha256));assert(workflow.includes('-PalkarnaVersionCode=39 -PalkarnaVersionName=1.0.38'));
+assert(script.includes('suite=Recovery39UpgradeTest'));assert(script.includes("native_count==75"));assert(script.includes("'Desktop882UpgradeTest','Recovery39UpgradeTest'"));assert(!script.includes('expectedVersionCode 38'));
+const fixture=await text('approved-android/app/src/androidTest/java/mr/alkarna/mobile/approved/Recovery39UpgradeTest.java');
+assert(fixture.includes('"Warm only the original distributed APK38",38'));assert(fixture.includes('"Candidate is exactly39",39'));assert(fixture.includes('super.verifyAfterInPlaceUpdate()'));assert(fixture.includes('recoveryConsumedId'));
+console.log(JSON.stringify({schema:'alkarna-recovery39-package',versionCode:39,versionName:'1.0.38',featureSchema:4,originalJVMRetained:original.cases.length,currentJVMSourceCases:current.size,nativeScenarios:75,upgradeBaselines:[27,38],oldReleasePipelinesUnchanged:true,passed:true}));

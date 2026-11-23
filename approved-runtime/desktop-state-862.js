@@ -1,4 +1,4 @@
-// Functional identity adapter for official Conta backups, including Offline builds 862 through 882.
+// Functional identity adapter for official Conta backups through main 0.1.30.
 // This never writes to storage, replays postings, imports login credentials or changes activation.
 import {sha256Hex} from './accounting-hash.js';
 import {stockBalanceAfter,reportCostNumber} from './accounting-numbers.js';
@@ -8,6 +8,8 @@ import {ensurePayrollState,validatePayrollState,validatePayrollSnapshot} from '.
 import {validateExpenseCategoryState} from './expense-category-domain.js';
 import {validatePartyOpeningState} from './party-opening-domain.js';
 import {upgradeState,validateFeatureState} from './upgrade-state.js';
+import {BUSINESS_INTERCHANGE_FORMAT,readBusinessInterchange} from './business-interchange.js';
+import {historicalSettlementProjection} from './historical-settlement.js';
 
 const clone=value=>structuredClone(value),own=(value,key)=>Object.hasOwn(value,key);
 const fail=message=>{throw Error(message+'؛ لم تتغير بيانات الهاتف')};
@@ -50,6 +52,7 @@ function reference(map,value,label,{optional=false}={}){
 function revision(value){const result=numeric(value,'إصدار المستند',{fallback:0,nonnegative:true});if(!Number.isSafeInteger(result))fail('إصدار المستند');return result;}
 
 export function desktopToMobileState(raw){
+ if(raw?.format===BUSINESS_INTERCHANGE_FORMAT)raw=readBusinessInterchange(raw);
  if(!raw||raw.format!=='conta-backup'||raw.schemaVersion!==1||!raw.collections||typeof raw.collections!=='object')fail('صيغة النسخة الرسمية غير مدعومة');
  const c=plain(clone(raw.collections));
  for(const name of ['products','parties','warehouses','documents','paymentAccounts','financialMovements'])if(!Array.isArray(c[name])||c[name].length>100000)fail('جزء النسخة '+name+' ناقص أو غير صالح');
@@ -68,11 +71,15 @@ export function desktopToMobileState(raw){
  const defaultWarehouses=c.warehouses.filter(row=>row.isSalesDefault===true);if(defaultWarehouses.length>1)fail('أكثر من مخزن بيع افتراضي');
  const main=defaultWarehouses[0]||c.warehouses.find(row=>!row.isArchived)||c.warehouses[0],warehouse=reference(warehouseIds,main._id??main.id,'مخزن البيع');
  const branding=c.appSettings.find(row=>(row._id??row.id)==='invoice-branding')||c.appSettings.find(row=>row.storeName)||{},currency=c.appSettings.find(row=>row.currency?.code)?.currency||c.appSettings.find(row=>['currency','currency-settings'].includes(row._id??row.id))||{};
- const state={products:[],parties:[],accounts:[],records:[],users:[],warehouses:[...names],warehouse,salesWarehouse:warehouse,warehouseMeta:Object.fromEntries(c.warehouses.map(row=>[String(row.name).trim(),{...clone(row),canonicalId:key(row._id??row.id),archived:row.isArchived===true}])),categories:c.productCategories.map(row=>({...clone(row),id:reference(ids.categories,row.id,'الفئة'),canonicalId:key(row.id),desktopId:row.id})),expenseCategories:clone(c.expenseCategories),employees:clone(c.employees),payrollFinancialMovements:[],financialMovements:[],stockEvents:[],auditEvents:[],counters:clone(c.counters),branding:branding.storeName||'الكرنه',brandInfo:{phone:branding.storePhone||'',address:branding.storeAddress||'',logo:branding.storeLogoDataUrl||'',registrationNumber:branding.registrationNumber||'',taxNumber:branding.taxNumber||'',footer:branding.footerNote||'',nameFont:branding.nameFont||'tahoma',nameFontSize:branding.nameFontSize||24,nameFontWeight:branding.nameFontWeight||800},currency:{code:currency.code||'MRU',availableCodes:currency.availableCodes||['MRU',currency.code||'MRU']},opening:{accounts:{},parties:{},stocks:{}},originId:'desktop:'+sha256Hex(JSON.stringify(c)),desktopImportVersion:882,desktopOriginal:clone(raw),desktopImportWarnings:[]};
+ const originRows=c.appSettings.filter(row=>(row._id??row.id)==='mobile-business-origin');
+ if(originRows.length>1||originRows.length&&(originRows[0].schemaVersion!==1||typeof originRows[0].originId!=='string'||!originRows[0].originId.trim()||originRows[0].originId.length>200))fail('هوية مصدر بيانات الأعمال غير صالحة');
+ const state={products:[],parties:[],accounts:[],records:[],users:[],compactProductNamesV1:true,warehouses:[...names],warehouse,salesWarehouse:warehouse,warehouseMeta:Object.fromEntries(c.warehouses.map(row=>[String(row.name).trim(),{...clone(row),canonicalId:key(row._id??row.id),archived:row.isArchived===true}])),categories:c.productCategories.map(row=>({...clone(row),id:reference(ids.categories,row.id,'الفئة'),canonicalId:key(row.id),desktopId:row.id})),expenseCategories:clone(c.expenseCategories),employees:clone(c.employees),payrollFinancialMovements:[],financialMovements:[],stockEvents:[],auditEvents:[],counters:clone(c.counters),branding:branding.storeName||'الكرنه',brandInfo:{phone:branding.storePhone||'',address:branding.storeAddress||'',logo:branding.storeLogoDataUrl||'',registrationNumber:branding.registrationNumber||'',taxNumber:branding.taxNumber||'',footer:branding.footerNote||'',nameFont:branding.nameFont||'tahoma',nameFontSize:branding.nameFontSize||24,nameFontWeight:branding.nameFontWeight||800},currency:{code:currency.code||'MRU',availableCodes:currency.availableCodes||['MRU',currency.code||'MRU']},opening:{accounts:{},parties:{},stocks:{}},originId:originRows[0]?.originId||'desktop:'+sha256Hex(JSON.stringify(c)),desktopImportVersion:882,desktopOriginal:clone(raw),desktopImportWarnings:[]};
  state.products=c.products.map(row=>{
   const stocks={};for(const [source,quantity]of Object.entries(row.stocks||{})){const name=reference(warehouseIds,source,'مخزن المنتج');if(own(stocks,name))fail('أكثر من رصيد لنفس المخزن');stocks[name]=numeric(quantity,'رصيد المنتج',{nonnegative:true})}
   for(const name of names)stocks[name]??=0;
-  const result={...clone(row),id:reference(ids.products,row.id,'المنتج'),canonicalId:key(row.id),desktopId:row.id,desktop:clone(row),name:row.name,sku:row.barcode||row.sku||'',price:numeric(row.piecePrice,'سعر المنتج',{fallback:0,nonnegative:true}),cost:numeric(row.pieceCost,'سعر شراء البطاقة',{fallback:0,nonnegative:true}),stocks,qty:stocks[warehouse]||0,archived:row.isArchived===true,categoryId:reference(ids.categories,row.categoryId,'فئة المنتج',{optional:true})};
+  const result={...clone(row),id:reference(ids.products,row.id,'المنتج'),canonicalId:key(row.id),desktopId:row.id,desktop:clone(row),name:row.name,sku:typeof row.barcode==='string'?row.barcode:'',sourceSku:row.sku??null,price:numeric(row.piecePrice,'سعر المنتج',{fallback:0,nonnegative:true}),cost:numeric(row.pieceCost,'سعر شراء البطاقة',{fallback:0,nonnegative:true}),stocks,qty:stocks[warehouse]||0,archived:row.isArchived===true,categoryId:reference(ids.categories,row.categoryId,'فئة المنتج',{optional:true})};
+  if(row.mobileSource?.format==='alkarna-web-backup'&&(own(row,'mobileImportedCurrentCost')||own(row,'mobileImportedCostBasis'))&&
+   (typeof row.mobileImportedCurrentCost!=='number'||!Number.isFinite(row.mobileImportedCurrentCost)||row.mobileImportedCurrentCost<0||typeof row.mobileImportedCostBasis!=='string'||! /^[a-f0-9]{64}$/.test(row.mobileImportedCostBasis)))fail('أساس تكلفة المنتج المستورد من الهاتف غير صالح');
   result.expiry=String(row.expiryDate??row.expiry??'').slice(0,10);
   if(own(row,'openingStock'))result.openingTotal=row.openingStock===null?0:numeric(row.openingStock,'رصيد البداية',{nonnegative:true});
   if(row.openingWarehouseId)result.openingWarehouse=reference(warehouseIds,row.openingWarehouseId,'مخزن رصيد البداية');
@@ -89,7 +96,7 @@ export function desktopToMobileState(raw){
  state.accounts=c.paymentAccounts.map(row=>({...clone(row),id:reference(ids.accounts,row.id,'وسيلة الدفع'),canonicalId:key(row.id),desktopId:row.id,desktop:clone(row),name:row.name,balance:numeric(row.balance,'رصيد وسيلة الدفع',{fallback:0}),active:row.isActive!==false,archived:row.isArchived===true}));
  const sourceById=new Map(c.documents.map(row=>[key(row.id),row])),financialByDocument=new Map();
  for(const movement of c.financialMovements){const id=key(movement.documentId),rows=financialByDocument.get(id)||[];rows.push(movement);financialByDocument.set(id,rows)}
- const kinds={sale:'sale',purchase:'purchase',expense:'expense',payment:'receive',transfer:'stocktransfer','account-transfer':'transfer',adjustment:'adjustment','account-adjustment':'deposit','party-opening':'party-opening','employee-opening':'employee-opening','employee-accrual':'employee-accrual','employee-payment':'employee-payment','employee-closure':'employee-closure',return:'return'};
+ const kinds={sale:'sale',purchase:'purchase',expense:'expense',payment:'receive',transfer:'stocktransfer','account-transfer':'transfer',adjustment:'adjustment','account-adjustment':'deposit','party-opening':'party-opening','employee-opening':'employee-opening','employee-accrual':'employee-accrual','employee-payment':'employee-payment','employee-closure':'employee-closure',return:'return',settlement:'settlement'};
  function convertDocument(row,id){
   if(!own(kinds,row.kind))fail('نوع مستند يحتاج مراجعة قبل الاستيراد: '+row.kind);
   if(row.status!==undefined&&!['posted','voided'].includes(row.status))fail('حالة مستند غير مدعومة');
@@ -131,6 +138,14 @@ export function desktopToMobileState(raw){
   if(['sale','purchase'].includes(row.kind)&&lines.some(line=>line.lineTotalMode==='exact')&&sumInvoiceLineTotals(lines.map(line=>line.lineTotal),true)!==amount)fail('إجمالي الفاتورة الدقيقة لا يطابق سطورها');
   const party=reference(ids.parties,row.partyId,'طرف المستند',{optional:true}),sourceWarehouse=reference(warehouseIds,row.warehouseId,'مخزن المستند',{optional:true}),destination=reference(warehouseIds,row.destinationWarehouseId,'مخزن الوجهة',{optional:true});
   const record={...clone(row),id,canonicalId:key(row.id),desktopId:row.id,desktop:clone(row),kind,number:row.number||String(row.id),title:row.title||row.partyName||kind,subtitle:typeof row.note==='string'?row.note:'',...(own(row,'note')?{note:clone(row.note)}:{}),occurredAt,date,time:occurredAt.slice(11,16)||'12:00',total:amount,paid,due,account,party,warehouse:sourceWarehouse,from:sourceWarehouse,toWarehouse:destination,to:reference(accountIds,row.toAccountId,'حساب التحويل الآخر',{optional:true}),voided:row.status==='voided',status:row.status||'posted',revision:revision(row.revision),lines,revisions:[],nonProductLines:clone(nonProductLines)};
+  if(kind==='settlement'){
+   const projection=historicalSettlementProjection(row);
+   if(!party||!projection||sourceLines.length)fail('بيانات التسوية التاريخية غير متسقة');
+   // Display the source report's signed effect. Original legacy fields remain
+   // untouched in desktop; they never authorize a new cash posting or edit.
+   Object.assign(record,{account:null,paid:0,due:0,cashAmount:0,partyBalanceDelta:projection.partyBalanceDelta,settlementProjection:projection,importReadOnly:true,importReadOnlyReason:'historical-settlement'});
+  }
+  if(kind==='party-opening'&&(row.legacyKey||row.legacy||row.mobileBaseline))Object.assign(record,{importReadOnly:true,importReadOnlyReason:'historical-party-opening'});
   if(record.kind==='stocktransfer'&&(!record.from||!record.toWarehouse))fail('مخزن التحويل مفقود');
   if(['sale','purchase','adjustment','return'].includes(record.kind)&&!record.warehouse)fail('مخزن الفاتورة مفقود');
   if(['sale','purchase','expense','receive','pay','deposit','withdraw','transfer','employee-payment'].includes(record.kind)&&paid>0&&!account)fail('وسيلة دفع مستند نقدي مفقودة');
@@ -145,7 +160,11 @@ export function desktopToMobileState(raw){
   if(row.kind==='payment'&&!row.partyCashDirection){record.importReadOnly=true;record.importReadOnlyReason='historical-payment-direction'}
   if(row.kind==='payment')record.partyCashDirection=direction;
   if(row.kind==='adjustment'){
-   const opening=row.openingCorrection===true||own(row,'openingStockBefore')&&own(row,'openingStockAfter');
+   // Older mobile baselines preserve an opaque original, not native correction
+   // evidence. Never fill absent before/after values to manufacture edit rights.
+   const historical=row.importedFrom==='mobile-v23'&&(row.mobileBaseline===true||row.mobileOpening);
+   const hasProof=['openingStockBefore','openingStockAfter','openingCostBefore','openingCostAfter'].every(name=>own(row,name));
+   const opening=!historical&&(row.openingCorrection===true||own(row,'openingStockBefore')&&own(row,'openingStockAfter'))||historical&&hasProof;
    record.openingCorrection=opening;record.openingStock=!opening&&(/^OPEN-(?!COR)/.test(String(row.number||''))||own(row,'openingStockAfter'));
    if(opening){
     if(!lines.length)fail('تصحيح بداية بلا منتج');record.openingProduct=lines[0].product;
@@ -167,8 +186,9 @@ export function desktopToMobileState(raw){
  // Desktop bank openings historically live only in financialMovements, not documents.
  // Expose them as native bank-history rows so they remain inspectable and never vanish into a baseline.
  for(const movement of c.financialMovements){
-  if(movement.isReversal===true||ids.documents.has(key(movement.documentId)))continue;
-  if(!['opening-balance','opening-balance-correction','manual-deposit','manual-withdrawal'].includes(movement.type))continue;
+  const settlementSource=sourceById.get(key(movement.documentId))?.kind==='settlement';
+  if(movement.isReversal===true||ids.documents.has(key(movement.documentId))&&!settlementSource)continue;
+  if(!settlementSource&&!['opening-balance','opening-balance-correction','manual-deposit','manual-withdrawal'].includes(movement.type))continue;
   const account=reference(accountIds,movement.paymentMethod??movement.accountId,'حساب الحركة المالية'),amount=numeric(movement.amount,'مبلغ الحركة المالية',{nonnegative:true}),occurredAt=dateText(movement.occurredAt,raw.createdAt),direction=movement.direction;
   if(!['in','out'].includes(direction))fail('اتجاه الحركة المالية');
   const record={...clone(movement),id:++nextRecordId,canonicalId:'movement:'+movement.id,desktopId:'movement:'+movement.id,desktopMovementId:movement.id,desktop:clone(movement),number:documentNumber(movement),kind:direction==='in'?'deposit':'withdraw',title:movement.type==='opening-balance-correction'?'تصحيح رصيد البداية':movement.type==='opening-balance'?'رصيد البداية':direction==='in'?'إيداع':'سحب',subtitle:typeof movement.note==='string'?movement.note:'',...(own(movement,'note')?{note:clone(movement.note)}:{}),date:occurredAt.slice(0,10),time:occurredAt.slice(11,16),occurredAt,total:amount,paid:amount,due:0,account,party:null,warehouse:null,lines:[],revisions:[],revision:revision(movement.revision),status:movement.status==='reversed'?'voided':'posted',voided:movement.status==='reversed',importReadOnly:true,importReadOnlyReason:'financial-movement-source'};

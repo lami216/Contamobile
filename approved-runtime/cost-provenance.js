@@ -1,6 +1,7 @@
 // Exact ordinary count-stock proof replay from Desktop 862.
 import { stockBalanceAfter, stockNumber, reportCostNumber } from "./accounting-numbers.js";
 import { mobileLineTotal } from './invoice-amount.js';
+import { sha256Hex } from './accounting-hash.js';
 const eventTypes = {
     purchase: [
         "purchase",
@@ -388,8 +389,27 @@ export function accountingMovements(state) {
 }
 export function accountingProduct(product){return {...product,id:String(product.id),pieceCost:product.cost,openingStock:product.openingTotal??product.openingStock};}
 const positiveCost=value=>{const parsed=reportCostNumber(value);return parsed!==null&&parsed>0?parsed:null;};
+/** Exact Desktop 0.1.30 acquisition basis; callers supply canonical identities. */
+export function canonicalMobileCostBasisSignature(productId,documents){
+ const rows=documents.filter(document=>document.status==='posted'&&
+  (document.kind==='purchase'||document.openingCorrection===true||String(document.number??'').startsWith('OPEN-'))&&
+  Array.isArray(document.lines)&&document.lines.some(line=>line.productId===productId))
+  .map(document=>({id:String(document.id),kind:String(document.kind),at:String(document.occurredAt),sequence:Number(document.sequence??0),
+   unit:reportCostNumber(document.openingCostAfter??document.lines.find(line=>line.productId===productId)?.unitPrice),
+   quantity:reportCostNumber(document.lines.find(line=>line.productId===productId)?.quantity),opening:document.openingStockAfter??null}))
+  .sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
+ return sha256Hex(JSON.stringify(rows));
+}
+export {canonicalMobileCostBasisSignature as mobileCostBasisSignature};
+// Numeric phone references select the lines, but never replace an imported
+// acquisition's canonical identity in its original history-bound cost basis.
+const accountingCostBasis=(product,documents)=>canonicalMobileCostBasisSignature(String(product.id),documents.map(document=>
+ ({...document,id:document.desktopId??document.canonicalId??document.id})));
+const hasImportedCurrentCost=(product,documents)=>product.mobileSource?.format==='alkarna-web-backup'&&
+ reportCostNumber(product.mobileImportedCurrentCost)!==null&&product.mobileImportedCostBasis===accountingCostBasis(product,documents);
 export function resolveProductCost(product,documents) {
  const relevant=documents.filter(document=>document.status==='posted'&&Array.isArray(document.lines)&&document.lines.some(line=>line.productId===String(product.id)));
+ if(hasImportedCurrentCost(product,relevant))return {cost:reportCostNumber(product.mobileImportedCurrentCost),source:'legacy-opening',at:null,sourceDocumentId:null};
  const latest=relevant.filter(document=>document.kind==='purchase').sort((a,b)=>String(a.occurredAt).localeCompare(String(b.occurredAt))||Number(a.sequence??0)-Number(b.sequence??0)).at(-1);
  const purchaseCost=positiveCost(latest?.lines.find(line=>line.productId===String(product.id))?.unitPrice);
  if(purchaseCost!==null)return {cost:purchaseCost,source:'purchase',at:latest.occurredAt,sourceDocumentId:latest.id};
@@ -403,6 +423,9 @@ export function resolveProductCost(product,documents) {
 }
 export function resolveCurrentProductCost(state,product,warehouse) {
  const documents=accountingDocuments(state),result=resolveProductCost(accountingProduct(product),documents);
+ // A zero source valuation remains zero in inventory/cache, but cannot assert a
+ // free acquisition cost for a new sale or permit fallback to count evidence.
+ if(result.cost===0&&product.mobileImportedCurrentCost===0&&hasImportedCurrentCost(accountingProduct(product),documents))return {...result,cost:null};
  if(result.cost!==null||!warehouse||!(stockNumber(product.stocks?.[warehouse])>0))return result;
  const evidence=resolveAdjustmentStockCost({productId:String(product.id),warehouseId:warehouse,movements:accountingMovements(state),documents,currentStock:product.stocks[warehouse]});
  return evidence?{cost:evidence.unitCost,source:'adjustment',at:evidence.occurredAt,sourceDocumentId:evidence.documentId,proof:evidence}:result;

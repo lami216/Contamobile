@@ -13,16 +13,18 @@ final class RegistrationPolicy {
   Decision(String stage,long retryAt,boolean changed){this.stage=stage;this.retryAt=retryAt;this.changed=changed;}
  }
  Decision decide(String fingerprint,long now,boolean online,boolean force,double random){
-  if(successful.equals(fingerprint))return new Decision("cached",0,false);
+  if(successful.equals(fingerprint)&&!force)return new Decision("cached",0,false);
   if(!online)return new Decision("offline",0,false);
   boolean changed=false;
   if(!pending.equals(fingerprint)){
    pending=fingerprint;failures=0;blocked=false;
    nextAttempt=now+(lastSuccess==0?30000L+(long)(clamp(random)*150001):1500L);changed=true;
   }
+  // An explicit recovery revalidates the server registration, even after a cached
+  // success. Automatic events remain cached. Preserve failure backoff; an explicit
+  // retry may recheck a repaired permanent denial only after a one-minute cooldown.
+  if(force){long deadline=lastAttempt==0?0:lastAttempt+10000L;if(failures>0)deadline=Math.max(deadline,blocked?lastAttempt+60000L:nextAttempt);return new Decision(now<deadline?"scheduled":"run",now<deadline?deadline:0,changed);}
   if(blocked)return new Decision("blocked",0,changed);
-  // Explicit recovery skips initial staggering, but cannot hammer failed attempts.
-  if(force&&(lastAttempt==0||now-lastAttempt>=10000))return new Decision("run",0,changed);
   if(now<nextAttempt)return new Decision("scheduled",nextAttempt,changed);
   return new Decision("run",0,changed);
  }

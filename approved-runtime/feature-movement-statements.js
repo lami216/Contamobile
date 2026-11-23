@@ -3,10 +3,10 @@ import {statementNote,financialStatementIndex,financialStatementSource} from './
 // Preserve phone column widths and navigation; a short literal preview belongs
 // inside the existing account/party cell, with the complete statement in details.
 const contexts=new Set(['accounts','account','ledger','cash']);
-const preview=note=>`<small class="financial-row-party" data-movement-statement data-user-content dir="auto" title="${esc(note)}" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere">${esc(note)}</small>`;
+const preview=note=>`<small class="financial-row-party" data-movement-statement data-literal-title data-user-content dir="auto" title="${esc(note)}" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere">${esc(note)}</small>`;
 function attachStatements(html,source){
  return html.replace(/(<button\b[^>]*class="home-invoice-party"[^>]*data-action="invoice:(\d+)"[^>]*>)([\s\S]*?)(<\/button>)/g,(whole,open,id,body,close)=>{
-  const note=statementNote(source(Number(id)));if(!note)return whole;
+  const note=statementNote(source(Number(id)));if(!note||body.includes('data-movement-statement'))return whole;
   return open+body+preview(note)+close;
  });
 }
@@ -15,7 +15,7 @@ export function installMovementStatementViews(){
  ledger=function(){
   const byId=new Map(liveRecords().filter(row=>row.party===selected).map(row=>[row.id,row]));
   return originalLedger().replace(/(<tr\b[^>]*data-action="invoice:(\d+)"[^>]*>)([\s\S]*?)(<\/tr>)/g,(whole,open,id,body,close)=>{
-   const note=statementNote(byId.get(Number(id)));if(!note)return whole;
+   const note=statementNote(byId.get(Number(id)));if(!note||body.includes('data-movement-statement'))return whole;
    const cells=body.match(/<td\b[\s\S]*?<\/td>/g);if(!cells||cells.length!==4)return whole;
    cells[2]=cells[2].replace(/<\/td>$/,preview(note)+'</td>');return open+cells.join('')+close;
   });

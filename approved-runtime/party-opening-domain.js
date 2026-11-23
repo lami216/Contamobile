@@ -64,8 +64,10 @@ function owner(state,id){
  if(!found)fail('الطرف غير موجود',404);
  partyOpeningNetBalance(found);return found;
 }
-function assertDocument(record){
- if(record.legacyKey||record.legacy||record.partyOpeningVersion!==PARTY_OPENING_VERSION||!Number.isSafeInteger(record.revision)||record.revision<0)fail('مستند رصيد البداية غير قابل للتعديل بهذه الطريقة',409);
+function assertDocument(record,{editable=true}={}){
+ // A valid historical snapshot is not an editable native command. Keeping these
+ // checks separate admits source baselines without weakening the command guard.
+ if(editable&&(record.legacyKey||record.legacy||record.importReadOnly)||record.partyOpeningVersion!==PARTY_OPENING_VERSION||!Number.isSafeInteger(record.revision)||record.revision<0)fail('مستند رصيد البداية غير قابل للتعديل بهذه الطريقة',409);
  const saved=values({direction:record.partyOpeningDirection,amount:record.partyOpeningAmount});
  if(record.partyOpeningContribution!==saved.contribution||record.partyBalanceDelta!==saved.contribution||record.total!==saved.amount||record.account!==null||record.paid!==0||record.due!==0||record.cashAmount!==0||!Array.isArray(record.lines)||record.lines.length)fail('بيانات مستند رصيد البداية غير متسقة؛ راجع الحساب',409);
  return saved;
@@ -75,7 +77,7 @@ export function validatePartyOpeningState(state){
  for(const record of state.records.filter(r=>r.kind==='party-opening')){
   owner(state,record.party);
   if(record.partyOpeningVersion===PARTY_OPENING_VERSION){
-   assertDocument(record);
+   assertDocument(record,{editable:false});
    for(const key of ['partyOpeningBalanceBefore','partyOpeningAppliedDelta','partyOpeningBalanceAfter'])if(!finite(record[key]))fail('بيانات مستند رصيد البداية غير متسقة؛ راجع الحساب',409);
    if(record.status!==undefined&&!['posted','voided'].includes(record.status)||record.status==='voided'&&!record.voided)fail('حالة رصيد البداية غير صالحة',409);
   }else if(!finite(record.partyBalanceDelta??record.partyOpeningContribution))fail('بيانات رصيد البداية التاريخي غير صالحة',409);

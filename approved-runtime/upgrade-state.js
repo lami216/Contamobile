@@ -98,6 +98,7 @@ export function archiveWarehouse(state,name){
 }
 export function activeWarehouses(state){return state.warehouses.filter(w=>!state.warehouseMeta?.[w]?.archived)}
 export function partyNetDelta(record){
+ if(record.kind==='settlement')return record.partyBalanceDelta;
  if(record.kind==='return')return (record.returnParentKind==='purchase'?1:-1)*Number(record.due||0);
  if(record.kind==='party-opening')return partyOpeningNetDelta(record);
  if(record.kind==='sale')return Number(record.due)||0;if(record.kind==='purchase')return -(Number(record.due)||0);
@@ -105,7 +106,7 @@ export function partyNetDelta(record){
 }
 export function moneyAccountDelta(record,id){
  if(record.kind==='return')return record.account===id?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
- if(record.kind==='party-opening'||record.kind==='employee-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure')return 0;
+ if(record.kind==='party-opening'||record.kind==='settlement'||record.kind==='employee-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure')return 0;
  if(record.kind==='employee-payment')return record.account===id?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  let value=record.account===id?(['sale','receive','deposit'].includes(record.kind)?Number(record.paid||0):-Number(record.paid||0)):0;
  if(record.kind==='transfer'&&record.to===id)value+=Number(record.total);return value;

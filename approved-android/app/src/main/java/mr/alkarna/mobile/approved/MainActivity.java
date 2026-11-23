@@ -165,8 +165,8 @@ public final class MainActivity extends Activity {
                     case "finish":JSONObject receipt=new JSONObject(content);response=administration.finishLocally(receipt.getString("grantId"),receipt.getString("intentId"));break;
                     default:throw new IOException("Unknown administration operation");
                 }result(id,response);
-            }catch(ContatoolsClient.ServiceFailure e){JSONObject failure=value("error","تعذّر الاتصال بخدمة الاستعادة؛ أعد المحاولة لاحقًا.");try{failure.put("retryAt",e.retryAt).put("permanent",e.permanent).put("status",e.status);}catch(Exception ignored){}result(id,failure);
-            }catch(Exception e){error(id,"تعذّر الاتصال بخدمة الاستعادة. لم يُغيّر التفعيل؛ أعد المحاولة أو تواصل مع الدعم.");}
+            }catch(ContatoolsClient.ServiceFailure e){JSONObject failure=value("error","تعذّر إتمام طلب الاستعادة؛ بياناتك وتفعيلك محفوظان.");try{failure.put("retryAt",e.retryAt).put("permanent",e.permanent).put("status",e.status).put("code",e.code).put("requestId",e.requestId).put("phase",RecoveryFailure.phase(command));}catch(Exception ignored){}result(id,failure);
+            }catch(Exception e){JSONObject failure=value("error","تعذّر إتمام طلب الاستعادة؛ بياناتك وتفعيلك محفوظان.");try{failure.put("code",RecoveryFailure.local(e)).put("phase",RecoveryFailure.phase(command));}catch(Exception ignored){}result(id,failure);}
         });}catch(java.util.concurrent.RejectedExecutionException full){JSONObject failure=value("error","هناك طلب جارٍ. أعد المحاولة بعد قليل.");try{failure.put("retryAt",System.currentTimeMillis()+5000);}catch(Exception ignored){}result(id,failure);}
     });}
     private void watchNetwork(){

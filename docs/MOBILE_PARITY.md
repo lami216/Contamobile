@@ -1,5 +1,18 @@
 # Contamobile parity ledger
 
+## Current approved runtime — Desktop main0.1.30, 2026-11-23
+
+The current migration record is [MAIN_0130_PARITY_AR.md](MAIN_0130_PARITY_AR.md),
+against immutable Desktop main `2327ccc83b3f76f7a30d13c0ca8d356c4cd7483b`
+and delivered Mobile39 `098ea6a5aeea00ac6ccd3c60f5b53205d54fca01`.
+The shipped application is `mr.alkarna.mobile.approved` (`approved-runtime` /
+`approved-android`); the retained React Native table below is historical.
+Source, browser and actual Desktop SQLite checks cover the transferred rules.
+Signed Android40 release acceptance additionally requires the exact candidate's
+workflow to pass all75 native scenarios and16 real in-place upgrade phases.
+Phone support services remain phone-only by the user's decision. Previously
+removed printing, wholesale and new offset workflows remain intentionally absent.
+
 ## Shipped runtime accounting correction — 2026-11-03
 
 The older table below also describes the retained React Native tree. The distributed

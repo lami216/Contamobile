@@ -3,6 +3,7 @@ import {upgradeState} from './upgrade-state.js';
 import {seedStockEvents} from './stock-domain.js';
 const prepareFeatureState=state=>{upgradeState(state);seedStockEvents(state)};
 import {validateState} from './database.js';
+import {BUSINESS_INTERCHANGE_FORMAT} from './business-interchange.js';
 export function installImportFeatures(api){
  let stage=null,preview=null,progress='',afterCommit=false,savedStageAvailable=false;
  const oldUtility=utility;utility=function(){return oldUtility()+(view==='backup'&&api.can('settings.legacy.import')?`<details class="feature-details"><summary>خيارات متقدمة</summary>${listMenu([['استيراد ودمج البيانات','إضافة بيانات سابقة مع الحفاظ على المحل والحسابات','box','site:feature:import']])}</details>`:'')};
@@ -25,8 +26,9 @@ export function installImportFeatures(api){
    if(command==='import-review'){
     const file=document.querySelector('#feature-import-file')?.files?.[0];if(!file)throw Error('اختر ملف البيانات');if(file.size>40*1024*1024)throw Error('الملف أكبر من 40 ميغابايت');const bytes=new Uint8Array(await file.arrayBuffer()),fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
     progress='جارٍ قراءة الملف…';modal='feature-import-progress';render();await new Promise(r=>setTimeout(r,0));
-    let raw;if(new TextDecoder().decode(bytes.slice(0,15))==='SQLite format 3')raw=await sqliteBackup(bytes,(phase,count)=>{progress=phase+' · '+count;const status=document.querySelector('[role=status]');if(status)status.textContent=progress});else{try{raw=JSON.parse(new TextDecoder().decode(bytes))}catch{throw Error('صيغة الملف غير مدعومة')}}
-    let incoming;if(raw.format==='alkarna-web-backup'&&raw.schemaVersion===1)incoming=raw.state;else if(raw.format==='conta-backup'&&raw.schemaVersion===1)incoming=api.desktopToState(raw);else throw Error('صيغة الملف غير مدعومة');const sameOwner=[...(incoming.users||[]),...(raw.users||[])].some(u=>u.role==='owner'&&api.users.some(current=>current.role==='owner'&&current.id===u.id));incoming.originId??=sameOwner?S.originId:'import:'+fingerprint;prepareFeatureState(incoming);validateState(incoming);
+    const legacySqlite=new TextDecoder().decode(bytes.slice(0,15))==='SQLite format 3';let raw;if(legacySqlite)raw=await sqliteBackup(bytes,(phase,count)=>{progress=phase+' · '+count;const status=document.querySelector('[role=status]');if(status)status.textContent=progress});else{try{raw=JSON.parse(new TextDecoder().decode(bytes))}catch{throw Error('صيغة الملف غير مدعومة')}}
+    if(!legacySqlite&&['alkarna-web-backup','conta-backup',BUSINESS_INTERCHANGE_FORMAT].includes(raw.format)){stage=null;preview=null;return api.reviewBackupValue(raw,file.name);}
+    let incoming;if(raw.format==='alkarna-web-backup'&&raw.schemaVersion===1)incoming=raw.state;else if((raw.format==='conta-backup'||raw.format===BUSINESS_INTERCHANGE_FORMAT)&&raw.schemaVersion===1)incoming=api.desktopToState(raw);else throw Error('صيغة الملف غير مدعومة');const sameOwner=[...(incoming.users||[]),...(raw.users||[])].some(u=>u.role==='owner'&&api.users.some(current=>current.role==='owner'&&current.id===u.id));incoming.originId??=sameOwner?S.originId:'import:'+fingerprint;prepareFeatureState(incoming);validateState(incoming);
     stage={filename:file.name,fingerprint,incoming,options:{stocks:'current',accounts:'current',parties:'current',records:'current',matches:{}},warnings:raw.warnings||[]};build();await save();modal='feature-import-preview';return render();
    }
    if(command==='import-options'){stage.options={...options(),matches:stage.options.matches};build();await save();return render()}

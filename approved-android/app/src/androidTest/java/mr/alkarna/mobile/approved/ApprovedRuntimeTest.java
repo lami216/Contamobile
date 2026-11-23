@@ -10,6 +10,7 @@ import org.junit.After;
 import org.junit.runner.RunWith;
 import org.json.JSONObject;
 import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.UiObject;
 import androidx.test.uiautomator.UiSelector;
 import static org.junit.Assert.*;
 import java.util.concurrent.*;
@@ -45,6 +46,35 @@ public class ApprovedRuntimeTest {
         var ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         try(var output=new FileOutputStream(new File(ctx.getExternalFilesDir(null),name+".png"))){image.compress(Bitmap.CompressFormat.PNG,100,output);}
+    }
+    private void observeNativeSave() throws Exception {
+        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async function(...args){window.__qaFileSaved=false;const d=window.__qaExportDiagnostic;if(d){d.saveBlobCalled=true;d.stage='native-save-start';d.name=String(args[0]);d.bytes=args[1]?.size;d.mime=args[1]?.type}try{const result=await Reflect.apply(save,this,args);window.__qaFileSaved=result.saved===true;if(d){d.stage='native-save-resolved';d.saved=result.saved===true}return result}catch(error){if(d){d.stage='native-save-rejected';d.error=String(error?.stack||error)}throw error}};return true})()");
+    }
+    private void captureNativeExportFailure(UiDevice device,String format) {
+        var ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File directory=ctx.getExternalFilesDir(null);JSONObject diagnostic=new JSONObject();
+        try{diagnostic.put("format",format).put("currentPackage",device.getCurrentPackageName());}catch(Exception ignored){}
+        try{diagnostic.put("web",new JSONObject(new org.json.JSONTokener(js("JSON.stringify({diagnostic:window.__qaExportDiagnostic,exportDone:window.__qaExportDone,fileSaved:window.__qaFileSaved,busy:typeof karnaPersistenceBusy==='function'?karnaPersistenceBusy():null,view,modal,runtimeState:document.documentElement.dataset.runtimeState,body:document.body.innerText.slice(0,16000),errors:[...document.querySelectorAll('#form-error,.auth-error,.toast')].map(e=>e.innerText)})")).nextValue().toString()));}catch(Exception failure){try{diagnostic.put("webCaptureError",failure.toString());}catch(Exception ignored){}}
+        try{activity.onActivity(a->{try{JSONObject nativeState=new JSONObject();var pending=MainActivity.class.getDeclaredField("pendingExport");pending.setAccessible(true);Object item=pending.get(a);nativeState.put("pendingExport",item!=null);if(item!=null)for(String name:new String[]{"name","mime","size"}){var field=item.getClass().getDeclaredField(name);field.setAccessible(true);nativeState.put(name,field.get(item));}var exports=MainActivity.class.getDeclaredField("exports");exports.setAccessible(true);nativeState.put("exportTransfers",((java.util.Map<?,?>)exports.get(a)).size());diagnostic.put("native",nativeState);}catch(Exception failure){try{diagnostic.put("nativeCaptureError",failure.toString());}catch(Exception ignored){}}});}catch(Exception failure){try{diagnostic.put("activityCaptureError",failure.toString());}catch(Exception ignored){}}
+        try{device.dumpWindowHierarchy(new File(directory,"qa-failure-ui.xml"));}catch(Exception failure){try{diagnostic.put("hierarchyCaptureError",failure.toString());}catch(Exception ignored){}}
+        try{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();try(var out=new FileOutputStream(new File(directory,"qa-failure-screen.png"))){if(image==null)throw new IOException("Screenshot unavailable");image.compress(Bitmap.CompressFormat.PNG,100,out);}}catch(Exception failure){try{diagnostic.put("screenshotCaptureError",failure.toString());}catch(Exception ignored){}}
+        try(var out=new FileOutputStream(new File(directory,"qa-failure-export.json"))){out.write(diagnostic.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(Exception failure){System.err.println("Native export diagnostic capture failed: "+failure.getClass().getSimpleName());}
+    }
+    private UiObject nativeSaveControl(UiDevice device,String format,String message) throws Exception {
+        // ACTION_CREATE_DOCUMENT belongs to the system DocumentsUI provider,
+        // never to an application button with a coincidentally matching label.
+        long deadline=android.os.SystemClock.elapsedRealtime()+20000;
+        while(android.os.SystemClock.elapsedRealtime()<deadline){
+            String provider=device.getCurrentPackageName();
+            if("com.android.documentsui".equals(provider)||"com.google.android.documentsui".equals(provider)){
+                UiSelector scope=new UiSelector().packageName(provider).enabled(true).clickable(true);
+                try{UiObject container=device.findObject(new UiSelector().packageName(provider).resourceId(provider+":id/container_save"));if(container.exists()){UiObject save=container.getChild(new UiSelector().resourceId("android:id/button1").enabled(true).clickable(true));if(save.exists())return save;}}catch(androidx.test.uiautomator.UiObjectNotFoundException ignored){}
+                for(String id:new String[]{"android:id/button1",provider+":id/button1",provider+":id/action_menu_save"}){UiObject save=device.findObject(scope.resourceId(id));if(save.exists())return save;}
+                for(UiSelector selector:new UiSelector[]{scope.textMatches("(?iu)^(save|enregistrer|حفظ)$"),scope.descriptionMatches("(?iu)^(save|enregistrer|حفظ)$")}){UiObject save=device.findObject(selector);if(save.exists())return save;}
+            }
+            Thread.sleep(150);
+        }
+        fail(message+"; see qa-failure-export.json / qa-failure-ui.xml / qa-failure-screen.png");return null;
     }
     @Test public void approvedSellerWorkflowAndColdPersistence() throws Exception {
         activity=ActivityScenario.launch(MainActivity.class);
@@ -149,10 +179,12 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true});return d.metrics.length===document.querySelectorAll('#content [data-action^=\"site:feature:report-metric:\"]').length&&d.metrics.every((m,i)=>document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]').innerText.includes(m.label))})()"));
         js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true}),i=d.metrics.findIndex(m=>m.key==='netProfit');document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]').click();return true})()");until("modal==='feature-report-metric'");
         assertEquals("true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true}),sale=d.rows.find(r=>r.kind==='sale'),sheet=document.querySelector('.sheet');return sale.total===100&&sale.cost===40&&sale.profit===60&&d.metrics.find(m=>m.key==='expenses').value===0&&d.metrics.find(m=>m.key==='netProfit').value===60&&sheet.querySelector('.report-context-note').innerText.includes('المبيعات − تكلفة البيع − المصاريف')&&sheet.querySelector('.report-trace-total .amount>span').textContent==='60'&&!!sheet.querySelector('[data-action=\"site:feature:report-document:'+sale.id+'\"]')})()"));capture("report-profit-sources");action("close");
-        js("reportType='profit';true");action("go:reports");
-        js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'profit',allTime:true}),i=d.metrics.findIndex(m=>m.key==='cost');document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]').click();return true})()");until("modal==='feature-report-metric'");
-        assertEquals("true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'profit',allTime:true}),sale=d.rows.find(r=>r.kind==='sale'),sheet=document.querySelector('.sheet');return d.metrics.find(m=>m.key==='cost').value===40&&sheet.querySelector('.report-trace-total .amount>span').textContent==='40'&&sheet.querySelector('[data-action=\"site:feature:report-document:'+sale.id+'\"] .amount>span').textContent==='40'})()"));action("close");
-        js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'profit',allTime:true}),i=d.metrics.findIndex(m=>m.key==='expenses');document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]').click();return true})()");until("modal==='feature-report-metric'");
+        js("reportType='overview';true");action("go:reports");
+        assertEquals("The visible report is overview","true",js("reportType==='overview'&&document.querySelector('#content .browse-toolbar').innerText.includes(browseReports.overview)"));
+        assertEquals("The clicked overview metric is net profit","true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true}),i=d.metrics.findIndex(m=>m.key==='netProfit'),metric=d.metrics[i],button=document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]');if(reportType!=='overview'||metric?.key!=='netProfit'||!button||!button.innerText.includes(metric.label))return false;button.click();return true})()"));until("modal==='feature-report-metric'");
+        assertEquals("The clicked profit component is cost","true",js("(()=>{const button=document.querySelector('[data-action=\"site:feature:report-component:cost\"]');if(button?.dataset.reportComponent!=='cost'||Number(button.dataset.value)!==-40)return false;button.click();return true})()"));until("!!document.querySelector('[data-component-source=\"cost\"]')");
+        assertEquals("true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true}),sale=d.rows.find(r=>r.kind==='sale'),sheet=document.querySelector('.sheet');return d.rows.filter(r=>r.kind==='sale'||r.kind==='return').reduce((sum,r)=>sum+r.cost,0)===40&&sheet.querySelector('.report-trace-total .amount>span').textContent==='40'&&sheet.querySelector('[data-action=\"site:feature:report-document:'+sale.id+'\"] .amount>span').textContent==='40'})()"));action("close");
+        assertEquals("The clicked overview metric is expenses","true",js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'overview',allTime:true}),i=d.metrics.findIndex(m=>m.key==='expenses'),metric=d.metrics[i],button=document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]');if(reportType!=='overview'||metric?.key!=='expenses'||!button||!button.innerText.includes(metric.label))return false;button.click();return true})()"));until("modal==='feature-report-metric'");
         assertEquals("true",js("document.querySelector('.sheet .report-trace-total .amount>span').textContent==='0'&&!document.querySelector('.sheet .feature-report-table')"));action("close");
         js("reportType='sales';true");action("go:reports");
         js("(()=>{const d=__qaReportModule.reportDataset(S,{type:'sales',allTime:true}),i=d.metrics.findIndex(m=>m.key==='customerNet');document.querySelector('[data-action=\"site:feature:report-metric:'+i+'\"]').click();return true})()");until("modal==='sourceinfo'&&!!document.querySelector('.report-trace')");
@@ -168,12 +200,13 @@ public class ApprovedRuntimeTest {
         capture("french-support");action("close");
         action("go:operations");
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
+        observeNativeSave();
         for(String format:new String[]{"excel","pdf"}){
-            until("!document.querySelector('[data-busy-disabled]')");js("window.__qaExportDone=false;act('site:export-"+format+"').finally(()=>window.__qaExportDone=true);true");
-            var save=device.findObject(new UiSelector().resourceId("android:id/button1"));
-            assertTrue("Native save picker for "+format,save.waitForExists(20000));
-            save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
+            try{
+                until("!karnaPersistenceBusy()&&!document.querySelector('[data-busy-disabled]')");js("window.__qaExportDone=false;window.__qaFileSaved=null;window.__qaExportDiagnostic={format:'"+format+"',stage:'requested',saveBlobCalled:false};act('site:export-"+format+"').finally(()=>window.__qaExportDone=true);true");
+                var save=nativeSaveControl(device,format,"Native save picker for "+format);
+                save.click();until("window.__qaExportDone===true");assertEquals("Native file saved: "+format,"true",js("window.__qaFileSaved"));
+            }catch(Exception|AssertionError failure){captureNativeExportFailure(device,format);throw failure;}
         }
         assertEquals("false",js("(()=>{modal='site-export';render();return !!document.querySelector('[data-action=\"site:export-print\"]')})()"));action("close");
         activity.close();activity=ActivityScenario.launch(MainActivity.class);
@@ -189,9 +222,11 @@ public class ApprovedRuntimeTest {
         assertEquals("true",js("S.products[0].categoryId===S.categories[0].id"));
         action("site:feature:opening:"+js("S.products[0].id"));assertEquals("true",js("modal==='feature-opening'&&document.querySelector('.feature-opening-metrics').innerText.includes('10')"));capture("french-opening-history");action("close");
         action("ledger:"+supplierId);action("site:feature:party-statement:"+supplierId);assertEquals("true",js("reportType==='party-ledger'&&!!document.querySelector('.feature-report-table')&&document.querySelector('#content').innerText.includes('Solde final')"));capture("french-party-statement");
-        js("(()=>{const save=NativeFiles.saveBlob;NativeFiles.saveBlob=async(...args)=>{window.__qaFileSaved=false;const result=await save(...args);window.__qaFileSaved=result.saved===true;return result};return true})()");
-        js("window.__qaExportDone=false;act('site:export-pdf').finally(()=>window.__qaExportDone=true);true");
-        var statementSave=device.findObject(new UiSelector().resourceId("android:id/button1"));assertTrue("Statement PDF saved directly",statementSave.waitForExists(20000));statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
+        observeNativeSave();
+        try{
+            until("!karnaPersistenceBusy()&&!document.querySelector('[data-busy-disabled]')");js("window.__qaExportDone=false;window.__qaFileSaved=null;window.__qaExportDiagnostic={format:'statement-pdf',stage:'requested',saveBlobCalled:false};act('site:export-pdf').finally(()=>window.__qaExportDone=true);true");
+            var statementSave=nativeSaveControl(device,"statement-pdf","Statement PDF saved directly");statementSave.click();until("window.__qaExportDone===true");assertEquals("true",js("window.__qaFileSaved"));
+        }catch(Exception|AssertionError failure){captureNativeExportFailure(device,"statement-pdf");throw failure;}
         action("go:users");action("site:new-user");js("(()=>{for(const [k,v]of Object.entries({name:'Vendeur',username:'seller',password:'1234'}))document.querySelector('#sheet-form [name='+k+']').value=v;return true})()");action("site:feature:permission-toggle:pos.edit:true");capture("french-granular-permissions");action("site:feature:user-save");
         js("window.__qaSql=false;initSqlJs().then(SQL=>{const db=new SQL.Database();db.run('CREATE TABLE offline_test(value INTEGER)');db.run('INSERT INTO offline_test VALUES (7)');window.__qaSql=db.exec('SELECT value FROM offline_test')[0].values[0][0]===7;db.close()});true");until("window.__qaSql===true");
         activity.close();activity=ActivityScenario.launch(MainActivity.class);until("!!document.querySelector('[data-action=\"site:login\"]')");js("document.querySelector('[name=username]').value='qa';document.querySelector('[name=password]').value='1234';true");action("site:login");
