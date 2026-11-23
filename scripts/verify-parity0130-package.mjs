@@ -28,6 +28,7 @@ assert.equal(original.sourceHead,previous39.sourceHead);assert.equal(original.so
 assert.equal(FEATURE_SCHEMA,4);
 const workflow=await text('.github/workflows/desktop-0130-android-upgrade.yml'),script=await text('scripts/test-parity0130-android-upgrade.sh'),fixture=await text('approved-android/parity0130-androidTest/java/mr/alkarna/mobile/approved/Desktop0130UpgradeTest.java'),gradle=await text('approved-android/app/build.gradle');
 assert(workflow.includes('branches: [feat/desktop-main-parity-20261123]'));assert(!workflow.includes("github.ref == 'refs/heads/main'"));
+assert(workflow.includes('needs: [business, build, native, upgrade]'),'A distributable update requires all business, build, native and upgrade gates');
 assert(workflow.includes('ref: '+desktopSource));assert(workflow.includes(previous39.sourceHead)&&workflow.includes(String(previous39.runId))&&workflow.includes(String(previous39.artifactId))&&workflow.includes(previous39.sha256));
 assert(workflow.includes("ALKARNA_HIGHEST_DISTRIBUTED_CODE: '39'"));assert(workflow.includes('-PalkarnaVersionCode=40 -PalkarnaVersionName=1.0.39 -PalkarnaParity0130Tests=true'));assert(workflow.includes('baseline: [27, 39]'));
 assert(!workflow.includes('baseline-v38'));assert(script.includes('CANDIDATE_VERSION_CODE=40')&&script.includes('suite=Desktop0130UpgradeTest'));assert(script.includes('native_count==75'));assert(script.includes("'Recovery39UpgradeTest','Desktop0130UpgradeTest'"));assert(!script.includes('expectedVersionCode 39'));

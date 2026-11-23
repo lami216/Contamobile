@@ -165,7 +165,6 @@ jobs:
             outputs/desktop862-qa/
           if-no-files-found: error
   build:
-    needs: business
     if: >-
       github.repository == 'lami216/Contamobile' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
@@ -369,7 +368,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
   verified:
-    needs: [build, native, upgrade]
+    needs: [business, build, native, upgrade]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
