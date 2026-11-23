@@ -1,7 +1,6 @@
 import {isStockSettlementDocument,nextStockSettlementSequence} from './stock-settlement.js';
 import {prepareExpenseRecordDateTime} from './expense-date-time.js';
 import {currentMovementNote,prepareMovementNote,isMovementNoteRecord} from './movement-note-update.js';
-import {installAccountingHealthFeatures} from './feature-health.js';
 import {installEmployeeFeatures} from './feature-employees.js';
 import {installPartyOpeningFeatures} from './feature-party-opening.js';
 import {installExpenseCategoryFeatures} from './feature-expense-categories.js';
@@ -13,6 +12,8 @@ import {installReportFeatures} from './feature-reports.js';
 import {installAdminFeatures} from './feature-admin.js';
 import {installSystemFeatures} from './feature-system.js';
 import {installImportFeatures} from './feature-import.js';
+import {installBusinessInterchangeFeatures} from './feature-interchange.js';
+import {bindWarehouseIdentities} from './warehouse-identity.js';
 import {installStockFeatures} from './feature-stock.js';
 import {repairArchivedBalances,reconcileHistoricalArchives} from './accounting-lifecycle.js';
 
@@ -20,11 +21,11 @@ export function prepareFeatureState(state){const before=JSON.stringify(state);up
 const stockSnapshot=state=>({products:state.products.map(p=>({id:p.id,stocks:{...p.stocks}}))});
 export function installFeatures(api){
  let movementFormAttempt=null,movementFormRecovery=null;
- const health=installAccountingHealthFeatures(api),employees=installEmployeeFeatures(api),partyOpening=installPartyOpeningFeatures(api),categories=installExpenseCategoryFeatures(api);
- const report=installReportFeatures(api),admin=installAdminFeatures(api),stock=installStockFeatures(api),importer=installImportFeatures(api),system=installSystemFeatures(api);
+ const employees=installEmployeeFeatures(api),partyOpening=installPartyOpeningFeatures(api),categories=installExpenseCategoryFeatures(api);
+ const report=installReportFeatures(api),admin=installAdminFeatures(api),stock=installStockFeatures(api),importer=installImportFeatures(api),system=installSystemFeatures(api),interchange=installBusinessInterchangeFeatures(api);
  globalThis.karnaCurrency=()=>currencyCode(S);
  globalThis.karnaMovementNote=record=>currentMovementNote(S,record);
- const groups=[health,employees,partyOpening,categories,report,admin,stock,importer,system];
+ const groups=[employees,partyOpening,categories,report,admin,stock,importer,system,interchange];
  const commandOf=action=>{const parts=action.split(':');return {command:parts[2],id:parts[3],rest:parts[4]}};
  const groupFor=command=>groups.find(g=>g.handles(command));
  const originalSite=api.siteAction;api.siteAction=async function(action){
@@ -75,11 +76,13 @@ export function installFeatures(api){
   if(r.kind==='purchase'||r.openingCorrection||r.openingStock)currentCosts();render();return true;
  };
  const originalEngine=api.engineDispatch;api.engineDispatch=async function(action){
+  if(await partyOpening.before?.(action))return;
   if(action==='post-party'||action==='post-cash'&&['deposit','withdraw','cashtransfer'].includes(modal))movementFormAttempt={actor:api.actor?.id,view,modal,editingId,values:{...api.form()}};
   else{movementFormAttempt=null;movementFormRecovery=null;}
   const voidBeforeState=['confirm-void','save-product'].includes(action)?stockSnapshot(S):null;
   const oldView=view,oldModal=modal,oldEditing=editingId,oldSelected=selected,category=action==='save-product'?admin.category():null;
   const oldWarehouse=action==='save-warehouse'?warehouseEdit:null,oldRecord=action==='confirm-void'?structuredClone(S.records.find(r=>r.id===selected)):null,knownIds=new Set(S.records.map(r=>r.id));
+  const warehouseIdentities=action==='save-warehouse'?bindWarehouseIdentities({originId:S.originId,warehouses:S.warehouses,warehouseMeta:structuredClone(S.warehouseMeta)}).warehouseMeta:null;
   if(oldRecord?.openingCorrection){const latest=S.records.find(r=>!r.voided&&r.openingCorrection&&r.openingProduct===oldRecord.openingProduct);if(latest?.id!==oldRecord.id)throw Error('يمكن إلغاء آخر تصحيح فعال فقط');const p=S.products.find(p=>p.id===oldRecord.openingProduct),origin=await openingState(S,p);if(origin.consumed>oldRecord.openingTotalBefore)throw Error('التصحيح استُهلك بحركات لاحقة؛ راجع سجل المخزون');}
   if(action==='save-product'&&category&&!S.categories.some(c=>c.id===Number(category)))throw Error('الفئة غير موجودة');
   if(action==='save-product'&&oldModal==='product'&&S.warehouseMeta[api.form().openingWarehouse]?.archived)throw Error('اختر مخزنًا فعالًا');
@@ -101,13 +104,15 @@ export function installFeatures(api){
   if(action==='save-account'){const a=S.accounts.at(-1);a.active=true;a.openingBalance=S.opening.accounts[a.id]||0;}
   if(action==='save-warehouse'&&modal!=='warehouse-editor'){
    // The engine closes the form on success; locate its new name through state instead.
-   const newName=oldWarehouse&&!S.warehouses.includes(oldWarehouse)?S.warehouses.find(w=>!Object.hasOwn(S.warehouseMeta,w)):S.warehouses.at(-1);
-   if(newName){S.warehouseMeta[newName]=oldWarehouse?S.warehouseMeta[oldWarehouse]||{archived:false}:{archived:false};if(oldWarehouse&&oldWarehouse!==newName){delete S.warehouseMeta[oldWarehouse];if(S.salesWarehouse===oldWarehouse)S.salesWarehouse=newName;for(const e of S.stockEvents)if(e.warehouseId===oldWarehouse)e.warehouseId=newName;for(const p of S.products)if(p.openingWarehouse===oldWarehouse)p.openingWarehouse=newName;for(const r of S.records)for(const l of r.lines||[])if(l.warehouse===oldWarehouse)l.warehouse=newName;}}
+   const newName=oldWarehouse?(S.warehouses.includes(oldWarehouse)?oldWarehouse:S.warehouses.find(w=>!Object.hasOwn(S.warehouseMeta,w))):S.warehouses.at(-1);
+   if(newName){S.warehouseMeta[newName]=oldWarehouse?S.warehouseMeta[oldWarehouse]||{archived:false}:{archived:false};if(oldWarehouse&&warehouseIdentities[oldWarehouse]?.canonicalId)S.warehouseMeta[newName].canonicalId=warehouseIdentities[oldWarehouse].canonicalId;if(oldWarehouse&&oldWarehouse!==newName){delete S.warehouseMeta[oldWarehouse];if(S.salesWarehouse===oldWarehouse)S.salesWarehouse=newName;for(const e of S.stockEvents)if(e.warehouseId===oldWarehouse)e.warehouseId=newName;for(const p of S.products)if(p.openingWarehouse===oldWarehouse)p.openingWarehouse=newName;for(const r of S.records)for(const l of r.lines||[])if(l.warehouse===oldWarehouse)l.warehouse=newName;for(const r of S.records)for(const key of ['openingWarehouseBefore','openingWarehouseAfter'])if(r[key]===oldWarehouse)r[key]=newName;}}
+   for(const name of S.warehouses)if(warehouseIdentities[name]?.canonicalId)S.warehouseMeta[name].canonicalId??=warehouseIdentities[name].canonicalId;
+   bindWarehouseIdentities(S);
   }
   if(action==='confirm-void'&&oldRecord&&!oldRecord.voided&&S.records.find(r=>r.id===oldRecord.id)?.voided){const cancelled=S.records.find(r=>r.id===oldRecord.id);cancelled.revision=(oldRecord.revision||0)+1;cancelled.revisions=[...(oldRecord.revisions||[]),{...oldRecord,revisions:undefined}];cancelled.updatedAt=cancelled.voidedAt;S.auditEvents??=[];S.auditEvents.push({id:crypto.randomUUID(),action:oldRecord.kind+'.void',status:'committed',entityId:String(oldRecord.id),createdAt:cancelled.voidedAt,actor:{id:api.actor?.id,principalType:api.actor?.role==='owner'?'owner':'user'}});recordStockRevision(S,oldRecord,null,voidBeforeState,'void');applyOpeningMetadata(S,oldRecord,true);if(oldRecord.openingAccountCorrection)S.accounts.find(a=>a.id===oldRecord.account).openingBalance=oldRecord.openingBalanceBefore;reconcileHistoricalArchives(S,oldRecord,null,true);currentCosts();render();}
   stock.after(action,oldView,oldModal,oldEditing);return result;
  };
- const oldSheet=sheet;sheet=function(){for(const group of groups){const html=group.sheet();if(html)return html;}let html=stock.expenseHtml(oldSheet());if(modal==='expense')html=html.replace('<form id="sheet-form">','<form id="sheet-form">'+categories.expenseField(S.records.find(r=>r.id===editingId))); if(modal==='site-export')html=html.replace(/<button type="button" data-action="site:export-print">[\s\S]*?<\/button>/,'');return html;};
+ const oldSheet=sheet;sheet=function(){for(const group of groups){const html=group.sheet();if(html)return html;}let html=stock.expenseHtml(oldSheet());if(modal==='expense')html=html.replace('<form id="sheet-form">','<form id="sheet-form">'+categories.expenseField(S.records.find(r=>r.id===editingId))); if(modal==='site-export')html=html.replace(/<button type="button" data-action="site:export-print">[\s\S]*?<\/button>/,'');return partyOpening.decorateSheet(html);};
  const oldProduct=productDetail;productDetail=function(){const p=S.products.find(p=>p.id===selected),html=oldProduct().replace(/<button[^>]*data-action="site:(?:archive-product:|unarchive:product:)[^"]*"[^>]*>[\s\S]*?<\/button>/g,'');return html+(p?`<div class="management-actions"><button class="feature-button" data-action="site:feature:opening:${p.id}">رصيد البداية وسجله</button></div>`+stock.productActions(p):'')};
  const oldInvoice=invoice;invoice=function(){return oldInvoice().replace(/<button class="document-print" data-action="site:print">[\s\S]*?<\/button>/,`<button class="document-print" data-action="site:feature:document-output">${icon('receipt')}تصدير الفاتورة</button>`)};
  const oldRender=render;render=function(){oldRender();stock.restoreInputs();
@@ -125,6 +130,6 @@ export function installFeatures(api){
  document.addEventListener('change',async event=>{if(event.target.id!=='feature-brand-logo'||!event.target.files?.[0])return;try{
   const file=event.target.files[0],actorId=api.actor?.id;if(!api.can('settings.branding.manage'))return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('اختر صورة PNG أو JPG أو WebP أصغر من 5 ميغابايت');const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),scale=Math.min(1,512/Math.max(bitmap.width,bitmap.height));canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const logo=canvas.toDataURL('image/png');if(logo.length>700000)throw Error('صورة الشعار كبيرة جدًا');if(api.actor?.id!==actorId||view!=='branding'||!api.can('settings.branding.manage'))return;admin.setLogo(logo);
   }catch(e){api.fail(e.message)}});
- const business=installBusinessRuntime(api,{employees,partyOpening,categories,health});
- return {report,admin,stock,business,async afterSave(){movementFormAttempt=null;movementFormRecovery=null;for(const group of [health,employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){movementFormRecovery=movementFormAttempt;for(const group of [health,employees,partyOpening,categories,stock])group.afterFailure?.()}};
+ const business=installBusinessRuntime(api,{employees,partyOpening,categories});
+ return {report,admin,stock,business,async afterSave(){movementFormAttempt=null;movementFormRecovery=null;for(const group of [employees,partyOpening,categories])await group.afterSave?.();stock.afterSave();await importer.afterSave();system.afterSave()},afterFailure(){movementFormRecovery=movementFormAttempt;for(const group of [employees,partyOpening,categories,stock])group.afterFailure?.()}};
 }

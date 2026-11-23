@@ -56,3 +56,14 @@ outputs/desktop882-qa/
 build-882/
 android882-proof/
 *.class
+
+# Current main 0.1.30 comparison and isolated Android40 evidence.
+desktop-0130-source/
+desktop-0130-transport/
+desktop-consumer/
+outputs/desktop0130-qa/
+outputs/main-parity-qa/
+build-parity0130/
+android0130-proof/
+android-parity0130-proof/
+verified-proof/

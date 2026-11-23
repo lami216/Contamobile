@@ -7,6 +7,9 @@ import {recordExportData,recordWorkbook} from './record-export.js';
 import {appLanguage,formatNumber,translateText} from './i18n.js';
 
 export function installReportFeatures(api){
+ // Current Desktop exposes profit from overview metrics and their source
+ // drilldowns; retain its calculation without a second report destination.
+ delete browseReports.profit;
  const scoped={},original=reports;let openedMetric=null,linkedReportIds=new Set(),linkedActor=null,linkedView=null,linkedModal=null;
  const resetLinks=()=>{linkedReportIds=new Set();linkedActor=api.actor?.id;linkedView=view;linkedModal=modal};
  const reportAction=row=>{if(!String(row.action||'').startsWith('invoice:'))return row.action;const id=Number(row.action.split(':')[1]),record=S.records.find(r=>r.id===id);if(!canReadReportSource(S,record,api.can))return undefined;linkedReportIds.add(id);return 'site:feature:report-document:'+id};
@@ -32,6 +35,7 @@ export function installReportFeatures(api){
  };
  const filterButton=()=>`<button class="feature-filter-button" type="button" data-action="site:feature:report-filters">${icon('settings')}تصفية التقرير${active()?'<span class="dot"></span>':''}</button>`;
  reports=function(){
+  if(!Object.hasOwn(browseReports,reportType))reportType='overview';
   resetLinks();const data=dataset();return `${(data.warnings||[]).map(w=>`<p class="notice">${esc(w)}</p>`).join('')}<div class="browse-toolbar">${browseButton('report',browseReports[reportType],'نوع التقرير')}${browseButton('period',browsePeriod(),'الفترة')}${filterButton()}</div>${data.party?`<div class="feature-scope"><strong data-user-content>${esc(data.party.name)}</strong><small>${period==='all'?'كل الفترة':esc(filters().from+' — '+filters().to)}</small></div>`:''}${data.needsParty?`<div class="empty"><h3>اختر الحساب</h3><p>اختر عميلًا أو موردًا لعرض كشف حسابه.</p><button class="primary" data-action="site:feature:report-filters">اختيار الحساب</button></div>`:`${section('ملخص الفترة')}<div class="metric-grid report-metrics-31">${data.metrics.map((m,i)=>`<button class="metric-card inline-metric" data-action="site:feature:report-metric:${i}"><strong>${esc(m.label)}</strong>${m.value===null?'<b class="metric-count">'+esc(translateText('غير مؤكد'))+'</b>':m.format==='money'?money(m.value,'sm'): `<b class="metric-count">${formatNumber(m.value)}</b>`}</button>`).join('')}</div>${section('تفاصيل التقرير')}${table(data)}`}`;
  };
  function fields(){

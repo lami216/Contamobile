@@ -9,7 +9,7 @@ import {updateMobileInvoiceLine} from './invoice-amount.js';
 import {materializePayroll} from './payroll-domain.js';
 
 export function installBusinessRuntime(api,groups){
- const {employees,partyOpening,categories,health}=groups;
+ const {employees,partyOpening,categories}=groups;
  globalThis.karnaBusiness={
   profit:(state,records)=>{const facts=profitSummary(saleFacts(state,{records}));return facts.costKnown?facts.profit:null},
   cashAccount,partyName:partyDisplayName,documentNumber:recordNumber,
@@ -47,18 +47,18 @@ export function installBusinessRuntime(api,groups){
   finally{commitRecord=oldCommit;}
  };
  const previousUtility=utility;
- utility=function(){return employees.ownsView(view)?employees.viewHtml(view):health?.ownsView?.(view)?health.viewHtml(view):previousUtility()};
- const oldSettings=settings;settings=function(){return oldSettings()+(api.actor?.role==='owner'?health?.managerButton?.()||'':'')};
+ utility=function(){return employees.ownsView(view)?employees.viewHtml(view):previousUtility()};
  const previousMore=more;
- more=function(){return previousMore()+ (api.can('employees.view')?section('الموظفون')+listMenu([['الموظفون','الحسابات والرواتب والحركات','people','site:feature:employees-list']]):'')+(api.actor?.role==='owner'&&health?.managerButton?health.managerButton():'')};
+ more=function(){return previousMore()+ (api.can('employees.view')?section('الموظفون')+listMenu([['الموظفون','الحسابات والرواتب والحركات','people','site:feature:employees-list']]):'')};
  const previousLedger=ledger;
  ledger=function(){return previousLedger()+partyOpening.panel(selected)};
  const previousExpense=utility;
  utility=function(){const html=previousExpense();return view==='expenses'?categories.managerButton()+html:html};
  const originalEffect=partyDelta,originalCash=accountDelta;
- partyDelta=function(record,id){return ['party-opening','return'].includes(record.kind)?storedPartyDelta(S,record,id):originalEffect(record,id)};
- accountDelta=function(record,id){return record.kind.startsWith('employee-')||['party-opening','return'].includes(record.kind)?cashDelta(record,id):originalCash(record,id)};
+ partyDelta=function(record,id){return ['party-opening','return','settlement'].includes(record.kind)?storedPartyDelta(S,record,id):originalEffect(record,id)};
+ accountDelta=function(record,id){return record.kind.startsWith('employee-')||['party-opening','return','settlement'].includes(record.kind)?cashDelta(record,id):originalCash(record,id)};
  documentLabels.return='مرتجع';
+ documentLabels.settlement='تسوية يدوية للرصيد';
  documentLabels['employee-opening']='رصيد بداية عامل';documentLabels['party-opening']='رصيد بداية طرف';documentLabels['employee-accrual']='استحقاق راتب';documentLabels['employee-payment']='حركة حساب موظف';documentLabels['employee-closure']='إقفال حساب عامل محذوف';
  titles.employees='الموظفون';titles['employee-ledger']='حساب الموظف';
  sectionThemes.employees=sectionThemes.parties;sectionThemes['employee-ledger']=sectionThemes.parties;

@@ -7,6 +7,7 @@ import {validatePayrollState} from './payroll-domain.js';
 import {validateState} from './database.js';
 import {sha256Hex} from './accounting-hash.js';
 import {executeLegacyImportPhase,preflightLegacyDatabase,inspectLegacyDatabase,LEGACY_IMPORT_PHASES} from './legacy-import.js';
+import {equivalentOwnBusinessImport} from './business-merge-identity.js';
 const normalize=v=>String(v||'').normalize('NFKD').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').trim().toLocaleLowerCase().replace(/\s+/g,' ');
 const keyOf=(state,kind,row)=>row.importKey||row.desktopId&&'desktop:'+kind+':'+row.desktopId||row.canonicalId&&'canonical:'+kind+':'+row.canonicalId||'mobile:'+(state.originId||state.branding)+':'+kind+':'+row.id;
 const num=v=>Number(v)||0;
@@ -39,8 +40,10 @@ function mergeSharedCounters(next,source){
  validateSharedCounters(next);
 }
 export function mergeImport(current,incoming,options={}){
- const next=structuredClone(current),source=structuredClone(incoming);upgradeState(next);upgradeState(source);mergeSharedCounters(next,source);
+ const next=structuredClone(current),source=structuredClone(incoming);upgradeState(next);upgradeState(source);
  const result={state:next,counts:{products:0,parties:0,accounts:0,warehouses:0,categories:0,expenseCategories:0,employees:0,records:0,existing:0},conflicts:[],warnings:[]},maps=Object.fromEntries(['products','parties','accounts','categories','expenseCategories','warehouses','records'].map(name=>[name,new Map()]));
+ if(equivalentOwnBusinessImport(next,source)){result.counts.existing=next.products.length+next.parties.length+next.accounts.length+next.records.length;result.ownBusinessSnapshotUnchanged=true;return result;}
+ mergeSharedCounters(next,source);
  const clone=value=>structuredClone(value),choices=options.matches||{},policy=name=>options[name]||'current',affectedProducts=new Set(),existingProducts=new Set(next.products.map(row=>row.id));
  const lastIds=Object.fromEntries(['categories','products','parties','accounts','records'].map(name=>[name,next[name].reduce((max,row)=>Math.max(max,row.id),name==='records'?100:0)]));
  const allocate=name=>++lastIds[name],ref=(map,value,label)=>{if(value===undefined||value===null||value==='')return value;const target=map.get(value)??map.get(Number(value));if(target===undefined)throw Error(label+' غير موجود');return target};

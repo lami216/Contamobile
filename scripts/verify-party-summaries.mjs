@@ -19,13 +19,13 @@ assert.equal(JSON.stringify(state),before,'Summary must never write balances, re
 assert.equal(historicalPartyProfit({lines:[{grossProfit:10},{grossProfit:null},{costAtSale:20,price:100,qty:3}]}),10,'Do not invent profit from current or missing costs');
 assert.equal(historicalPartyProfit({profit:0,lines:[{grossProfit:20}]}),0);
 const legacy={parties:[parties[0]],records:[record('sale',1,1000,{lines:[{grossProfit:300}]}),record('return',1,250,{lines:[{grossProfit:80}]}),record('sale',1,10)]};
-assert.equal(partyFinancialSummary(legacy,'customer').values.trade,760);assert.equal(partyFinancialSummary(legacy,'customer').values.profit,null,'An unknown line prevents an unqualified profit total; it is not silently zero');
+assert.equal(partyFinancialSummary(legacy,'customer').values.trade,760);assert.equal(partyFinancialSummary(legacy,'customer').values.profit,220,'Desktop party totals sum saved line profit and give an unknown line no added profit; report unknown-cost handling is separate');
 const decimals={parties:[parties[0]],records:[record('sale',1,.1,{paid:.1,profit:-.1}),record('sale',1,.2,{paid:.2,profit:-.2})]};
-assert.equal(partyFinancialSummary(decimals,'customer').values.trade,.3);assert.equal(partyFinancialSummary(decimals,'customer').values.profit,-.3);
+assert.equal(partyFinancialSummary(decimals,'customer').values.trade,.1+.2);assert.equal(partyFinancialSummary(decimals,'customer').values.profit,-.1-.2);
 assert.deepEqual(partyFinancialSummary({parties:[],records:[]},'supplier').values,{trade:0,profit:0,cashIn:0,cashOut:0,invoiceCount:0,receivable:0,payable:0});
 const large={parties:[parties[0]],records:Array.from({length:10000},(_,id)=>record('sale',1,100,{id,profit:10,paid:id%2?100:0}))};
 const start=performance.now();const summary=partyFinancialSummary(large,'customer');assert.equal(summary.values.trade,1000000);assert.equal(summary.values.cashIn,500000);assert.equal(summary.values.profit,100000);
-console.log('PASS desktop party totals: cash/credit, both party directions, historic profit, returns, void/reversal exclusions, active/archive scope, independent debt directions, cent rounding, immutable state and source reconciliation');
+console.log('PASS desktop party totals: cash/credit, both party directions, historic profit, returns, void/reversal exclusions, active/archive scope, independent debt directions, source precision, immutable state and source reconciliation');
 console.log('CHECK 10,000 party records summarized in '+Math.round(performance.now()-start)+' ms');
 const converter=fs.readFileSync(new URL('../approved-runtime/app.js',import.meta.url),'utf8').match(/^function desktopToState.*$/m)?.[0];assert(converter);
 const convert=vm.runInNewContext(converter+';desktopToState',{validateState,desktopToMobileState});

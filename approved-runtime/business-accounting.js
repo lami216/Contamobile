@@ -9,12 +9,14 @@ export function financialRecordReadOnly(state,record){
  if(record.kind==='employee-closure'||record.kind?.startsWith('employee-')&&(state.employees||[]).some(e=>e.id===record.employeeId&&e.isDeleted===true))return true;
  if(record.importReadOnly&&!isEditableLegacyBankMovement(state,record))return true;
  if(['sale','purchase','expense'].includes(record.kind)&&record.legacyKey)return true;
+ if(record.kind==='adjustment'&&record.importedFrom==='mobile-v23'&&(record.mobileBaseline===true||record.mobileOpening))return true;
  return record.kind==='sale'&&(state.records||[]).some(row=>row.kind==='return'&&!row.voided&&(!row.status||row.status==='posted')&&[record.id,record.desktopId].filter(v=>v!=null).some(id=>String(row.parentDocumentId??row.desktop?.parentDocumentId)===String(id)));
 }
 
 export function storedPartyDelta(state,record,partyId){
  if(record.party!==partyId)return 0;
  const party=state.parties.find(p=>p.id===partyId);
+ if(record.kind==='settlement')return record.partyBalanceDelta*(party?.type==='supplier'?-1:1);
  if(record.kind==='return')return (record.returnParentKind==='purchase'?1:-1)*(party?.type==='supplier'?-1:1)*Number(record.due||0);
  if(record.kind==='party-opening')return partyOpeningStoredDelta(state,record);
  if(['receive','pay'].includes(record.kind))return (party?.type==='supplier'?(record.kind==='pay'?-1:1):(record.kind==='receive'?-1:1))*record.total;
@@ -23,7 +25,7 @@ export function storedPartyDelta(state,record,partyId){
 }
 export function cashDelta(record,accountId){
  if(record.kind==='return')return record.account===accountId?(record.returnParentKind==='purchase'?1:-1)*Number(record.paid||0):0;
- if(record.kind==='employee-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure'||record.kind==='party-opening')return 0;
+ if(record.kind==='employee-opening'||record.kind==='employee-accrual'||record.kind==='employee-closure'||record.kind==='party-opening'||record.kind==='settlement')return 0;
  if(record.kind==='employee-payment')return record.account===accountId?(record.employeePaymentDirection==='deposit'?1:-1)*record.total:0;
  return (record.account===accountId?(['sale','receive','deposit'].includes(record.kind)?1:-1)*Number(record.paid||0):0)+(record.kind==='transfer'&&record.to===accountId?record.total:0);
 }
