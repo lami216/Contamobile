@@ -131,6 +131,7 @@ jobs:
           node scripts/test-imported-history-parity-0130.mjs
           node scripts/test-desktop-snapshot-parity-0130.mjs
           node scripts/test-party-metrics-main-parity.mjs
+          node scripts/test-profit-breakdown-0130-ux.mjs
           node scripts/test-document-notes-main-parity.mjs
           node scripts/test-document-notes-main-ux.mjs
           node scripts/test-long-movement-notes-0130-ux.mjs
